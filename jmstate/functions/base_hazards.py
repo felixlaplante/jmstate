@@ -15,7 +15,6 @@ def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: Current time.
     """
-
     return t1
 
 
@@ -29,7 +28,6 @@ def clock_reset(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: Current time - Past transition time.
     """
-
     return t1 - t0
 
 
@@ -45,7 +43,6 @@ def exponential(lmda: torch.Tensor | float) -> BaseHazardFn:
     Returns:
         BaseHazardFn: The expoential base hazard function.
     """
-
     lmda = torch.as_tensor(lmda, dtype=torch.float32)
 
     # Checks
@@ -79,7 +76,6 @@ def weibull(
     Returns:
         BaseHazardFn: The weibull base hazard function.
     """
-
     k = torch.as_tensor(k, dtype=torch.float32)
     lmda = torch.as_tensor(lmda, dtype=torch.float32)
 
@@ -118,7 +114,6 @@ def gompertz(
     Returns:
         BaseHazardFn: The gompertz base hazard function.
     """
-
     # Conversion en tenseur
     a = torch.as_tensor(a, dtype=torch.float32)
 
@@ -146,7 +141,7 @@ def log_normal(
 
     Args:
         mu (torch.Tensor | float):  log time mean.
-        sigma (torch.Tensor | float): The log time scale.
+        scale (torch.Tensor | float): The log time scale.
         clock_method (ClockMethod, optional): The ClockMethod transformation needed, typically clock reset. Defaults to clock_reset.
 
     Raises:
@@ -155,7 +150,6 @@ def log_normal(
     Returns:
         BaseHazardFn: Returns the log normal base hazard function.
     """
-
     mu = torch.as_tensor(mu, dtype=torch.float32)
     scale = torch.as_tensor(scale, dtype=torch.float32)
 

@@ -1,6 +1,6 @@
 import copy
 import warnings
-from typing import Any, Callable, Dict
+from typing import Any, Callable, cast
 
 import torch
 
@@ -12,15 +12,24 @@ from ._longitudinal import LongitudinalMixin
 
 
 class MultiStateJointModel(LongitudinalMixin, HazardMixin):
-    """A class of the nonlinear multistate joint model. It feature possibility
+    """A class of the nonlinear multistate joint model.
+
+    It feature possibility
     to simulate data, fit based on stochastic gradient with any torch.optim
-    optimizer of choice."""
+    optimizer of choice.
+
+    Args:
+        LongitudinalMixin (_type_): The longitudinal part of the model.
+        HazardMixin (_type_): The hazard part of the model.
+    """
 
     def __init__(
         self,
         model_design: ModelDesign,
         init_params: ModelParams,
         *,
+        optimizer: type[torch.optim.Optimizer] = torch.optim.Adam,
+        optimizer_params: dict[str, Any] = {"lr": 1e-2},
         pen: Callable[[ModelParams], torch.Tensor] | None = None,
         n_quad: int = 32,
         n_bissect: int = 32,
@@ -33,6 +42,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             model_design (ModelDesign): Model design containing regression, base hazard and link functions and model dimensions.
             init_params (ModelParams): Initial values for the parameters.
+            optimizer (type[torch.optim.Optimizer], optional): The stochastic optimizer constructor. Defaults to torch.optim.Adam.
+            optimizer_params (_type_, optional): Optimizer parameter dict. Defaults to {"lr": 1e-2}.
             pen (Callable[[ModelParams], torch.Tensor] | None, optional): The penalization function. Defaults to None.
             n_quad (int, optional): The used numnber of points for Gauss-Legendre quadrature. Defaults to 32.
             n_bissect (int, optional): The number of bissection steps used in transition sampling. Defaults to 32.
@@ -43,10 +54,13 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Raises:
             TypeError: If pen is not None and is not callable.
         """
-
         # Store model components
         self.model_design = model_design
         self.params_ = copy.deepcopy(init_params)
+
+        # Set up optimizer
+        self.optimizer = optimizer
+        self.optimizer_params = optimizer_params
 
         # Store penalization
         if pen is not None and not callable(pen):
@@ -65,10 +79,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
 
         # Initialize attributes that will be set later
-        self.fim_: torch.Tensor | None = None
+        self.data: ModelData | None = None
+        self.metrics_: dict[str, Any] = {}
         self.fit_ = False
 
-    def _ll(self, b: torch.Tensor, data: ModelData) -> torch.Tensor:
+    def _loglik(self, b: torch.Tensor, data: ModelData) -> torch.Tensor:
         """Computes the total log likelihood up to a constant.
 
         Args:
@@ -79,7 +94,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             torch.Tensor: The computed total log likelihood.
         """
 
-        def _prior_ll(b: torch.Tensor) -> torch.Tensor:
+        def _prior_loglik(b: torch.Tensor) -> torch.Tensor:
             Q_inv_cholesky, Q_log_eigvals = self.params_.get_cholesky_and_log_eigvals(
                 "Q"
             )
@@ -96,14 +111,14 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         psi = self.model_design.f(self.params_.gamma, b)
 
         # Compute individual likelihood components
-        long_ll = super()._long_ll(psi, data)
-        hazard_ll = super()._hazard_ll(psi, data)
-        prior_ll = _prior_ll(b)
+        long_loglik = super()._long_loglik(psi, data)
+        hazard_loglik = super()._hazard_loglik(psi, data)
+        prior_loglik = _prior_loglik(b)
 
         # Sum all likelihood components
-        total_ll = long_ll + hazard_ll + prior_ll
+        total_loglik = long_loglik + hazard_loglik + prior_loglik
 
-        return total_ll
+        return total_loglik
 
     def _setup_mcmc(
         self,
@@ -123,13 +138,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Returns:
             MetropolisHastingsSampler: The intialized Markov kernel.
         """
-
         # Initialize random effects
         init_b = torch.zeros((data.size, self.params_.Q_dim_), dtype=torch.float32)
 
         # Create sampler
         sampler = MetropolisHastingsSampler(
-            lambda b: self._ll(b, data),
+            lambda b: self._loglik(b, data),
             init_b,
             init_step_size,
             adapt_rate,
@@ -141,44 +155,41 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     def fit(
         self,
         data: ModelData,
-        optimizer: type[torch.optim.Optimizer] = torch.optim.Adam,
-        optimizer_params: Dict[str, Any] = {"lr": 1e-2},
         *,
         n_iter: int = 2000,
         batch_size: int = 1,
-        callback: (
-            Callable[[ModelParams, MetropolisHastingsSampler], None] | None
-        ) = None,
+        callbacks: list[Callable[[dict[str, Any]], None]] = [],
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
         init_warmup: int = 500,
         cont_warmup: int = 5,
+        verbose: bool = True,
     ) -> None:
         """Fits the MultiStateJointModel.
 
         Args:
             data (ModelData): The dataset to learn from.
-            optimizer (type[torch.optim.Optimizer], optional): The stochastic optimizer constructor. Defaults to torch.optim.Adam.
-            optimizer_params (_type_, optional): Optimizer parameter dict. Defaults to {"lr": 1e-2}.
             n_iter (int, optional): Number of iterations for optimization. Defaults to 2000.
             batch_size (int, optional): Batch size used in fitting. Defaults to 1.
-            callback (Callable[[ModelParams, MetropolisHastingsSampler], None] | None, optional): A callback function that can be used to track the optimization. Defaults to None.
+            callbacks (list[Callable[[dict[str, Any]], None]], optional): A list of callbacks. Defaults to [].
             init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
-            target_accept_rate (float, optional): Mean acceptation target. Defaults to 0.234.
+            accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
             init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
             cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
+            verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
             ValueError: If batch_size is not greater than 0.
+            TypeError: If some callback is not callable.
         """
-
         # Verify batch_size
         if batch_size < 1:
             raise ValueError(f"batch_size must be greater than 0, got {batch_size}")
 
         # Load and complete data
+        self.data = data
         x_rep = data.x.repeat(batch_size, 1) if data.x is not None else None
         t_rep = data.t if data.t.ndim == 1 else data.t.repeat(batch_size, 1)
         y_rep = data.y.repeat(batch_size, 1, 1)
@@ -192,122 +203,157 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         # Set up optimizer
         self.params_.require_grad(True)
-        params_list = self.params_.as_list
-        optimizer_instance = optimizer(params=params_list, **optimizer_params)
+        optimizer = self.optimizer(params=self.params_.as_list, **self.optimizer_params)
 
         # Set up MCMC
         sampler = self._setup_mcmc(data_rep, init_step_size, adapt_rate, accept_target)
         sampler.warmup(init_warmup)
 
-        def _fit():
-            _, current_ll = sampler.step()
+        def _fit(iter: int):
+            b, loglik = sampler.step()
 
             # Optimization step: Update parameters
-            optimizer_instance.zero_grad()
-            nll_pen = -current_ll.sum() / batch_size + self.pen(self.params_)
-            nll_pen.backward()  # type: ignore
+            tot_loglik = loglik.sum() / batch_size
+            tot_nloglik_pen = -tot_loglik + self.pen(self.params_)
 
-            optimizer_instance.step()
+            optimizer.zero_grad()
+            tot_nloglik_pen.backward()  # type: ignore
+            optimizer.step()
 
-            if callback is not None:
-                callback(self.params_, sampler)
+            info = {
+                "data": data,
+                "iter": iter,
+                "n_iter": n_iter,
+                "start": iter == 0,
+                "end": (iter + 1) == n_iter,
+                "model": self,
+                "params": self.params_,
+                "sampler": sampler,
+                "b": b,
+                "loglik": loglik,
+                "tot_loglik": tot_loglik,
+                "tot_nloglik_pen": tot_nloglik_pen,
+            }
+
+            for callback in callbacks:
+                if not callable(callable):
+                    raise TypeError("callback is not callable")
+                callback(info)
 
         # Main fitting loop
-        sampler.loop(n_iter, cont_warmup, _fit, desc="Fitting joint model")
+        sampler.loop(
+            n_iter, cont_warmup, _fit, desc="Fitting joint model", verbose=verbose
+        )
 
-        params_flat = torch.cat([p.detach().flatten() for p in params_list])
+        params_flat = torch.cat([p.detach().flatten() for p in self.params_.as_list])
         if torch.isnan(params_flat).any() or torch.isinf(params_flat).any():
             warnings.warn("Error infering model parameters")
 
         # Set fit_ to True
         self.params_.require_grad(False)
         self.fit_ = True
+        data_rep.clear_extra()
         self.clear_cache()
 
-    def compute_fim(
+    def post_fit(
         self,
-        data: ModelData,
+        new_data: ModelData | None = None,
         *,
-        n_iter: int = 500,
-        step_size: float = 0.1,
+        n_iter: int = 1000,
+        callbacks: list[Callable[[dict[str, Any], dict[str, Any]], None]] = [],
+        init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
         init_warmup: int = 500,
         cont_warmup: int = 5,
-    ) -> None:
-        """Computes the Fisher Information Matrix.
+        verbose: bool = True,
+    ) -> dict[str, Any]:
+        """Fits the MultiStateJointModel.
 
         Args:
-            data (ModelData): The dataset to learn from. Should be the same as used in fit.
-            n_iter (int, optional): Number of iterations to compute n_iter. Defaults to 500.
-            step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
+            new_data (ModelData): The dataset to learn from. Defaults to None.
+            n_iter (int, optional): Number of iterations for optimization. Defaults to 1000.
+            callbacks (list[Callable[[dict[str, Any], dict[str, Any]], None]], optional): A list of callbacks. Defaults to [].
+            init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
-            target_accept_rate (float, optional): Mean acceptation target. Defaults to 0.234.
+            accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
             init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
             cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
+            verbose (bool, optional): Wheter or not to show progress. Defaults to True.
+
+        Raises:
+            ValueError: If new_data is be None when model is not fit
+            TypeError: If some callback is not callable.
         """
-
-        if not self.fit_:
-            warnings.warn(
-                "Model should be fit before computing Fisher Information Matrix"
-            )
-
         # Prepare data
+        if new_data is None and not self.fit_:
+            raise ValueError("new_data must not be None when model is not fit")
+
+        data = cast(ModelData, self.data if new_data is None else new_data)
         data.prepare(self.model_design)
 
-        # Set up MCMC for prediction
-        sampler = self._setup_mcmc(data, step_size, adapt_rate, accept_target)
+        # Set up gradient if needed
+        self.params_.require_grad(True)
 
-        # Warmup MCMC
+        # Set up MCMC
+        sampler = self._setup_mcmc(data, init_step_size, adapt_rate, accept_target)
         sampler.warmup(init_warmup)
 
-        # Setup
-        self.params_.require_grad(True)
-        params_list = self.params_.as_list
-        d = self.params_.numel
-        fim = torch.zeros(d, d)
+        # Initialize metrics
+        metrics: dict[str, Any] = {}
 
-        def _compute_fim():
-            nonlocal fim
-            _, current_ll = sampler.step()
-            nll_pen = -current_ll.sum() + self.pen(self.params_)
+        def _post_fit(iter: int):
+            b, loglik = sampler.step()
 
-            # Clear gradients
-            for p in params_list:
+            # Compute stats
+            tot_loglik = loglik.sum()
+            tot_nloglik_pen = -tot_loglik + self.pen(self.params_)
+
+            for p in self.params_.as_list:
                 if p.grad is not None:
                     p.grad.zero_()
+            tot_nloglik_pen.backward()  # type: ignore
 
-            # Compute gradients
-            nll_pen.backward()  # type: ignore
+            info = {
+                "data": data,
+                "iter": iter,
+                "n_iter": n_iter,
+                "start": iter == 0,
+                "end": (iter + 1) == n_iter,
+                "model": self,
+                "params": self.params_,
+                "sampler": sampler,
+                "b": b,
+                "loglik": loglik,
+                "tot_loglik": tot_loglik,
+                "tot_nloglik_pen": tot_nloglik_pen,
+            }
 
-            # Collect gradient vector
-            grad_chunks: list[torch.Tensor] = []
-            for p in params_list:
-                if p.grad is not None:
-                    grad_chunks.append(p.grad.view(-1))
-                else:
-                    grad_chunks.append(torch.zeros(p.numel()))
+            for callback in callbacks:
+                if not callable(callable):
+                    raise TypeError("callback is not callable")
+                callback(info, metrics)
 
-            grad = torch.cat(grad_chunks)
-
-            # Update Fisher Information Matrix
-            fim += torch.outer(grad, grad) / n_iter
-
+        # Main post fitting loop
         sampler.loop(
-            n_iter, cont_warmup, _compute_fim, "Computing Fisher Information Matrix"
+            n_iter, cont_warmup, _post_fit, desc="Running post fit", verbose=verbose
         )
 
-        if torch.isnan(fim).any() or torch.isinf(fim).any():
-            warnings.warn("Error computing Fisher Information Matrix")
-        else:
-            self.fim_ = fim
+        # Set up metrics
+        if new_data is None:
+            self.metrics_ = metrics
 
+        # Restore default
         self.params_.require_grad(False)
+        data.clear_extra()
         self.clear_cache()
 
+        return metrics
+
     def get_stderror(self) -> ModelParams:
-        """Returns the standard error of the parameters that can be used to
-        draw confidence intervals.
+        """Returns the standard error of the parameters.
+
+        They can be used to draw confidence intervals.
 
         Raises:
             ValueError: If the Fisher Information Matrix could not be computed.
@@ -315,9 +361,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Returns:
             ModelParams: The standard error in the same format as the parameters.
         """
-
         # Check if self.fim_ is well defined
-        if self.fim_ is None:
+        if self.metrics_.get("fim") is None:
             raise ValueError(
                 "Fisher Information Matrix must be previously computed. CIs may not be computed."
             )
@@ -367,6 +412,80 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         return se_params
 
+    def predict_y(
+        self,
+        pred_data: ModelData,
+        t: torch.Tensor,
+        *,
+        n_iter_b: int,
+        step_size: float = 0.1,
+        adapt_rate: float = 0.01,
+        accept_target: float = 0.234,
+        init_warmup: int = 500,
+        cont_warmup: int = 5,
+        verbose: bool = True,
+    ) -> list[torch.Tensor]:
+        """Predicts the longitudinal values (y) for new individuals.
+
+        Args:
+            pred_data (ModelData): Prediction data.
+            u (torch.Tensor): The evaluation times of the probabilities.
+            n_iter_b (int): Number of iterations for random effects sampling.
+            step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
+            adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
+            accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
+            init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
+            cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
+            max_length (int, optional): Maximum iterations or sampling (prevents infinite loops). Defaults to 100.
+            verbose (bool, optional): Wheter or not to show progress. Defaults to True.
+
+        Raises:
+            ValueError: If u is of incorrect shape.
+
+        Returns:
+            list[torch.Tensor]: A list for each b of survival probabilities.
+        """
+        # Convert and check if c_max matches the right shape
+        t = torch.as_tensor(t, dtype=torch.float32)
+        if t.ndim != 2 or t.shape[0] != pred_data.size:
+            raise ValueError(
+                "t has incorrect shape, got {u.shape}, expected {(sample_data.size, eval_points)}"
+            )
+
+        # Load and complete prediction data
+        pred_data.prepare(self.model_design)
+
+        # Set up MCMC for prediction
+        sampler = self._setup_mcmc(pred_data, step_size, adapt_rate, accept_target)
+
+        # Warmup MCMC
+        sampler.warmup(init_warmup)
+
+        # Generate predicted probabilites
+        predicted_y: list[torch.Tensor] = []
+
+        def _predict_longitudinal(iter: int):
+            b, _ = sampler.step()
+
+            # Transform to individual-specific parameters
+            psi = self.model_design.f(self.params_.gamma, b)
+
+            y = self.model_design.h(t, pred_data.x, psi)
+
+            predicted_y.append(y)
+
+        sampler.loop(
+            n_iter_b,
+            cont_warmup,
+            _predict_longitudinal,
+            desc="Predicting longitudinal expected values",
+            verbose=verbose,
+        )
+
+        pred_data.clear_extra()
+        self.clear_cache()
+        return predicted_y
+
     def predict_surv_log_probs(
         self,
         pred_data: ModelData,
@@ -378,6 +497,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         accept_target: float = 0.234,
         init_warmup: int = 500,
         cont_warmup: int = 5,
+        verbose: bool = True,
     ) -> list[torch.Tensor]:
         """Predicts the survival (event free) probabilities for new individuals.
 
@@ -391,6 +511,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
             cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
             max_length (int, optional): Maximum iterations or sampling (prevents infinite loops). Defaults to 100.
+            verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
             ValueError: If u is of incorrect shape.
@@ -398,7 +519,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Returns:
             list[torch.Tensor]: A list for each b of survival probabilities.
         """
-
         # Convert and check if c_max matches the right shape
         u = torch.as_tensor(u, dtype=torch.float32)
         if u.ndim != 2 or u.shape[0] != pred_data.size:
@@ -418,27 +538,29 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Generate predicted probabilites
         predicted_log_probs: list[torch.Tensor] = []
 
-        def _predict_surv_log_probs():
-            current_b, _ = sampler.step()
+        def _predict_surv_log_probs(iter: int):
+            b, _ = sampler.step()
 
             # Transform to individual-specific parameters
-            psi = self.model_design.f(self.params_.gamma, current_b)
+            psi = self.model_design.f(self.params_.gamma, b)
 
             sample_data = SampleData(
                 pred_data.x, pred_data.trajectories, psi, pred_data.c
             )
 
-            current_log_probs = self.compute_surv_log_probs(sample_data, u)
+            log_probs = self.compute_surv_log_probs(sample_data, u)
 
-            predicted_log_probs.append(current_log_probs)
+            predicted_log_probs.append(log_probs)
 
         sampler.loop(
             n_iter_b,
             cont_warmup,
             _predict_surv_log_probs,
-            "Predicting survival log probabilities",
+            desc="Predicting survival log probabilities",
+            verbose=verbose,
         )
 
+        pred_data.clear_extra()
         self.clear_cache()
         return predicted_log_probs
 
@@ -455,6 +577,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         init_warmup: int = 500,
         cont_warmup: int = 5,
         max_length: int = 100,
+        verbose: bool = True,
     ) -> list[list[list[Trajectory]]]:
         """Predict survival trajectories for new individuals.
 
@@ -469,6 +592,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
             cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
             max_length (int, optional): Maximum iterations or sampling (prevents infinite loops). Defaults to 100.
+            verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
             ValueError: If n_iter_T is not greater than 0.
@@ -477,7 +601,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Returns:
             list[list[list[Trajectory]]]: A list of lists of trajectories. First list is for a b sample, then multiples iid drawings of the trajectories.
         """
-
         # Convert and check if c_max matches the right shape
         c_max = torch.as_tensor(c_max, dtype=torch.float32)
         if c_max.shape != (pred_data.size,):
@@ -506,31 +629,34 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Generate predictions
         predicted_trajectories: list[list[list[Trajectory]]] = []
 
-        def _predict_trajectories():
-            current_b, _ = sampler.step()
+        def _predict_trajectories(iter: int):
+            b, _ = sampler.step()
 
             # Transform to individual-specific parameters
-            psi = self.model_design.f(self.params_.gamma, current_b)
+            psi = self.model_design.f(self.params_.gamma, b)
             # Replicate for multiple trajectory samples
             psi_rep = psi.repeat(n_iter_T, 1)
 
             sample_data = SampleData(x_rep, trajectories_rep, psi_rep, c_rep)
             # Sample trajectories
-            current_trajectories = self.sample_trajectories(
-                sample_data, c_max_rep, max_length
-            )
+            trajectories = self.sample_trajectories(sample_data, c_max_rep, max_length)
 
             # Organize by trajectory iteration
             trajectory_chunks = [
-                current_trajectories[i * pred_data.size : (i + 1) * pred_data.size]
+                trajectories[i * pred_data.size : (i + 1) * pred_data.size]
                 for i in range(n_iter_T)
             ]
 
             predicted_trajectories.append(trajectory_chunks)
 
         sampler.loop(
-            n_iter_b, cont_warmup, _predict_trajectories, "Predicting trajectories"
+            n_iter_b,
+            cont_warmup,
+            _predict_trajectories,
+            desc="Predicting trajectories",
+            verbose=verbose,
         )
 
+        pred_data.clear_extra()
         self.clear_cache()
         return predicted_trajectories

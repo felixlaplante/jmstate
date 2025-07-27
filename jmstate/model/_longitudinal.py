@@ -1,5 +1,3 @@
-from typing import Any
-
 import torch
 
 from ..utils.structures import ModelData, ModelDesign, ModelParams
@@ -11,11 +9,7 @@ class LongitudinalMixin:
     params_: ModelParams
     model_design: ModelDesign
 
-    def __init__(self, **kwargs: Any):
-
-        super().__init__(**kwargs)
-
-    def _long_ll(self, psi: torch.Tensor, data: ModelData) -> torch.Tensor:
+    def _long_loglik(self, psi: torch.Tensor, data: ModelData) -> torch.Tensor:
         """Computes the longitudinal log likelihood.
 
         Args:
@@ -25,7 +19,6 @@ class LongitudinalMixin:
         Returns:
             torch.Tensor: The computed log likelihood.
         """
-
         # Compute residuals
         predicted = self.model_design.h(data.extra_["valid_t"], data.x, psi)
         diffs = data.extra_["valid_y"] - predicted * data.extra_["valid_mask"]

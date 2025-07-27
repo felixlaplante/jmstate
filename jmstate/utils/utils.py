@@ -27,7 +27,6 @@ def log_cholesky_from_flat(
     Returns:
         torch.Tensor: The log cholesky representation.
     """
-
     if flat.ndim != 1:
         raise ValueError(f"flat should be flat, got shape {flat.shape}")
 
@@ -52,7 +51,7 @@ def flat_from_log_cholesky(L: torch.Tensor, method: str = "full") -> torch.Tenso
     """Computes flat tensor from log cholesky matrix according to choice of method.
 
     Args:
-        flat (torch.Tensor): The flat tensor parameter.
+        L (torch.Tensor): The square lower triangular matrix parameter.
         method (str, optional): The method, either for full, diagonal or isotropic covariance matrix. Defaults to "full".
 
     Raises:
@@ -61,7 +60,6 @@ def flat_from_log_cholesky(L: torch.Tensor, method: str = "full") -> torch.Tenso
     Returns:
         torch.Tensor: The flat representation.
     """
-
     if L.ndim != 2 or L.shape[0] != L.shape[1]:
         raise ValueError(f"L must be square, got shape {L.shape}")
 
@@ -90,7 +88,6 @@ def build_buckets(
     Returns:
         dict[tuple[int, int], tuple[torch.Tensor, ...]]: A dictionnary of transition keys with a triplet of tensors (idxs, t0, t1).
     """
-
     try:
         # Process each individual trajectory
         buckets: DefaultDict[tuple[int, int], list[list[Any]]] = defaultdict(

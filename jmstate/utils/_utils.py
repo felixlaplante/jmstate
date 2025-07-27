@@ -17,7 +17,6 @@ def legendre_quad(n_quad: int) -> tuple[torch.Tensor, ...]:
     Returns:
         tuple[torch.Tensor, ...]: The nodes and weights.
     """
-
     nodes, weights = cast(
         tuple[
             np.ndarray[Any, np.dtype[np.float32]],
@@ -33,8 +32,9 @@ def legendre_quad(n_quad: int) -> tuple[torch.Tensor, ...]:
 
 
 def flat_from_tril(L: torch.Tensor) -> torch.Tensor:
-    """Flatten the lower triangular part (including the diagonal) of a square matrix L
-    into a 1D tensor, in row-wise order.
+    """Flatten the lower triangular part (including the diagonal) of a square matrix.
+    
+    Into a 1D tensor, in row-wise order.
 
     Args:
         L (torch.Tensor): Square lower-triangular matrix of shape (n, n).
@@ -46,7 +46,6 @@ def flat_from_tril(L: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: Flattened 1D tensor containing the lower triangular entries.
     """
-
     try:
         if L.ndim != 2 or L.shape[0] != L.shape[1]:
             raise ValueError("Input must be a square matrix")
@@ -74,7 +73,6 @@ def tril_from_flat(flat: torch.Tensor, n: int) -> torch.Tensor:
     Returns:
         torch.Tensor: The lower triangular matrix.
     """
-
     if flat.numel() != (n * (n + 1)) // 2:
         raise ValueError("Incompatible dimensions for lower triangular matrix")
 
@@ -104,7 +102,6 @@ def build_vec_rep(
     Returns:
         dict[tuple[int, int], tuple[torch.Tensor, ...]]: The vectorizable buckets representation.
     """
-
     try:
         # Get survival transitions defined in the model
         trans = set(surv.keys())

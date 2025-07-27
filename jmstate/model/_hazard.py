@@ -31,8 +31,8 @@ class HazardMixin:
             enable_likelihood_cache (bool, optional): Enables cache during fit, and MCMC loops and likelihood computations in general. Defaults to True.
             enable_predict_cache (bool, optional): Enables cache during predicting steps. Defaults to False.
             cache_limit (int): Max length of cache.
+            kwargs (Any): Additional kwargs.
         """
-
         self.n_quad = n_quad
         self.n_bissect = n_bissect
         self.enable_likelihood_cache = enable_likelihood_cache
@@ -50,7 +50,7 @@ class HazardMixin:
         super().__init__(**kwargs)
 
     def _get_cache(self, name: str, key: Any) -> torch.Tensor:
-        """Gets the cache [name][key]
+        """Gets the cache [name][key].
 
         Args:
             name (str): The name of the cache info.
@@ -59,7 +59,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The cached tensor.
         """
-
         cache = self._cache[name]
         cache.move_to_end(key)
         return cache[key]
@@ -72,15 +71,13 @@ class HazardMixin:
             key (Any): The key inside the current info.
             val (torch.Tensor): The tensor to cache.
         """
-
         cache = self._cache[name]
         cache[key] = val
         if len(cache) > self.cache_limit:
             cache.popitem(last=False)
 
     def clear_cache(self) -> None:
-        """Clears the cached tensors"""
-
+        """Clears the cached tensors."""
         self._cache = {
             "half": OrderedDict(),
             "quad": OrderedDict(),
@@ -115,12 +112,11 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log hazard.
         """
-
         # Compute baseline hazard
         key = (
             id(log_base_hazard_fn),
-            hash(t0.numpy().tobytes()),
-            hash(t1.numpy().tobytes()),
+            hash(t0.numpy().tobytes()),  # type: ignore
+            hash(t1.numpy().tobytes()),  # type: ignore
         )
         try:
             base = self._get_cache("base", key)
@@ -173,7 +169,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed cumulative hazard.
         """
-
         # Reshape for broadcasting
         t0, t1, c = (
             t0.view(-1, 1),
@@ -182,7 +177,7 @@ class HazardMixin:
         )
 
         # Transform to quadrature interval
-        key = (hash(c.numpy().tobytes()), hash(t1.numpy().tobytes()))
+        key = (hash(c.numpy().tobytes()), hash(t1.numpy().tobytes()))  # type: ignore
         try:
             half = self._cache["half"][key]
             quad = self._get_cache("quad", key)
@@ -238,12 +233,11 @@ class HazardMixin:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: A tuple containing log and cumulative hazard.
         """
-
         # Reshape for broadcasting
         t0, t1 = t0.view(-1, 1), t1.view(-1, 1)
 
         # Transform to quadrature interval
-        key = (hash(t0.numpy().tobytes()), hash(t1.numpy().tobytes()))
+        key = (hash(t0.numpy().tobytes()), hash(t1.numpy().tobytes()))  # type: ignore
         try:
             half = self._cache["half"][key]
             quad = self._get_cache("quad", key)
@@ -305,7 +299,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed pre transition times.
         """
-
         # Initialize for bisection search
         t0 = t0.view(-1, 1)
         t_left, t_right = t0.clone().view(-1, 1), c_max.clone().view(-1, 1)
@@ -344,7 +337,6 @@ class HazardMixin:
         Returns:
             bool: Returns False if simulations are left.
         """
-
         # Get initial buckets from last states
         last_states = [trajectory[-1:] for trajectory in trajectories]
         current_buckets = build_vec_rep(last_states, c_max, self.model_design.surv)
@@ -363,14 +355,12 @@ class HazardMixin:
 
             t1 = torch.nextafter(t1, torch.tensor(torch.inf, dtype=torch.float32))
 
-            x, psi, alphas, betas, surv, c = (
-                sample_data.x,
-                sample_data.psi,
-                self.params_.alphas,
-                self.params_.betas,
-                self.model_design.surv,
-                sample_data.c,
-            )
+            x = sample_data.x
+            psi = sample_data.psi
+            alphas = self.params_.alphas
+            betas = self.params_.betas
+            surv = self.model_design.surv
+            c = sample_data.c
 
             # Sample transition times
             t_sample = self._sample_transition(
@@ -411,7 +401,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
-
         # Convert to float32
         u = torch.as_tensor(u, dtype=torch.float32)
 
@@ -435,18 +424,16 @@ class HazardMixin:
                 idx, t0, _, _ = bucket
                 t1 = u[:, k]
 
-                x, psi, alphas, betas, surv, c, enable_predict_cache = (
-                    sample_data.x,
-                    sample_data.psi,
-                    self.params_.alphas,
-                    self.params_.betas,
-                    self.model_design.surv,
-                    sample_data.c,
-                    self.enable_predict_cache,
-                )
+                x = sample_data.x
+                psi = sample_data.psi
+                alphas = self.params_.alphas
+                betas = self.params_.betas
+                surv = self.model_design.surv
+                c = sample_data.c
+                enable_predict_cache = self.enable_predict_cache
 
                 # Compute negative log survival
-                alts_ll = self._cum_hazard(
+                alts_loglik = self._cum_hazard(
                     t0,
                     t1,
                     c,
@@ -458,7 +445,7 @@ class HazardMixin:
                     enable_predict_cache,
                 )
 
-                nlog_probs[:, k].index_add_(0, idx, alts_ll)
+                nlog_probs[:, k].index_add_(0, idx, alts_loglik)
 
         log_probs = torch.clamp(-nlog_probs, max=0.0)
 
@@ -484,7 +471,6 @@ class HazardMixin:
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
-
         # Convert and check if c_max matches the right shape
         c_max = torch.as_tensor(c_max, dtype=torch.float32)
         if c_max.shape != (sample_data.size,):
@@ -508,7 +494,7 @@ class HazardMixin:
 
         return trajectories
 
-    def _hazard_ll(self, psi: torch.Tensor, data: ModelData) -> torch.Tensor:
+    def _hazard_loglik(self, psi: torch.Tensor, data: ModelData) -> torch.Tensor:
         """Computes the hazard log likelihood.
 
         Args:
@@ -519,7 +505,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log likelihood.
         """
-
         ll = torch.zeros(data.size, dtype=torch.float32)
 
         for key, bucket in data.extra_["buckets"].items():
@@ -532,7 +517,7 @@ class HazardMixin:
                 self.model_design.surv,
             )
 
-            obs_ll, alts_ll = self._log_and_cum_hazard(
+            obs_loglik, alts_loglik = self._log_and_cum_hazard(
                 t0,
                 t1,
                 x.index_select(0, idx) if x is not None else None,
@@ -543,7 +528,7 @@ class HazardMixin:
                 self.enable_likelihood_cache,
             )
 
-            vals = obs * obs_ll - alts_ll
+            vals = obs * obs_loglik - alts_loglik
             ll.index_add_(0, idx, vals)
 
         return ll

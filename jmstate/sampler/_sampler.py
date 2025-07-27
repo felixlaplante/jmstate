@@ -28,7 +28,6 @@ class MetropolisHastingsSampler:
         Raises:
             RuntimeError: If the initial log prob fails to be computed.
         """
-
         self.log_prob_fn = log_prob_fn
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
@@ -64,7 +63,6 @@ class MetropolisHastingsSampler:
             ValueError: If adapt_rate is not strictly positive.
             ValueError: If target_accept_rate is not in (0, 1).
         """
-
         if not callable(self.log_prob_fn):
             raise TypeError("log_prob_fn must be callable")
 
@@ -83,7 +81,6 @@ class MetropolisHastingsSampler:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: A tuple containing current_state and current_log_prob.
         """
-
         # Detach current state to avoid gradient accumulation
         self.current_state = self.current_state.detach()
         self.current_log_prob = self.current_log_prob.detach()
@@ -134,7 +131,6 @@ class MetropolisHastingsSampler:
         Raises:
             ValueError: If the warmup steps is not positive.
         """
-
         if warmup < 0:
             raise ValueError("Warmup must be a non-negative integer")
 
@@ -146,8 +142,9 @@ class MetropolisHastingsSampler:
         self,
         n_iter: int,
         cont_warmup: int,
-        job: Callable[[], None],
+        job: Callable[[int], None],
         desc: str,
+        verbose: bool,
     ) -> None:
         """Loops while subsampling.
 
@@ -156,14 +153,20 @@ class MetropolisHastingsSampler:
             cont_warmup (int): The sublamping MCMC number.
             job (Callable[[], None]): The function to execute.
             desc (str): The description during the loop.
-        """
+            verbose (bool): Wheter or not to show progress.
 
-        for iteration in tqdm(range(n_iter), desc=desc):
+        Raises:
+            ValueError: If n_iter is not greater or equal to one.
+        """
+        if n_iter < 1:
+            raise ValueError(f"n_iter must be at least one, got {n_iter}")
+
+        for iter in tqdm(range(n_iter), desc=desc, disable=not verbose):
             try:
                 self.warmup(cont_warmup)
-                job()
+                job(iter)
             except Exception as e:
-                warnings.warn(f"Error in iteration {iteration}: {e}")
+                warnings.warn(f"Error in iteration {iter}: {e}")
                 continue
 
     @property
@@ -173,7 +176,6 @@ class MetropolisHastingsSampler:
         Returns:
             torch.Tensor: The means of the acceptance_rates accross iterations.
         """
-
         return self.n_accepted / torch.clamp(self.n_samples, min=1.0)
 
     @property
@@ -183,5 +185,4 @@ class MetropolisHastingsSampler:
         Returns:
             float: The mean step size.
         """
-
         return self.step_sizes.mean().item()

@@ -81,7 +81,6 @@ class ModelData:
 
     def __post_init__(self):
         """Runs the post init conversions and checks."""
-
         # Convert to float32
         self.x = (
             torch.as_tensor(self.x, dtype=torch.float32) if self.x is not None else None
@@ -105,7 +104,6 @@ class ModelData:
             ValueError: If t contains torch.nan where y is not.
             ValueError: If the trajectories are not sorted by time.
         """
-
         # Check for inf tensors
         for name, tensor in [
             ("c", self.c),
@@ -161,16 +159,22 @@ class ModelData:
 
         Args:
             data (ModelData): The current dataset.
+
         Raises:
             TypeError: If self.params_.betas is None and x is not None or the other way around.
         """
-
         # Add derived quantities
         self.extra_["valid_mask"] = ~torch.isnan(self.y)
         self.extra_["n_valid"] = self.extra_["valid_mask"].sum(dim=1)
         self.extra_["valid_t"] = torch.nan_to_num(self.t)
         self.extra_["valid_y"] = torch.nan_to_num(self.y)
-        self.extra_["buckets"] = build_vec_rep(self.trajectories, self.c, model_design.surv)
+        self.extra_["buckets"] = build_vec_rep(
+            self.trajectories, self.c, model_design.surv
+        )
+
+    def clear_extra(self) -> None:
+        """Clears extra information."""
+        self.extra_ = {}
 
     @property
     def size(self) -> int:
@@ -206,7 +210,6 @@ class SampleData:
 
     def __post_init__(self):
         """Runs the post init conversions and checks."""
-
         # Convert to float32
         self.x = (
             torch.as_tensor(self.x, dtype=torch.float32) if self.x is not None else None
@@ -230,7 +233,6 @@ class SampleData:
             ValueError: If the trajectories are not sorted by time.
             ValueError: If the last trajectory time is greater than c
         """
-
         # Check for inf tensors
         for name, tensor in [("c", self.c), ("x", self.x), ("psi", self.psi)]:
             if tensor is not None and tensor.isinf().any():
@@ -309,7 +311,6 @@ class ModelParams:
 
     def __post_init__(self):
         """Convert and init to float32 the parameters."""
-
         # Convert components to float32
         Q_flat, Q_method = self.Q_repr
         R_flat, R_method = self.R_repr
@@ -350,7 +351,6 @@ class ModelParams:
             ValueError: If any of the beta tensors contains inf.
             ValueError: If any of the beta tensors is not 1D.
         """
-
         # Check main tensors
         for name, tensor in [
             ("gamma", self.gamma),
@@ -389,7 +389,6 @@ class ModelParams:
             ValueError: If the number of elements is not a triangular number and the method is "full".
             ValueError: If the number of elements is not one and the method is "ball".
         """
-
         if matrix not in ("Q", "R"):
             raise ValueError(f"matrix should be either Q or R, got {matrix}")
 
@@ -420,7 +419,6 @@ class ModelParams:
         Returns:
             list[torch.Tensor]: The list of the parameters.
         """
-
         iterables: Iterable[torch.Tensor | list[torch.Tensor]] = (
             [self.gamma] if self.gamma is not None else [],
             [self.Q_repr[0], self.R_repr[0]],
@@ -437,7 +435,6 @@ class ModelParams:
         Returns:
             int: The number of the parameters.
         """
-
         return sum(p.numel() for p in self.as_list)
 
     def get_cholesky(self, matrix: str) -> torch.Tensor:
@@ -452,7 +449,6 @@ class ModelParams:
         Returns:
             torch.Tensor: The precision matrix.
         """
-
         if matrix not in ("Q", "R"):
             raise ValueError(f"matrix should be either Q or R, got {matrix}")
 
@@ -479,7 +475,6 @@ class ModelParams:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: The tuple of precision matrix and log eigenvalues of precision.
         """
-
         if matrix not in ("Q", "R"):
             raise ValueError(f"matrix should be either Q or R, got {matrix}")
 
@@ -499,7 +494,6 @@ class ModelParams:
         Args:
             req (bool): Wether to require or not.
         """
-
         # Enable or diasable gradients
         for tensor in self.as_list:
             tensor.requires_grad_(req)
