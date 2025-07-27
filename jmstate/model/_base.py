@@ -270,7 +270,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         data_rep.clear_extra()
         self.clear_cache()
 
-    def post_fit(
+    def get_metrics(
         self,
         new_data: ModelData | None = None,
         *,
@@ -317,7 +317,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Initialize metrics
         metrics: dict[str, Any] = {}
 
-        def _post_fit(iter: int):
+        def _get_metrics(iter: int):
             (b, logpdfs), logliks = sampler.step()
 
             # Compute stats
@@ -356,7 +356,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         # Main post fitting loop
         sampler.loop(
-            n_iter, cont_warmup, _post_fit, desc="Running post fit", verbose=verbose
+            n_iter, cont_warmup, _get_metrics, desc="Running metrics loop", verbose=verbose
         )
 
         # Set up metrics
