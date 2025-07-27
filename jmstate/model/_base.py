@@ -32,6 +32,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     enable_likelihood_cache: bool
     enable_predict_cache: bool
     cache_limit: int | None
+    fit_: bool
 
     def __init__(
         self,
