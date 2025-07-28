@@ -6,7 +6,8 @@ import torch
 
 from ..types._defs import LOGTWOPI, Trajectory
 from ..types._structures import ModelData, ModelDesign, ModelParams, SampleData
-from ..utils._misc import call_callbacks, get_cholesky_and_log_eigvals
+from ..utils._linalg import get_cholesky_and_log_eigvals
+from ..utils._misc import call_callbacks
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._sampler import MetropolisHastingsSampler

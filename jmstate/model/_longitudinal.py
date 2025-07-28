@@ -2,7 +2,7 @@ import torch
 
 from ..types._defs import LOGTWOPI
 from ..types._structures import ModelData, ModelDesign, ModelParams
-from ..utils._misc import get_cholesky_and_log_eigvals
+from ..utils._linalg import get_cholesky_and_log_eigvals
 
 
 class LongitudinalMixin:
