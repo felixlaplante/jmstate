@@ -116,7 +116,7 @@ def sample_params_from_model(
         raise ValueError("Model must be fit and Fisher Information Matrix computed.")
 
     dist = torch.distributions.MultivariateNormal(
-        model.params_.as_flat, model.metrics_["fim"].inverse()
+        model.params_.as_flat_tensor, model.metrics_["fim"].inverse()
     )
     flat_samples = dist.sample((sample_size,))
 
