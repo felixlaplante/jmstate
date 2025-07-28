@@ -29,6 +29,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     params_: ModelParams
     optimizer: type[torch.optim.Optimizer]
     optimizer_params: dict[str, float] | None
+    pen: Callable[[ModelParams], torch.Tensor] | None
     n_quad: int
     n_bissect: int
     enable_likelihood_cache: bool
@@ -78,11 +79,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
 
         # Store penalization
-        if pen is not None and not callable(pen):
+        self.pen = pen
+        if self.pen is not None and not callable(self.pen):
             raise TypeError("pen must be callable or None")
-        self.pen: Callable[[ModelParams], torch.Tensor] = lambda params: (
-            torch.tensor(0.0, dtype=torch.float32) if pen is None else pen(params)
-        )
 
         # Info of the Mixin Classes
         super().__init__(
@@ -231,11 +230,15 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             (b, logpdfs), logliks = sampler.step()
 
             # Optimization step: Update parameters
-            penalty = self.pen(self.params_)
+            penalty = self.pen(self.params_) if self.pen is not None else None
             loglik = logliks.sum() / batch_size
-            nloglik_pen = -loglik + penalty
+            nloglik_pen = -loglik + penalty if penalty is not None else -loglik
+            loss = (
+                -logpdfs.sum() / batch_size + penalty
+                if penalty is not None
+                else -logpdfs.sum() / batch_size
+            )
 
-            loss = -logpdfs.sum() / batch_size + penalty
             optimizer.zero_grad()  # type: ignore
             loss.backward()  # type: ignore
             optimizer.step()  # type: ignore
@@ -248,11 +251,14 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 "end": (iter + 1) == n_iter,
                 "model": self,
                 "params": self.params_,
+                "optimizer": optimizer,
                 "sampler": sampler,
                 "b": b,
                 "logpdfs": logpdfs,
                 "loglik": loglik,
+                "penalty": penalty,
                 "nloglik_pen": nloglik_pen,
+                "loss": loss,
             }
 
             call_callbacks(callbacks, info=info)
@@ -277,8 +283,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         new_data: ModelData | None = None,
         *,
         n_iter: int = 1000,
-        callbacks: Callable[[dict[str, Any], dict[str, Any]], None]
-        | list[Callable[[dict[str, Any], dict[str, Any]], None]],
+        callbacks: (
+            Callable[[dict[str, Any], dict[str, Any]], None]
+            | list[Callable[[dict[str, Any], dict[str, Any]], None]]
+        ),
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
@@ -324,10 +332,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             (b, logpdfs), logliks = sampler.step()
 
             # Compute stats
-            penalty = self.pen(self.params_)
+            penalty = self.pen(self.params_) if self.pen is not None else None
             loglik = logliks.sum()
-            nloglik_pen = -loglik + penalty
-            loss = -logpdfs.sum() + penalty
+            nloglik_pen = -loglik + penalty if penalty is not None else -loglik
+            loss = -logpdfs.sum() + penalty if penalty is not None else -logpdfs.sum()
 
             for p in self.params_.as_list:
                 if p.grad is not None:
@@ -346,7 +354,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 "b": b,
                 "logpdfs": logpdfs,
                 "loglik": loglik,
+                "penalty": penalty,
                 "nloglik_pen": nloglik_pen,
+                "loss": loss,
             }
 
             call_callbacks(callbacks, info=info, metrics=metrics)
@@ -393,7 +403,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     def predict_y(
         self,
         pred_data: ModelData,
-        t: torch.Tensor,
+        u: torch.Tensor,
         *,
         n_iter_b: int,
         step_size: float = 0.1,
@@ -407,7 +417,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         Args:
             pred_data (ModelData): Prediction data.
-            u (torch.Tensor): The evaluation times of the probabilities.
+            u (torch.Tensor): The evaluation times of the longitudinal variables.
             n_iter_b (int): Number of iterations for random effects sampling.
             step_size (float, optional): Kernel step. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate. Defaults to 0.01.
@@ -424,10 +434,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             list[torch.Tensor]: A list for each b of survival probabilities.
         """
         # Convert and check if c_max matches the right shape
-        t = torch.as_tensor(t, dtype=torch.float32)
-        if t.ndim != 2 or t.shape[0] != pred_data.size:
+        u = torch.as_tensor(u, dtype=torch.float32)
+        if u.ndim != 2 or u.shape[0] != pred_data.size:
             raise ValueError(
-                "t has shape {u.shape}, expected {(sample_data.size, eval_points)}"
+                "u has shape {u.shape}, expected {(sample_data.size, eval_points)}"
             )
 
         # Load and complete prediction data
@@ -450,7 +460,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 gamma=self.params_.gamma, x=pred_data.x, b=b
             )
 
-            y = self.model_design.regression_fn(t, psi)
+            y = self.model_design.regression_fn(u, psi)
 
             predicted_y.append(y)
 
