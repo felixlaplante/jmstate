@@ -176,7 +176,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             Callable[[dict[str, Any]], None]
             | list[Callable[[dict[str, Any]], None]]
             | None
-        ),
+        ) = None,
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
@@ -277,11 +277,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         new_data: ModelData | None = None,
         *,
         n_iter: int = 1000,
-        callbacks: (
-            Callable[[dict[str, Any], dict[str, Any]], None]
-            | list[Callable[[dict[str, Any], dict[str, Any]], None]]
-            | None
-        ) = None,
+        callbacks: Callable[[dict[str, Any], dict[str, Any]], None]
+        | list[Callable[[dict[str, Any], dict[str, Any]], None]],
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
@@ -294,7 +291,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             new_data (ModelData): The dataset to learn from. Defaults to None.
             n_iter (int, optional): Number of iterations for optimization. Defaults to 1000.
-            callbacks (Callable[[dict[str, Any], dict[str, Any]], None] | list[Callable[[dict[str, Any], dict[str, Any]], None]] | None, optional): A list of callbacks. Defaults to None.
+            callbacks (Callable[[dict[str, Any], dict[str, Any]], None] | list[Callable[[dict[str, Any], dict[str, Any]], None]] | None): A list of callbacks.
             init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
