@@ -415,7 +415,7 @@ class ModelParams:
         return list(itertools.chain.from_iterable(iterables))
 
     @property
-    def as_flat(self) -> torch.Tensor:
+    def as_flat_tensor(self) -> torch.Tensor:
         """Get the flattened parameters.
 
         Returns:
