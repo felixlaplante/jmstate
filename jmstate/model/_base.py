@@ -7,7 +7,7 @@ import torch
 from ..types._defs import LOGTWOPI, Trajectory
 from ..types._structures import ModelData, ModelDesign, ModelParams, SampleData
 from ..utils._linalg import get_cholesky_and_log_eigvals
-from ..utils._misc import call_callbacks
+from ..utils._misc import call_callbacks, params_like_from_flat
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._sampler import MetropolisHastingsSampler
@@ -376,59 +376,19 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         They can be used to draw confidence intervals.
 
-        Raises:
-            ValueError: If the Fisher Information Matrix could not be computed.
-
         Returns:
             ModelParams: The standard error in the same format as the parameters.
         """
         # Check if fim is defined
         if self.metrics_.get("fim") is None:
             raise ValueError(
-                "Fisher Information Matrix must be previously computed. CIs may not be computed."
+                "Fisher Information Matrix must be previously computed. CIs cannot be computed."
             )
-
-        # Get parameter vector
-        params_list = self.params_.as_list
-        params_flat = torch.cat([p.detach().flatten() for p in params_list])
 
         # Compute standard errors
-        try:
-            fim_inv = torch.linalg.pinv(self.metrics_["fim"])  # type: ignore
-            flat_se = torch.sqrt(fim_inv.diag())  # type: ignore
+        flat_se = torch.sqrt(self.metrics_["fim"].inverse().diag())
 
-        except Exception as e:
-            warnings.warn(
-                f"Error inverting Fisher Information Matrix: {e}", stacklevel=2
-            )
-            flat_se = torch.full_like(params_flat, torch.nan)
-
-        # Organize by parameter structure
-        i = 0
-
-        def _next(ref: torch.Tensor) -> torch.Tensor:
-            nonlocal i
-            n = ref.numel()
-            result = flat_se[i : i + n]
-            i += n
-            return result
-
-        gamma = _next(self.params_.gamma) if self.params_.gamma is not None else None
-
-        Q_flat = _next(self.params_.Q_repr[0])
-        Q_method = self.params_.Q_repr[1]
-
-        R_flat = _next(self.params_.R_repr[0])
-        R_method = self.params_.R_repr[1]
-
-        alphas = {key: _next(val) for key, val in self.params_.alphas.items()}
-
-        betas = (
-            {key: _next(val) for key, val in self.params_.betas.items()}
-            if self.params_.betas is not None
-            else None
-        )
-        return ModelParams(gamma, (Q_flat, Q_method), (R_flat, R_method), alphas, betas)
+        return params_like_from_flat(self.params_, flat_se)
 
     def predict_y(
         self,

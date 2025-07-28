@@ -415,6 +415,15 @@ class ModelParams:
         return list(itertools.chain.from_iterable(iterables))
 
     @property
+    def as_flat(self) -> torch.Tensor:
+        """Get the flattened parameters.
+
+        Returns:
+            torch.Tensor: The flattened parameters.
+        """
+        return torch.cat(self.as_list)
+
+    @property
     def numel(self) -> int:
         """Return the number of parameters.
 
