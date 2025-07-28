@@ -3,6 +3,7 @@
 This package provides tools for multi-state joint modeling with PyTorch.
 """
 
+from . import callbacks, functions, types, utils  # type: ignore # noqa: F401
 from .model import MultiStateJointModel
 
 __author__ = "Félix Laplante"
