@@ -282,7 +282,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         self,
         new_data: ModelData | None = None,
         *,
-        n_iter: int = 1000,
+        n_b_samples: int = 1000,
         callbacks: (
             Callable[[dict[str, Any], dict[str, Any]], None]
             | list[Callable[[dict[str, Any], dict[str, Any]], None]]
@@ -298,7 +298,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         Args:
             new_data (ModelData): The dataset to learn from. Defaults to None.
-            n_iter (int, optional): Number of iterations for optimization. Defaults to 1000.
+            n_b_samples (int, optional): Number of random effects samples. Defaults to 1000.
             callbacks (Callable[[dict[str, Any], dict[str, Any]], None] | list[Callable[[dict[str, Any], dict[str, Any]], None]] | None): A list of callbacks.
             init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
@@ -345,9 +345,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             info = {
                 "data": data,
                 "iter": iter,
-                "n_iter": n_iter,
+                "n_iter": n_b_samples,
                 "start": iter == 0,
-                "end": (iter + 1) == n_iter,
+                "end": (iter + 1) == n_b_samples,
                 "model": self,
                 "params": self.params_,
                 "sampler": sampler,
@@ -363,7 +363,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         # Main post fitting loop
         sampler.loop(
-            n_iter,
+            n_b_samples,
             cont_warmup,
             _get_metrics,
             desc="Running metrics loop",
@@ -405,7 +405,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         pred_data: ModelData,
         u: torch.Tensor,
         *,
-        n_iter_b: int,
+        n_b_samples: int = 500,
         step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
@@ -418,7 +418,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             pred_data (ModelData): Prediction data.
             u (torch.Tensor): The evaluation times of the longitudinal variables.
-            n_iter_b (int): Number of iterations for random effects sampling.
+            n_b_samples (int): Number of iterations for random effects sampling. Defaults to 500.
             step_size (float, optional): Kernel step. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
@@ -465,7 +465,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             predicted_y.append(y)
 
         sampler.loop(
-            n_iter_b,
+            n_b_samples,
             cont_warmup,
             _predict_longitudinal,
             desc="Predicting longitudinal expected values",
@@ -476,12 +476,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         self.clear_cache()
         return predicted_y
 
-    def predict_surv_log_probs(
+    def predict_surv_logps(
         self,
         pred_data: ModelData,
         u: torch.Tensor,
         *,
-        n_iter_b: int,
+        n_b_samples: int = 500,
         step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
@@ -494,7 +494,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             pred_data (ModelData): Prediction data.
             u (torch.Tensor): The evaluation times of the probabilities.
-            n_iter_b (int): Number of iterations for random effects sampling.
+            n_b_samples (int, optional): Number of random effects samples. Defaults to 500.
             step_size (float, optional): Kernel step in Metropolis. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
@@ -526,9 +526,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         sampler.warmup(init_warmup)
 
         # Generate predicted probabilites
-        predicted_log_probs: list[torch.Tensor] = []
+        predicted_logps: list[torch.Tensor] = []
 
-        def _predict_surv_log_probs(_iter: int):
+        def _predict_surv_logps(_iter: int):
             (b, _), _ = sampler.step()
 
             # Transform to individual-specific parameters
@@ -540,29 +540,29 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 pred_data.x, pred_data.trajectories, psi, pred_data.c
             )
 
-            log_probs = self.compute_surv_log_probs(sample_data, u)
+            logps = self.compute_surv_logps(sample_data, u)
 
-            predicted_log_probs.append(log_probs)
+            predicted_logps.append(logps)
 
         sampler.loop(
-            n_iter_b,
+            n_b_samples,
             cont_warmup,
-            _predict_surv_log_probs,
+            _predict_surv_logps,
             desc="Predicting survival log probabilities",
             verbose=verbose,
         )
 
         pred_data.clear_extra()
         self.clear_cache()
-        return predicted_log_probs
+        return predicted_logps
 
     def predict_trajectories(
         self,
         pred_data: ModelData,
         c_max: torch.Tensor,
         *,
-        n_iter_b: int,
-        n_iter_T: int,
+        n_b_samples: int = 500,
+        n_trajectories_samples: int = 100,
         step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
@@ -576,8 +576,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             pred_data (ModelData): Prediction data.
             c_max (torch.Tensor): Maximum prediction times.
-            n_iter_b (int): Number of iterations for random effects sampling.
-            n_iter_T (int): Number of trajectory samples per random effects sample.
+            n_b_samples (int): Number of random effects samples. Defaults to 500.
+            n_trajectories_samples (int): Number of trajectory samples per random effects sample. Defaults to 100.
             step_size (float, optional): Kernel step in Metropolis. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
@@ -587,17 +587,21 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
-            ValueError: If n_iter_T is not greater than 0.
+            ValueError: If n_trajectories_samples is not greater than 0.
             RuntimeError: If the prediction fails.
 
         Returns:
             list[list[list[Trajectory]]]: A list of lists of trajectories. First list is for a b sample, then multiples iid drawings of the trajectories.
         """
-        # Convert and check if c_max matches the right shape
+        # Convert and check if c_max matches the right shape and n_trajectories_samples
         c_max = torch.as_tensor(c_max, dtype=torch.float32)
         if c_max.shape != (pred_data.size,):
             raise ValueError(
                 "c_max has incorrect shape, got {c_max.shape}, expected {(sample_data.size,)}"
+            )
+        if n_trajectories_samples < 1:
+            raise ValueError(
+                f"n_trajectories_samples must be greater than 0, got {n_trajectories_samples}"
             )
 
         # Load and complete prediction
@@ -609,15 +613,15 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Warmup MCMC
         sampler.warmup(init_warmup)
 
-        # Check n_iter_T
-        if n_iter_T < 1:
-            raise ValueError(f"n_iter_T must be greater than 0, got {n_iter_T}")
-
         # Prepare replicate data for trajectory sampling
-        x_rep = pred_data.x.repeat(n_iter_T, 1) if pred_data.x is not None else None
-        trajectories_rep = pred_data.trajectories * n_iter_T
-        c_rep = pred_data.c.repeat(n_iter_T)
-        c_max_rep = c_max.repeat(n_iter_T)
+        x_rep = (
+            pred_data.x.repeat(n_trajectories_samples, 1)
+            if pred_data.x is not None
+            else None
+        )
+        trajectories_rep = pred_data.trajectories * n_trajectories_samples
+        c_rep = pred_data.c.repeat(n_trajectories_samples)
+        c_max_rep = c_max.repeat(n_trajectories_samples)
 
         # Generate predictions
         predicted_trajectories: list[list[list[Trajectory]]] = []
@@ -630,7 +634,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 gamma=self.params_.gamma, x=pred_data.x, b=b
             )
             # Replicate for multiple trajectory samples
-            psi_rep = psi.repeat(n_iter_T, 1)
+            psi_rep = psi.repeat(n_trajectories_samples, 1)
 
             sample_data = SampleData(x_rep, trajectories_rep, psi_rep, c_rep)
             # Sample trajectories
@@ -639,13 +643,13 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             # Organize by trajectory iteration
             trajectory_chunks = [
                 trajectories[i * pred_data.size : (i + 1) * pred_data.size]
-                for i in range(n_iter_T)
+                for i in range(n_trajectories_samples)
             ]
 
             predicted_trajectories.append(trajectory_chunks)
 
         sampler.loop(
-            n_iter_b,
+            n_b_samples,
             cont_warmup,
             _predict_trajectories,
             desc="Predicting trajectories",

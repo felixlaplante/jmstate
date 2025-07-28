@@ -400,7 +400,7 @@ class HazardMixin:
 
         return True
 
-    def compute_surv_log_probs(
+    def compute_surv_logps(
         self, sample_data: SampleData, u: torch.Tensor
     ) -> torch.Tensor:
         """Computes log probabilites of remaining event free up to time u.
@@ -431,7 +431,7 @@ class HazardMixin:
             self.model_design.surv,
         )
 
-        nlog_probs = torch.zeros_like(u)
+        nlogps = torch.zeros_like(u)
 
         for key, bucket in buckets.items():
             for k in range(u.shape[1]):
@@ -459,9 +459,9 @@ class HazardMixin:
                     enable_predict_cache,
                 )
 
-                nlog_probs[:, k].index_add_(0, idx, alts_logliks)
+                nlogps[:, k].index_add_(0, idx, alts_logliks)
 
-        return torch.clamp(-nlog_probs, max=0.0)
+        return torch.clamp(-nlogps, max=0.0)
 
     def sample_trajectories(
         self,

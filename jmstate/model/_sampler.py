@@ -1,4 +1,3 @@
-import warnings
 from typing import Any, Callable
 
 import torch
@@ -162,6 +161,7 @@ class MetropolisHastingsSampler:
 
         Raises:
             ValueError: If n_iter is not greater or equal to one.
+            RuntimeError: If an iteration fails.
         """
         if n_iter < 1:
             raise ValueError(f"n_iter must be at least one, got {n_iter}")
@@ -171,8 +171,9 @@ class MetropolisHastingsSampler:
                 self.warmup(cont_warmup)
                 job(iter)
             except Exception as e:
-                warnings.warn(f"Error in iteration {iter}: {e}", stacklevel=2)
-                continue
+                raise RuntimeError(
+                    f"Error in Metropolis Hastings iteration {iter}: {e}"
+                ) from e
 
     @property
     def acceptance_rates(self) -> torch.Tensor:
