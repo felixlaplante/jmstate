@@ -28,6 +28,8 @@ def AdamL1Proximal(lmda: float, group: str = "betas") -> type[CallbackFn]:
         ) -> None:
             if not isinstance(info["optimizer"], torch.optim.Adam):
                 raise ValueError("Optimizer must be set as Adam for AdamL1Proximal")
+            if getattr(info["params"], group) is None:
+                raise ValueError(f"{group} is None")
 
             self.offset = (
                 ALPHAS_POS
