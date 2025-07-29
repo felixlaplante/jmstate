@@ -32,7 +32,7 @@ def AdamL1Proximal(lmda: float, group: str = "betas") -> type[CallbackFn]:
             self.offset = (
                 ALPHAS_POS
                 if group == "alphas"
-                else ALPHAS_POS + len(info["model"].model_design.surv)
+                else ALPHAS_POS + len(info["params"].alphas)
             )
 
         def run(
