@@ -2,15 +2,16 @@ from typing import Any
 
 import torch
 
+from ..types._defs import ALPHAS_POS
 from ..types._structures import CallbackFn
 
 
-def L1Proximal(lmda: float, group: str = "betas") -> type[CallbackFn]:
-    """Gets the L1 proximal operator.
+def AdamL1Proximal(lmda: float, group: str = "betas") -> type[CallbackFn]:
+    """Gets the L1 proximal operator for Adam.
 
     Args:
         lmda (float): The penalty.
-        group (str, optional): Either alphas or betas. Defaults to "betas".
+        group (str, optional): Must be either "alphas" or "betas". Defaults to "betas".
 
     Raises:
         ValueError: If the group is not alphas nor betas.
@@ -21,22 +22,44 @@ def L1Proximal(lmda: float, group: str = "betas") -> type[CallbackFn]:
     if group not in ("alphas", "betas"):
         raise ValueError(f"Group must be either 'alphas' or 'betas', got {group}")
 
-    class _L1Proximal(CallbackFn):
+    class _AdamL1Proximal(CallbackFn):
         def init(
             self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
         ) -> None:
-            pass
+            if not isinstance(info["optimizer"], torch.optim.Adam):
+                raise ValueError("Optimizer must be set as Adam for AdamL1Proximal")
+
+            self.offset = (
+                ALPHAS_POS
+                if group == "alphas"
+                else ALPHAS_POS + len(info["model"].model_design.surv)
+            )
 
         def run(
             self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
         ) -> None:
+            g = info["optimizer"].param_groups[0]
+
             attr = getattr(info["params"], group)
-            for key, val in attr.items():
-                attr[key] = torch.sign(val) * torch.clamp(val.abs() - lmda, min=0.0)
+            for i, key in enumerate(attr):
+                p = g["params"][i + self.offset]
+
+                if p.grad is None:
+                    continue
+
+                state = info["optimizer"].state[p]
+                if len(state) == 0:
+                    continue
+
+                effective_lr = g["lr"] / torch.sqrt(state["exp_avg_sq"] + g["eps"])
+
+                attr[key].data = torch.clamp(
+                    attr[key].abs() - lmda * effective_lr, min=0.0
+                )
 
         def end(
             self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
         ) -> None:
             pass
 
-    return _L1Proximal
+    return _AdamL1Proximal
