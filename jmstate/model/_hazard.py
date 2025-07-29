@@ -71,6 +71,9 @@ class HazardMixin:
         Returns:
             torch.Tensor: The cached tensor.
         """
+        if self.cache_limit is not None and self.cache_limit <= 0:
+            return missing()
+
         cache = self._cache[name]
         if key in cache:
             cache.move_to_end(key)
