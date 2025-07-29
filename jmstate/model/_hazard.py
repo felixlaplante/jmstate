@@ -66,6 +66,7 @@ class HazardMixin:
         Args:
             name (str): The name of the cache info.
             key (Any): The key inside the current info.
+            missing (Callable[[], torch.Tensor]): The fallback function.
 
         Returns:
             torch.Tensor: The cached tensor.
@@ -138,11 +139,10 @@ class HazardMixin:
         mod = link_fn(t=t1, psi=psi) @ alpha
 
         # Compute covariates effect
-        cov = torch.tensor(0.0, dtype=torch.float32)
         if x is not None and beta is not None:
-            cov = x @ beta.unsqueeze(1)
+            return base + mod + x @ beta.unsqueeze(1)
 
-        return base + mod + cov
+        return base + mod
 
     def _cum_hazard(
         self,
