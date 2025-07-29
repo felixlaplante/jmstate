@@ -54,7 +54,7 @@ def AdamL1Proximal(lmda: float, group: str = "betas") -> type[CallbackFn]:
                 effective_lr = g["lr"] / torch.sqrt(state["exp_avg_sq"] + g["eps"])
 
                 attr[key].data = torch.clamp(
-                    attr[key].abs() - lmda * effective_lr, min=0.0
+                    attr[key].abs() - (lmda * info["data"].size) * effective_lr, min=0.0
                 )
 
         def end(
