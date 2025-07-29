@@ -20,16 +20,21 @@ def uniform(
     Returns:
         dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha of supplementary risk.
     """
-
-    rank_lo, rank_hi = rankdata(F_lo, method="max", axis=0), rankdata(
-        F_hi, method="min", axis=0
+    rank_lo, rank_hi = rankdata(F_lo, method="max", axis=-2), rankdata(
+        F_hi, method="min", axis=-2
     )
-    infZ, supZ = rank_lo.min(axis=1) - 1, rank_hi.max(axis=1) - 1
+    infZ, supZ = rank_lo.min(axis=-1) - 1, rank_hi.max(axis=-1) - 1
 
     q_lo = cast(int, np.quantile(infZ, alpha / 2, method="lower"))
     q_hi = cast(int, np.quantile(supZ, 1 - alpha / 2, method="higher"))
 
-    return {"lower": np.sort(F_lo, axis=0)[q_lo], "upper": np.sort(F_hi, axis=0)[q_hi]}
+    sorted_lo = np.sort(F_lo, axis=-2)
+    sorted_hi = np.sort(F_hi, axis=-2)
+
+    return {
+        "lower": sorted_lo.take(q_lo, axis=-2),  # type: ignore
+        "upper": sorted_hi.take(q_hi, axis=-2),  # type: ignore
+    }
 
 
 def student(
@@ -53,12 +58,11 @@ def student(
     Returns:
         dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha of supplementary risk.
     """
-
-    mean_lo, mean_hi = F_lo.mean(axis=0), F_hi.mean(axis=0)
-    std_lo, std_hi = F_lo.std(axis=0) + eps, F_hi.std(axis=0) + eps
+    mean_lo, mean_hi = F_lo.mean(axis=-2), F_hi.mean(axis=-2)
+    std_lo, std_hi = F_lo.std(axis=-2) + eps, F_hi.std(axis=-2) + eps
 
     T_lo, T_hi = (F_lo - mean_lo) / std_lo, (F_hi - mean_hi) / std_hi
-    infT, supT = T_lo.min(axis=1), T_hi.max(axis=1)
+    infT, supT = T_lo.min(axis=-1), T_hi.max(axis=-1)
 
     q_lo = cast(float, np.quantile(infT, alpha / 2))
     q_hi = cast(float, np.quantile(supT, 1 - alpha / 2))
