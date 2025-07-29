@@ -3,105 +3,95 @@ from typing import Any
 
 import torch
 
-
-def compute_fim(info: dict[str, Any], metrics: dict[str, Any]) -> None:
-    """Callback to compute the Fisher Information Matrix.
-
-    Args:
-        info (dict[str, Any]): The information dict.
-        metrics (dict[str, Any]): The metrics dict.
-    """
-    model = info["model"]
-    params = info["params"]
-    n_iter = info["n_iter"]
-    start = info["start"]
-    end = info["end"]
-
-    if not model.fit_ and start:
-        warnings.warn(
-            "Model should be fit before computing Fisher Information Matrix",
-            stacklevel=2,
-        )
-
-    if start:
-        d = params.numel
-        metrics["grad_m1"] = torch.zeros(d, dtype=torch.float32)
-        metrics["grad_m2"] = torch.zeros((d, d), dtype=torch.float32)
-
-    # Collect gradient vector
-    grad_chunks: list[torch.Tensor] = []
-    for p in params.as_list:
-        if p.grad is not None:
-            grad_chunks.append(p.grad.view(-1))
-        else:
-            grad_chunks.append(torch.zeros(p.numel()))
-
-    grad = torch.cat(grad_chunks)
-
-    # Update
-    metrics["grad_m1"] += grad / n_iter
-    metrics["grad_m2"] += torch.outer(grad, grad) / n_iter
-
-    # Set Fisher Information Matrix if it is done
-    if end:
-        metrics["fim"] = metrics["grad_m2"] - torch.outer(
-            metrics["grad_m1"], metrics["grad_m1"]
-        )
-        metrics.pop("grad_m1")
-        metrics.pop("grad_m2")
+from ..types._structures import CallbackFn
 
 
-def compute_criteria(info: dict[str, Any], metrics: dict[str, Any]) -> None:
-    """Callback to compute the Fisher Information Matrix.
+class ComputeFIM(CallbackFn):
+    """Callback to compute the Fisher Information Matrix."""
 
-    Args:
-        info (dict[str, Any]): The information dict.
-        metrics (dict[str, Any]): The metrics dict.
-    """
-    data = info["data"]
-    model = info["model"]
-    params = info["params"]
-    n_iter = info["n_iter"]
-    loglik = info["loglik"]
-    nloglik_pen = info["nloglik_pen"]
-    start = info["start"]
-    end = info["end"]
+    def init(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        if not info["model"].fit_:
+            warnings.warn(
+                "Model should be fit before computing Fisher Information Matrix",
+                stacklevel=2,
+            )
+        d = info["params"].numel
+        tmp["grad_m1"] = torch.zeros(d, dtype=torch.float32)
+        tmp["grad_m2"] = torch.zeros((d, d), dtype=torch.float32)
 
-    if not model.fit_ and start:
-        warnings.warn(
-            "Model should be fit before computing logLik, AIC, or BIC", stacklevel=2
-        )
+    def run(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        grad_chunks: list[torch.Tensor] = []
+        for p in info["params"].as_list:
+            if p.grad is not None:
+                grad_chunks.append(p.grad.view(-1))
+            else:
+                grad_chunks.append(torch.zeros(p.numel()))
 
-    if start:
+        grad = torch.cat(grad_chunks)
+
+        # Update
+        tmp["grad_m1"] += grad / info["n_iter"]
+        tmp["grad_m2"] += torch.outer(grad, grad) / info["n_iter"]
+
+    def end(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        metrics["fim"] = tmp["grad_m2"] - torch.outer(tmp["grad_m1"], tmp["grad_m1"])
+        tmp.pop("grad_m1")
+        tmp.pop("grad_m2")
+
+
+class ComputeCriteria(CallbackFn):
+    """Callback to compute the Fisher Information Matrix."""
+
+    def init(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        if not info["model"].fit_:
+            warnings.warn(
+                "Model should be fit before computing logLik, AIC, or BIC", stacklevel=2
+            )
         metrics["loglik"] = torch.zeros(1, dtype=torch.float32)
         metrics["nloglik_pen"] = torch.zeros(1, dtype=torch.float32)
 
-    # Update
-    metrics["loglik"] += loglik.detach() / n_iter
-    metrics["nloglik_pen"] += nloglik_pen.detach() / n_iter
+    def run(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        metrics["loglik"] += info["loglik"].detach() / info["n_iter"]
+        metrics["nloglik_pen"] += info["nloglik_pen"].detach() / info["n_iter"]
 
-    # Set other metrics when it is done
-    if end:
-        aic_pen = 2 * params.numel
-        bic_pen = params.numel * torch.log(torch.tensor(data.size, dtype=torch.float32))
+    def end(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        aic_pen = 2 * info["params"].numel
+        bic_pen = info["params"].numel * torch.log(
+            torch.tensor(info["data"].size, dtype=torch.float32)
+        )
 
         metrics["aic"] = 2 * metrics["nloglik_pen"] + aic_pen
         metrics["bic"] = 2 * metrics["nloglik_pen"] + bic_pen
 
 
-def compute_ebes(info: dict[str, Any], metrics: dict[str, Any]) -> None:
-    """Callback to compute the EBEs of the random effects.
+class ComputeEBEs(CallbackFn):
+    """Callback to compute the EBEs of b."""
 
-    Args:
-        info (dict[str, Any]): The information dict.
-        metrics (dict[str, Any]): The metrics dict.
-    """
-    b = info["b"]
-    n_iter = info["n_iter"]
-    start = info["start"]
+    def init(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        metrics["b_ebes"] = torch.zeros_like(
+            info["sampler"].current_state, dtype=torch.float32
+        )
 
-    if start:
-        metrics["b_ebes"] = torch.zeros_like(b, dtype=torch.float32)
+    def run(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        metrics["b_ebes"] += info["b"].detach() / info["n_iter"]
 
-    # Update
-    metrics["b_ebes"] += b.detach() / n_iter
+    def end(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        pass

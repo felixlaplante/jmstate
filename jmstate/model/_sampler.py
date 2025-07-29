@@ -166,13 +166,13 @@ class MetropolisHastingsSampler:
         if n_iter < 1:
             raise ValueError(f"n_iter must be at least one, got {n_iter}")
 
-        for iter in tqdm(range(n_iter), desc=desc, disable=not verbose):
+        for iteration in tqdm(range(n_iter), desc=desc, disable=not verbose):
             try:
                 self.warmup(cont_warmup)
-                job(iter)
+                job(iteration)
             except Exception as e:
                 raise RuntimeError(
-                    f"Error in Metropolis Hastings iteration {iter}: {e}"
+                    f"Error in Metropolis Hastings iteration {iteration}: {e}"
                 ) from e
 
     @property

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
@@ -29,24 +29,6 @@ def legendre_quad(n_quad: int) -> tuple[torch.Tensor, ...]:
     std_weights = torch.tensor(weights, dtype=torch.float32)
 
     return std_nodes, std_weights
-
-
-def call_callbacks(
-    callbacks: Callable[..., None] | list[Callable[..., None]] | None,
-    *args: Any,
-    **kwargs: Any,
-):
-    """Call one or multiple functions.
-
-    Args:
-        callbacks (Callable[..., None] | list[Callable[..., None]] | None): The function(s) to call, or None.
-    """
-    if callbacks is None:
-        return
-    if callable(callbacks):
-        callbacks = [callbacks]
-    for callback in callbacks:
-        callback(*args, **kwargs)
 
 
 def params_like_from_flat(

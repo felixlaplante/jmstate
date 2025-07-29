@@ -325,7 +325,16 @@ class HazardMixin:
             t_mid = 0.5 * (t_left + t_right)
 
             cumulative = self._cum_hazard(
-                t0, t_mid, c, x, psi, alpha, beta, base_hazard_fn, link_fn, False
+                t0,
+                t_mid,
+                c,
+                x,
+                psi,
+                alpha,
+                beta,
+                base_hazard_fn,
+                link_fn,
+                self.enable_predict_cache,
             )
 
             # Update search bounds

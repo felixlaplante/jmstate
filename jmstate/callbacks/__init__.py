@@ -1,3 +1,11 @@
-from ._computations import compute_criteria, compute_ebes, compute_fim  # noqa: D104
+from ._computations import ComputeCriteria, ComputeEBEs, ComputeFIM  # noqa: D104
+from ._projections import L1Proximal
+from ._scheduling import Scheduling
 
-__all__ = ["compute_criteria", "compute_ebes", "compute_fim"]
+__all__ = [
+    "ComputeCriteria",
+    "ComputeEBEs",
+    "ComputeFIM",
+    "L1Proximal",
+    "Scheduling",
+]

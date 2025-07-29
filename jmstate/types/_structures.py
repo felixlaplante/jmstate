@@ -1,4 +1,5 @@
 import itertools
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from math import isqrt
@@ -462,3 +463,24 @@ class ModelParams:
         n = getattr(self, matrix + "_dim_")
 
         return cov_from_flat(flat, n, method)
+
+
+# Abstract
+class CallbackFn(ABC):
+    @abstractmethod
+    def init(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def run(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def end(
+        self, info: dict[str, Any], metrics: dict[str, Any], tmp: dict[str, Any]
+    ) -> None:
+        pass

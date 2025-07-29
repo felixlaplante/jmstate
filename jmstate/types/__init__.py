@@ -7,11 +7,12 @@ from ._defs import (
     RegressionFn,
     Trajectory,
 )
-from ._structures import ModelData, ModelDesign, ModelParams, SampleData
+from ._structures import CallbackFn, ModelData, ModelDesign, ModelParams, SampleData
 
 __all__ = [
     "BaseHazardFn",
     "BucketData",
+    "CallbackFn",
     "ClockMethod",
     "IndividualEffectsFn",
     "LinkFn",

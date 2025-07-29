@@ -4,10 +4,17 @@ from typing import Any, Callable, cast
 
 import torch
 
+from ..callbacks._misc import call_callbacks
 from ..types._defs import LOGTWOPI, Trajectory
-from ..types._structures import ModelData, ModelDesign, ModelParams, SampleData
+from ..types._structures import (
+    CallbackFn,
+    ModelData,
+    ModelDesign,
+    ModelParams,
+    SampleData,
+)
 from ..utils._linalg import get_cholesky_and_log_eigvals
-from ..utils._misc import call_callbacks, params_like_from_flat
+from ..utils._misc import params_like_from_flat
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._sampler import MetropolisHastingsSampler
@@ -28,7 +35,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     model_design: ModelDesign
     params_: ModelParams
     optimizer: type[torch.optim.Optimizer]
-    optimizer_params: dict[str, float] | None
+    optimizer_params: dict[str, Any] | None
     pen: Callable[[ModelParams], torch.Tensor] | None
     n_quad: int
     n_bissect: int
@@ -43,7 +50,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         init_params: ModelParams,
         *,
         optimizer: type[torch.optim.Optimizer] = torch.optim.Adam,
-        optimizer_params: dict[str, float] | None = None,
+        optimizer_params: dict[str, Any] | None = None,
         pen: Callable[[ModelParams], torch.Tensor] | None = None,
         n_quad: int = 32,
         n_bissect: int = 32,
@@ -171,25 +178,21 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         *,
         n_iter: int = 2000,
         batch_size: int = 1,
-        callbacks: (
-            Callable[[dict[str, Any]], None]
-            | list[Callable[[dict[str, Any]], None]]
-            | None
-        ) = None,
+        callbacks: CallbackFn | list[CallbackFn] | None = None,
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
         init_warmup: int = 500,
         cont_warmup: int = 5,
         verbose: bool = True,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         """Fits the MultiStateJointModel.
 
         Args:
             data (ModelData): The dataset to learn from.
             n_iter (int, optional): Number of iterations for optimization. Defaults to 2000.
             batch_size (int, optional): Batch size used in fitting. Defaults to 1.
-            callbacks (Callable[[dict[str, Any]], None] | list[Callable[[dict[str, Any], dict[str, Any]], None]] | None, optional): A list of callbacks. Defaults to None.
+            callbacks (CallbackFn | list[CallbackFn] | None, optional): A list of callbacks. Defaults to None.
             init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
@@ -200,6 +203,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Raises:
             ValueError: If batch_size is not greater than 0.
             TypeError: If some callback is not callable.
+
+        Returns:
+            dict[str, Any] | None: The metrics dict, possibly empty if none were recorded.
         """
         # Verify batch_size
         if batch_size < 1:
@@ -226,7 +232,21 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         sampler = self._setup_mcmc(data_rep, init_step_size, adapt_rate, accept_target)
         sampler.warmup(init_warmup)
 
-        def _fit(iter: int):
+        # Initialize metrics and tmp
+        metrics: dict[str, Any] = {}
+        tmp: dict[str, Any] = {}
+
+        info = {
+            "data": data,
+            "n_iter": n_iter,
+            "model": self,
+            "params": self.params_,
+            "optimizer": optimizer,
+            "sampler": sampler,
+        }
+        call_callbacks("init", callbacks, info, metrics=metrics, tmp=tmp)
+
+        def _fit(iteration: int):
             (b, logpdfs), logliks = sampler.step()
 
             # Optimization step: Update parameters
@@ -245,10 +265,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
             info = {
                 "data": data,
-                "iter": iter,
+                "iter": iteration,
                 "n_iter": n_iter,
-                "start": iter == 0,
-                "end": (iter + 1) == n_iter,
                 "model": self,
                 "params": self.params_,
                 "optimizer": optimizer,
@@ -260,13 +278,22 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 "nloglik_pen": nloglik_pen,
                 "loss": loss,
             }
-
-            call_callbacks(callbacks, info=info)
+            call_callbacks("run", callbacks, info, metrics=metrics, tmp=tmp)
 
         # Main fitting loop
         sampler.loop(
             n_iter, cont_warmup, _fit, desc="Fitting joint model", verbose=verbose
         )
+
+        info = {
+            "data": data,
+            "n_iter": n_iter,
+            "model": self,
+            "params": self.params_,
+            "optimizer": optimizer,
+            "sampler": sampler,
+        }
+        call_callbacks("end", callbacks, info={}, metrics=metrics, tmp=tmp)
 
         params_flat = torch.cat([p.detach().flatten() for p in self.params_.as_list])
         if torch.isnan(params_flat).any() or torch.isinf(params_flat).any():
@@ -278,28 +305,27 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         data_rep.clear_extra()
         self.clear_cache()
 
+        return metrics if metrics != {} else None
+
     def get_metrics(
         self,
         new_data: ModelData | None = None,
         *,
         n_b_samples: int = 1000,
-        callbacks: (
-            Callable[[dict[str, Any], dict[str, Any]], None]
-            | list[Callable[[dict[str, Any], dict[str, Any]], None]]
-        ),
+        callbacks: CallbackFn | list[CallbackFn],
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
         init_warmup: int = 500,
         cont_warmup: int = 5,
         verbose: bool = True,
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         """Fits the MultiStateJointModel.
 
         Args:
             new_data (ModelData): The dataset to learn from. Defaults to None.
             n_b_samples (int, optional): Number of random effects samples. Defaults to 1000.
-            callbacks (Callable[[dict[str, Any], dict[str, Any]], None] | list[Callable[[dict[str, Any], dict[str, Any]], None]] | None): A list of callbacks.
+            callbacks (CallbackFn | list[CallbackFn]): A list of callbacks functions.
             init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
@@ -310,6 +336,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Raises:
             ValueError: If new_data is be None when model is not fit
             TypeError: If some callback is not callable.
+
+        Returns:
+            dict[str, Any] | None: The metrics dict, possibly empty if none were recorded.
         """
         # Prepare data
         if new_data is None and not self.fit_:
@@ -325,10 +354,20 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         sampler = self._setup_mcmc(data, init_step_size, adapt_rate, accept_target)
         sampler.warmup(init_warmup)
 
-        # Initialize metrics
+        # Initialize metrics and tmp
         metrics: dict[str, Any] = {}
+        tmp: dict[str, Any] = {}
 
-        def _get_metrics(iter: int):
+        info = {
+            "data": data,
+            "n_iter": n_b_samples,
+            "model": self,
+            "params": self.params_,
+            "sampler": sampler,
+        }
+        call_callbacks("init", callbacks, info, metrics=metrics, tmp=tmp)
+
+        def _get_metrics(iteration: int):
             (b, logpdfs), logliks = sampler.step()
 
             # Compute stats
@@ -344,10 +383,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
             info = {
                 "data": data,
-                "iter": iter,
+                "iter": iteration,
                 "n_iter": n_b_samples,
-                "start": iter == 0,
-                "end": (iter + 1) == n_b_samples,
                 "model": self,
                 "params": self.params_,
                 "sampler": sampler,
@@ -358,8 +395,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 "nloglik_pen": nloglik_pen,
                 "loss": loss,
             }
-
-            call_callbacks(callbacks, info=info, metrics=metrics)
+            call_callbacks("run", callbacks, info=info, metrics=metrics, tmp=tmp)
 
         # Main post fitting loop
         sampler.loop(
@@ -370,6 +406,15 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             verbose=verbose,
         )
 
+        info = {
+            "data": data,
+            "n_iter": n_b_samples,
+            "model": self,
+            "params": self.params_,
+            "sampler": sampler,
+        }
+        call_callbacks("end", callbacks, info, metrics=metrics, tmp=tmp)
+
         # Set up metrics
         if new_data is None:
             self.metrics_ = metrics
@@ -379,7 +424,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         data.clear_extra()
         self.clear_cache()
 
-        return metrics
+        return metrics if metrics != {} else None
 
     def get_stderror(self) -> ModelParams:
         """Returns the standard error of the parameters.
@@ -528,7 +573,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Generate predicted probabilites
         predicted_logps: list[torch.Tensor] = []
 
-        def _predict_surv_logps(_iter: int):
+        def _predict_surv_logps(_iteration: int):
             (b, _), _ = sampler.step()
 
             # Transform to individual-specific parameters
@@ -626,7 +671,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Generate predictions
         predicted_trajectories: list[list[list[Trajectory]]] = []
 
-        def _predict_trajectories(_iter: int):
+        def _predict_trajectories(_iteration: int):
             (b, _), _ = sampler.step()
 
             # Transform to individual-specific parameters
