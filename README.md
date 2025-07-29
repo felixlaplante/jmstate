@@ -1,1 +1,1 @@
-# paquid-jmstate
+# Joint Modeling inference and prediction made easy
