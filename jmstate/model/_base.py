@@ -250,7 +250,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             (b, logpdfs), logliks = sampler.step()
 
             # Optimization step: Update parameters
-            penalty = self.pen(self.params_) if self.pen is not None else None
+            penalty = (
+                self.pen(self.params_) * data.size if self.pen is not None else None
+            )
             loglik = logliks.sum() / batch_size
             nloglik_pen = -loglik + penalty if penalty is not None else -loglik
             loss = (
@@ -371,7 +373,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             (b, logpdfs), logliks = sampler.step()
 
             # Compute stats
-            penalty = self.pen(self.params_) if self.pen is not None else None
+            penalty = (
+                self.pen(self.params_) * data.size if self.pen is not None else None
+            )
             loglik = logliks.sum()
             nloglik_pen = -loglik + penalty if penalty is not None else -loglik
             loss = -logpdfs.sum() + penalty if penalty is not None else -logpdfs.sum()
