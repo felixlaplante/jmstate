@@ -70,6 +70,8 @@ class Metrics(SimpleNamespace):
     pred_y: list[torch.Tensor]
     pred_surv_logps: list[torch.Tensor]
     pred_trajectories: list[list[Trajectory]]
+    params_history: list[torch.Tensor]
+    mcmc_diagnostics: list[dict[str, Any]]
 
 
 # Dataclasses

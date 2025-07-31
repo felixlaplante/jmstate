@@ -162,7 +162,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         init_warmup: int = 500,
         cont_warmup: int = 5,
         verbose: bool = True,
-    ) -> Any | dict[str, Any] | None:
+    ) -> Any | Metrics | None:
         """Runs the MultiStateJointModel loop and some jobs.
 
         Args:

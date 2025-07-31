@@ -69,11 +69,9 @@ class Scheduling(Job):
         self.scheduler_params = scheduler_params
 
     def init(self, info: Info, metrics: Metrics) -> None:
-        if not isinstance(info.extra.optimizer, torch.optim.Optimizer):
+        if not hasattr(info, "optimizer"):
             raise ValueError("Optimizer must be initialized before scheduler")
-        self.scheduler = self.scheduler_factory(
-            info.extra.optimizer, **self.scheduler_params
-        )
+        self.scheduler = self.scheduler_factory(info.optimizer, **self.scheduler_params)
 
     def run(self, info: Info, metrics: Metrics) -> None:
         self.scheduler.step()
@@ -98,7 +96,9 @@ class AdamL1Proximal(Job):
             )
 
     def init(self, info: Info, metrics: Metrics) -> None:
-        if not isinstance(info.extra.optimizer, torch.optim.Adam):
+        if not hasattr(info, "optimizer"):
+            raise ValueError("Optimizer must be initialized before AdamL1Proximal")
+        if not isinstance(info.optimizer, torch.optim.Adam):
             raise ValueError("Optimizer must be set as Adam for AdamL1Proximal")
         if getattr(info.model.params_, self.group) is None:
             raise ValueError(f"{self.group} is None")
@@ -110,7 +110,7 @@ class AdamL1Proximal(Job):
         )
 
     def run(self, info: Info, metrics: Metrics) -> None:
-        g = cast(torch.optim.Adam, info.extra.optimizer).param_groups[0]
+        g = cast(torch.optim.Adam, info.optimizer).param_groups[0]
 
         attr = getattr(info.model.params_, self.group)
         for i, key in enumerate(attr):
@@ -119,7 +119,7 @@ class AdamL1Proximal(Job):
             if p.grad is None:
                 continue
 
-            state = cast(torch.optim.Adam, info.extra.optimizer).state[p]
+            state = cast(torch.optim.Adam, info.optimizer).state[p]
             if len(state) == 0:
                 continue
 

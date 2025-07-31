@@ -174,12 +174,21 @@ class MetropolisHastingsSampler:
 
     @property
     def acceptance_rates(self) -> torch.Tensor:
-        """Gets the acceptance_rate mean.
+        """Gets the acceptance_rate.
 
         Returns:
             torch.Tensor: The means of the acceptance_rates accross iterations.
         """
         return self.n_accepted / torch.clamp(self.n_samples, min=1.0)
+
+    @property
+    def mean_acceptance_rate(self) -> float:
+        """Gets the acceptance_rate mean across all individuals.
+
+        Returns:
+            torch.Tensor: The means accross iterations and individuals.
+        """
+        return self.acceptance_rates.mean().item()
 
     @property
     def mean_step_size(self) -> float:
@@ -189,3 +198,17 @@ class MetropolisHastingsSampler:
             float: The mean step size.
         """
         return self.step_sizes.mean().item()
+
+    @property
+    def diagnostics(self) -> dict[str, Any]:
+        """Gets the summary of the MCMC diagnostics.
+
+        Returns:
+            dict[str, Any]: The dict of the diagnostics.
+        """
+        return {
+            "acceptance_rates": self.acceptance_rates.clone(),
+            "mean_acceptance_rate": self.mean_acceptance_rate,
+            "step_sizes": self.step_sizes.clone(),
+            "mean_step_size": self.mean_step_size,
+        }
