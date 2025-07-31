@@ -21,9 +21,9 @@ class ComputeFIM(Job):
                 "Model should be fit before computing Fisher Information Matrix",
                 stacklevel=2,
             )
-        if info.batch_size != 1:
+        if info.n_chains != 1:
             warnings.warn(
-                "Batch size should be set to one",
+                "n_chains should be set to 1",
                 stacklevel=2,
             )
 
@@ -58,17 +58,22 @@ class ComputeFIM(Job):
 
 
 class ComputeCriteria(Job):
-    """Job to compute the Fisher Information Matrix."""
+    """Job to compute AIC, BIC and Log Likelihood."""
+
+    n: int
+    m: int
 
     def init(self, info: Info, metrics: Metrics) -> None:
+        self.n = info.data.size
+        self.m = info.n_iterations * info.n_chains
         metrics.loglik = 0.0
 
     def run(self, info: Info, metrics: Metrics) -> None:
-        metrics.loglik += info.logliks.detach().sum().item() / info.n_iterations
+        metrics.loglik += info.logliks.detach().sum().item() / self.m
 
     def end(self, info: Info, metrics: Metrics) -> None:
         metrics.nloglik_pen = (
-            info.model.pen(info.model.params_).item() - metrics.loglik
+            self.n * info.model.pen(info.model.params_).item() - metrics.loglik
             if info.model.pen is not None
             else -metrics.loglik
         )
@@ -76,7 +81,7 @@ class ComputeCriteria(Job):
         d = info.model.params_.numel
         aic_pen = 2 * d
         bic_pen = (
-            d * torch.log(torch.tensor(info.data.size, dtype=torch.float32)).item()
+            d * torch.log(torch.tensor(self.n, dtype=torch.float32)).item()
         )
 
         metrics.aic = 2 * metrics.nloglik_pen + aic_pen
@@ -96,7 +101,7 @@ class ComputeEBEs(Job):
 
     def run(self, info: Info, metrics: Metrics) -> None:
         metrics.ebes += (
-            info.b.detach().view(self.n, -1, self.p).mean(dim=1) / info.n_iterations
+            info.b.detach().view(-1, self.n, self.p).mean(dim=0) / info.n_iterations
         )
 
     def end(self, info: Info, metrics: Metrics) -> None:

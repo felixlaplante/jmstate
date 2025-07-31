@@ -155,7 +155,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         *,
         jobs: Job | list[Job],
         n_iterations: int = 2000,
-        batch_size: int = 1,
+        n_chains: int = 1,
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         accept_target: float = 0.234,
@@ -169,7 +169,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
             n_iterations (int, optional): Number of iterations for optimization. Defaults to 2000.
-            batch_size (int, optional): Batch size used. Defaults to 1.
+            n_chains (int, optional): Batch size used. Defaults to 1.
             init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
@@ -179,17 +179,17 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         Raises:
             ValueError: If n_iterations is not greater than 0.
-            ValueError: If batch_size is not greater than 0.
+            ValueError: If n_chains is not greater than 0.
             TypeError: If some callback is not callable.
 
         Returns:
             Any | dict[str, Any] | None: The metrics dict, or its single element, possibly None if none were recorded.
         """
-        # Verify batch_size
+        # Verify n_chains
         if n_iterations < 1:
             raise ValueError(f"n_iterations must be greater than 0, got {n_iterations}")
-        if batch_size < 1:
-            raise ValueError(f"batch_size must be greater than 0, got {batch_size}")
+        if n_chains < 1:
+            raise ValueError(f"n_chains must be greater than 0, got {n_chains}")
 
         # Load and complete data
         if new_data is None and self.data is None:
@@ -197,11 +197,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         # Repeat data to do minibatch in a vectorized fashion
         data = cast(ModelData, new_data if new_data is not None else self.data)
-        x_rep = data.x.repeat(batch_size, 1) if data.x is not None else None
-        t_rep = data.t if data.t.ndim == 1 else data.t.repeat(batch_size, 1)
-        y_rep = data.y.repeat(batch_size, 1, 1)
-        trajectories_rep = data.trajectories * batch_size
-        c_rep = data.c.repeat(batch_size)
+        x_rep = data.x.repeat(n_chains, 1) if data.x is not None else None
+        t_rep = data.t if data.t.ndim == 1 else data.t.repeat(n_chains, 1)
+        y_rep = data.y.repeat(n_chains, 1, 1)
+        trajectories_rep = data.trajectories * n_chains
+        c_rep = data.c.repeat(n_chains)
 
         data_rep = CompleteModelData(
             x_rep, t_rep, y_rep, trajectories_rep, c_rep, skip_validation=True
@@ -219,7 +219,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             data=data,
             iteration=-1,
             n_iterations=n_iterations,
-            batch_size=batch_size,
+            n_chains=n_chains,
             model=self,
             sampler=sampler,
         )

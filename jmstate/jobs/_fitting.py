@@ -12,6 +12,7 @@ class Fit(Job):
     retain_graph: bool
     optimizer_factory: type[torch.optim.Optimizer]
     optimizer_params: dict[str, Any] | None
+    n: int
 
     def __init__(
         self,
@@ -27,14 +28,17 @@ class Fit(Job):
         info.model.data = info.data
         info.model.params_.require_grad(True)
         info.optimizer = self.optimizer_factory(
-            info.model.params_.as_list, **(self.optimizer_params or {"lr": 1e-2})
+            info.model.params_.as_list,
+            **(self.optimizer_params or {"lr": 0.01}),
         )
+        self.n = info.data.size
 
     def run(self, info: Info, metrics: Metrics) -> None:
         loss = (
-            -info.logpdfs.sum() + info.model.pen(info.model.params_)
+            -info.logpdfs.sum() / info.n_chains
+            + self.n * info.model.pen(info.model.params_)
             if info.model.pen is not None
-            else -info.logpdfs.sum()
+            else -info.logpdfs.sum() / info.n_chains
         )
 
         info.optimizer.zero_grad()  # type: ignore
@@ -85,6 +89,7 @@ class AdamL1Proximal(Job):
 
     group: str
     lmda: float
+    n: int
     offset: int
 
     def __init__(self, lmda: float, group: str = "betas") -> None:
@@ -103,6 +108,7 @@ class AdamL1Proximal(Job):
         if getattr(info.model.params_, self.group) is None:
             raise ValueError(f"{self.group} is None")
 
+        self.n = info.data.size
         self.offset = (
             ALPHAS_POS
             if self.group == "alphas"
@@ -126,7 +132,7 @@ class AdamL1Proximal(Job):
             eff_lr = g["lr"] / torch.sqrt(state["exp_avg_sq"] + g["eps"])
 
             attr[key].data = torch.clamp(
-                attr[key].abs() - (self.lmda * info.data.size) * eff_lr, min=0.0
+                attr[key].abs() - (self.lmda * self.n) * eff_lr, min=0.0
             )
 
     def end(self, info: Info, metrics: Metrics) -> None:
