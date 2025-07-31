@@ -211,14 +211,12 @@ class HazardMixin:
         )
 
         # Compute hazard at quadrature points
-        log_hazard_vals = self._log_hazard(
+        vals = self._log_hazard(
             t0, quad_c, x, psi, alpha, beta, base_hazard_fn, link_fn, enable_cache
         )
+        vals.clamp_(min=-50.0, max=50.0).exp_()
 
-        # Numerical integration using Gaussian quadrature
-        hazard_vals = torch.exp(torch.clamp(log_hazard_vals, min=-50.0, max=50.0))
-
-        return half.view(-1) * (hazard_vals @ self._std_weights)
+        return half.view(-1) * (vals @ self._std_weights)
 
     def _log_and_cum_hazard(
         self,
@@ -278,19 +276,12 @@ class HazardMixin:
         )
 
         # Compute log hazard at all points
-        temp = self._log_hazard(
+        all_vals = self._log_hazard(
             t0, quad_lc, x, psi, alpha, beta, base_hazard_fn, link_fn, enable_cache
         )
+        all_vals[:, 1:].clamp_(min=-50.0, max=50.0).exp_()
 
-        # Extract log hazard at endpoint and quadrature points
-        log_hazard_vals = temp[:, :1]  # Log hazard at t1
-        hazard_vals = torch.exp(
-            torch.clamp(temp[:, 1:], min=-50.0, max=50.0)
-        )  # Hazard at quadrature points
-
-        return log_hazard_vals.view(-1), half.view(-1) * (
-            hazard_vals @ self._std_weights
-        )
+        return all_vals[:, 0], half.view(-1) * (all_vals[:, 1:] @ self._std_weights)
 
     def _sample_transition(
         self,
@@ -326,7 +317,7 @@ class HazardMixin:
         t_left, t_right = t0.clone().view(-1, 1), c_max.clone().view(-1, 1)
 
         # Generate exponential random variables
-        target = -torch.log(torch.clamp(torch.rand(t_left.numel()), min=1e-8))
+        target = -torch.log(torch.rand(t_left.numel()))
 
         # Bisection search for survival times
         for _ in range(self.n_bissect):
