@@ -16,6 +16,8 @@ class PredictY(Job):
         self.u = torch.as_tensor(u, dtype=torch.float32)
 
     def init(self, info: Info, metrics: Metrics) -> None:
+        if info.n_chains != 1:
+            raise ValueError(f"n_chains must be equal to 1, got {info.n_chains}")
         if self.u.ndim != 2 or self.u.shape[0] != info.data.size:
             raise ValueError(
                 f"u has shape {self.u.shape}, expected ({info.data.size}, eval_points)"
@@ -43,6 +45,8 @@ class PredictSurvLogps(Job):
         self.u = torch.as_tensor(u, dtype=torch.float32)
 
     def init(self, info: Info, metrics: Metrics) -> None:
+        if info.n_chains != 1:
+            raise ValueError(f"n_chains must be equal to 1, got {info.n_chains}")
         if self.u.ndim != 2 or self.u.shape[0] != info.data.size:
             raise ValueError(
                 f"u has shape {self.u.shape}, expected ({info.data.size}, eval_points)"
@@ -87,6 +91,8 @@ class PredictTrajectories(Job):
             )
 
     def init(self, info: Info, metrics: Metrics) -> None:
+        if info.n_chains != 1:
+            raise ValueError(f"n_chains must be equal to 1, got {info.n_chains}")
         if self.c_max.shape != (info.data.size,):
             raise ValueError(
                 f"c_max has incorrect shape, got {self.c_max.shape}, expected {(info.data.size,)}"
