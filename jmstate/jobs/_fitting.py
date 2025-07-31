@@ -93,7 +93,7 @@ class AdamL1Proximal(Job):
 
     group: str
     lmda: float
-    offset: int
+    param_groups: list[dict[str, Any]]
 
     def __init__(self, lmda: float, group: str = "betas") -> None:
         self.group = group
@@ -110,16 +110,15 @@ class AdamL1Proximal(Job):
             raise ValueError("Optimizer must be set as Adam for AdamL1Proximal")
         if getattr(info.model.params_, self.group) is None:
             raise ValueError(f"{self.group} is None")
-        if all(g.get("group") != self.group for g in info.optimizer.param_groups):
+
+        self.param_groups = [
+            g for g in info.optimizer.param_groups if g.get("group") == self.group
+        ]
+        if self.param_groups == []:
             raise ValueError(f"Optimizer does not optimize group {self.group}")
 
-        self.n = info.data.size
-
     def run(self, info: Info, metrics: Metrics) -> None:
-        for g in info.optimizer.param_groups:
-            if g.get("group") != self.group:
-                continue
-
+        for g in self.param_groups:
             for p in g["params"]:
                 if p.grad is None:
                     continue
