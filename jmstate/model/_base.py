@@ -30,7 +30,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     pen: Callable[[ModelParams], torch.Tensor] | None
     n_quad: int
     n_bissect: int
-    enable_cache: bool
     cache_limit: int | None
     data: ModelData | None
     metrics_: Metrics | None
@@ -44,7 +43,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         pen: Callable[[ModelParams], torch.Tensor] | None = None,
         n_quad: int = 32,
         n_bissect: int = 32,
-        enable_cache: bool = True,
         cache_limit: int | None = 256,
     ):
         """Initializes the joint model based on the user defined design.
@@ -55,7 +53,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             pen (Callable[[ModelParams], torch.Tensor] | None, optional): The penalization function. Defaults to None.
             n_quad (int, optional): The used numnber of points for Gauss-Legendre quadrature. Defaults to 32.
             n_bissect (int, optional): The number of bissection steps used in transition sampling. Defaults to 32.
-            enable_cache (bool, optional): Enables caching. Defaults to True.
             cache_limit (int | None, optional): The max length of cache. Defaults to 256.
 
         Raises:
@@ -74,7 +71,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         super().__init__(
             n_quad=n_quad,
             n_bissect=n_bissect,
-            enable_cache=enable_cache,
             cache_limit=cache_limit,
         )
 
