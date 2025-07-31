@@ -51,7 +51,7 @@ class Info(SimpleNamespace):
     data: ModelData
     iteration: int
     n_iterations: int
-    batch_size: int
+    n_chains: int
     model: MultiStateJointModel
     sampler: MetropolisHastingsSampler
     optimizer: torch.optim.Optimizer
@@ -107,8 +107,3 @@ class Job(ABC):
 
 # Constants
 LOGTWOPI: Final = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float32))
-GAMMA_POS: Final = 0
-Q_POS: Final = 1
-R_POS: Final = 2
-ALPHAS_POS: Final = 3
-BETAS_POS: Final = 4
