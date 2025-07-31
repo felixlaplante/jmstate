@@ -1,47 +1,51 @@
 import warnings
-from typing import Any, cast
+from typing import Any
 
 import torch
 
-from ..typedefs._defs import ALPHAS_POS, Info, Job, Metrics
+from ..typedefs._defs import Info, Job, Metrics
 
 
 class Fit(Job):
     """Job to fit the model."""
 
-    retain_graph: bool
     optimizer_factory: type[torch.optim.Optimizer]
     optimizer_params: dict[str, Any] | None
-    n: int
+    retain_graph: bool
 
     def __init__(
         self,
-        retain_graph: bool = False,
         optimizer_factory: type[torch.optim.Optimizer] = torch.optim.Adam,
         optimizer_params: dict[str, Any] | None = None,
+        retain_graph: bool = False,
     ) -> None:
-        self.retain_graph = retain_graph
         self.optimizer_factory = optimizer_factory
         self.optimizer_params = optimizer_params
+        self.retain_graph = retain_graph
 
     def init(self, info: Info, metrics: Metrics) -> None:
         info.model.data = info.data
         info.model.params_.require_grad(True)
+        param_groups = [
+            {
+                "params": val,
+                "group": key,
+            }
+            for key, val in info.model.params_.as_groups.items()
+        ]
         info.optimizer = self.optimizer_factory(
-            info.model.params_.as_list,
+            param_groups,
             **(self.optimizer_params or {"lr": 0.01}),
         )
-        self.n = info.data.size
 
     def run(self, info: Info, metrics: Metrics) -> None:
         loss = (
-            -info.logpdfs.sum() / info.n_chains
-            + self.n * info.model.pen(info.model.params_)
+            -info.logpdfs.mean() + info.model.pen(info.model.params_)
             if info.model.pen is not None
-            else -info.logpdfs.sum() / info.n_chains
+            else -info.logpdfs.mean()
         )
 
-        info.optimizer.zero_grad()  # type: ignore
+        info.optimizer.zero_grad(set_to_none=True)  # type: ignore
         loss.backward(retain_graph=self.retain_graph)  # type: ignore
         info.optimizer.step()  # type: ignore
 
@@ -89,7 +93,6 @@ class AdamL1Proximal(Job):
 
     group: str
     lmda: float
-    n: int
     offset: int
 
     def __init__(self, lmda: float, group: str = "betas") -> None:
@@ -107,33 +110,26 @@ class AdamL1Proximal(Job):
             raise ValueError("Optimizer must be set as Adam for AdamL1Proximal")
         if getattr(info.model.params_, self.group) is None:
             raise ValueError(f"{self.group} is None")
+        if all(g.get("group") != self.group for g in info.optimizer.param_groups):
+            raise ValueError(f"Optimizer does not optimize group {self.group}")
 
         self.n = info.data.size
-        self.offset = (
-            ALPHAS_POS
-            if self.group == "alphas"
-            else ALPHAS_POS + len(info.model.params_.alphas)
-        )
 
     def run(self, info: Info, metrics: Metrics) -> None:
-        g = cast(torch.optim.Adam, info.optimizer).param_groups[0]
-
-        attr = getattr(info.model.params_, self.group)
-        for i, key in enumerate(attr):
-            p = g["params"][i + self.offset]
-
-            if p.grad is None:
+        for g in info.optimizer.param_groups:
+            if g.get("group") != self.group:
                 continue
 
-            state = cast(torch.optim.Adam, info.optimizer).state[p]
-            if len(state) == 0:
-                continue
+            for p in g["params"]:
+                if p.grad is None:
+                    continue
 
-            eff_lr = g["lr"] / torch.sqrt(state["exp_avg_sq"] + g["eps"])
+                state = info.optimizer.state[p]
+                if len(state) == 0:
+                    continue
 
-            attr[key].data = torch.clamp(
-                attr[key].abs() - (self.lmda * self.n) * eff_lr, min=0.0
-            )
+                eff_lr = g["lr"] / torch.sqrt(state["exp_avg_sq"] + g["eps"])
+                p.data = torch.clamp(p.abs() - self.lmda * eff_lr, min=0.0)
 
     def end(self, info: Info, metrics: Metrics) -> None:
         pass
