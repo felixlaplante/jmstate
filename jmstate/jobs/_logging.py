@@ -17,7 +17,7 @@ class LogParamsHistory(Job):
 
 
 class MCMCDiagnostics(Job):
-    """Job to log the evolution of the paramters during fit."""
+    """Job to log the evolution of the MCMC sampler."""
 
     def init(self, info: Info, metrics: Metrics) -> None:
         metrics.mcmc_diagnostics = []
