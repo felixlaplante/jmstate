@@ -60,7 +60,7 @@ def params_like_from_flat(ref_params: ModelParams, flat: torch.Tensor) -> ModelP
         n = ref.numel()
         result = flat[i : i + n]
         i += n
-        return result
+        return result.view(ref.shape)
 
     gamma = _next(ref_params.gamma) if ref_params.gamma is not None else None
 

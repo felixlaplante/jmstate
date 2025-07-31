@@ -19,11 +19,8 @@ class ModelParams:
         ValueError: If the name matrix is not "Q" nor "R".
         ValueError: If the name matrix is not "Q" nor "R".
         ValueError: If any of the main tensors contains inf.
-        ValueError: If any of the main tensors is not 1D.
         ValueError: If any of the alpha tensors contains inf.
-        ValueError: If any of the alpha tensors is not 1D.
         ValueError: If any of the beta tensors contains inf.
-        ValueError: If any of the beta tensors is not 1D.
     """
 
     gamma: torch.Tensor | None
@@ -40,17 +37,14 @@ class ModelParams:
 
         Raises:
             ValueError: If any of the main tensors contains inf.
-            ValueError: If any of the main tensors is not 1D.
             ValueError: If any of the alpha tensors contains inf.
-            ValueError: If any of the alpha tensors is not 1D.
             ValueError: If any of the beta tensors contains inf.
-            ValueError: If any of the beta tensors is not 1D.
         """
         Q_flat, Q_method = self.Q_repr
         R_flat, R_method = self.R_repr
 
-        Q_flat = torch.as_tensor(Q_flat, dtype=torch.float32)
-        R_flat = torch.as_tensor(R_flat, dtype=torch.float32)
+        Q_flat = torch.as_tensor(Q_flat, dtype=torch.float32).view(-1)
+        R_flat = torch.as_tensor(R_flat, dtype=torch.float32).view(-1)
 
         # Update representation tuples
         self.Q_repr = (Q_flat, Q_method)
@@ -63,11 +57,11 @@ class ModelParams:
         )
 
         for key, alpha in self.alphas.items():
-            self.alphas[key] = torch.as_tensor(alpha, dtype=torch.float32)
+            self.alphas[key] = torch.as_tensor(alpha, dtype=torch.float32).view(-1)
 
         if self.betas is not None:
             for key, beta in self.betas.items():
-                self.betas[key] = torch.as_tensor(beta, dtype=torch.float32)
+                self.betas[key] = torch.as_tensor(beta, dtype=torch.float32).view(-1)
 
         self._set_dims("Q")
         self._set_dims("R")
@@ -84,22 +78,16 @@ class ModelParams:
                 continue
             if tensor.isinf().any():
                 raise ValueError(f"{name} contains inf")
-            if tensor.ndim != 1:
-                raise ValueError(f"{name} must be 1D")
 
         # Check dictionary tensors
         for key, alpha in self.alphas.items():
             if alpha.isinf().any():
                 raise ValueError(f"alpha {key} contains inf")
-            if alpha.ndim != 1:
-                raise ValueError(f"alpha {key} must be 1D")
 
         if self.betas is not None:
             for key, beta in self.betas.items():
                 if beta.isinf().any():
                     raise ValueError(f"beta {key} contains inf")
-                if beta.ndim != 1:
-                    raise ValueError(f"beta {key} must be 1D")
 
     def _set_dims(self, matrix: str) -> None:
         """Sets dimensions for matrix.
@@ -158,7 +146,7 @@ class ModelParams:
         Returns:
             torch.Tensor: The flattened parameters.
         """
-        return torch.cat(self.as_list)
+        return torch.cat([p.view(-1) for p in self.as_list])
 
     @property
     def numel(self) -> int:
