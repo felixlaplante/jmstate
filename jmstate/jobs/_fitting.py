@@ -114,8 +114,6 @@ class AdamL1Proximal(Job):
         self.param_groups = [
             g for g in info.optimizer.param_groups if g.get("group") == self.group
         ]
-        if self.param_groups == []:
-            raise ValueError(f"Optimizer does not optimize group {self.group}")
 
     def run(self, info: Info, metrics: Metrics) -> None:
         for g in self.param_groups:
