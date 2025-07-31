@@ -1,5 +1,4 @@
 import itertools
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from math import isqrt
 
@@ -124,20 +123,29 @@ class ModelParams:
                 raise ValueError(f"Got method {method} unknown for matrix {matrix}")
 
     @property
+    def as_groups(self) -> dict[str, list[torch.Tensor]]:
+        """Get a dict of all the parameters.
+
+        Returns:
+            dict[str, list[torch.Tensor]]: The dict of the parameters.
+        """
+        groups = {
+            "gamma": [self.gamma] if self.gamma is not None else [],
+            "Q": [self.Q_repr[0]],
+            "R": [self.R_repr[0]],
+            "alphas": list(self.alphas.values()),
+            "betas": list(self.betas.values()) if self.betas is not None else [],
+        }
+        return {key: val for key, val in groups.items() if val != []}
+
+    @property
     def as_list(self) -> list[torch.Tensor]:
-        """Get a list of all the parameters for optimization.
+        """Get a list of all the parameters.
 
         Returns:
             list[torch.Tensor]: The list of the parameters.
         """
-        iterables: Iterable[torch.Tensor | list[torch.Tensor]] = (
-            [self.gamma] if self.gamma is not None else [],
-            [self.Q_repr[0], self.R_repr[0]],
-            list(self.alphas.values()),
-            list(self.betas.values()) if self.betas is not None else [],
-        )
-
-        return list(itertools.chain.from_iterable(iterables))
+        return list(itertools.chain.from_iterable(self.as_groups.values()))
 
     @property
     def as_flat_tensor(self) -> torch.Tensor:
