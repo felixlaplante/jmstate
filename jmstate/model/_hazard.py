@@ -136,7 +136,7 @@ class HazardMixin:
         )
 
         # Compute time-varying effects
-        mod = link_fn(t=t1, psi=psi) @ alpha
+        mod = link_fn(t1, psi) @ alpha
 
         # Compute covariates effect
         if x is not None and beta is not None:
