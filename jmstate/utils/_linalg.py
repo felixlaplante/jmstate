@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, cast
 
 import torch
@@ -143,7 +145,7 @@ def flat_from_cov(V: torch.Tensor, method: str = "full") -> torch.Tensor:
 
 
 def get_cholesky_and_log_eigvals(
-    params: "ModelParams", matrix: str
+    params: ModelParams, matrix: str
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Get Cholesky factor as well as log eigenvalues.
 

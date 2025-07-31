@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -33,9 +35,7 @@ def legendre_quad(n_quad: int) -> tuple[torch.Tensor, ...]:
     return std_nodes, std_weights
 
 
-def params_like_from_flat(
-    ref_params: "ModelParams", flat: torch.Tensor
-) -> "ModelParams":
+def params_like_from_flat(ref_params: ModelParams, flat: torch.Tensor) -> ModelParams:
     """Gets a ModelParams instance based on the flat representation.
 
     Args:
@@ -89,8 +89,8 @@ def params_like_from_flat(
 
 
 def sample_params_from_model(
-    model: "MultiStateJointModel", sample_size: int
-) -> list["ModelParams"]:
+    model: MultiStateJointModel, sample_size: int
+) -> list[ModelParams]:
     """Sample parameters based on asymptotic behavior of the MLE.
 
     Args:

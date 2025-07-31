@@ -511,7 +511,9 @@ class HazardMixin:
             for i, trajectory in enumerate(trajectories)
         ]
 
-    def _hazard_logliks(self, psi: torch.Tensor, data: CompleteModelData) -> torch.Tensor:
+    def _hazard_logliks(
+        self, psi: torch.Tensor, data: CompleteModelData
+    ) -> torch.Tensor:
         """Computes the hazard log likelihood.
 
         Args:

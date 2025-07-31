@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -46,12 +48,12 @@ class ClockMethod(Protocol):
 
 # SimpleNamespaces
 class Info(SimpleNamespace):
-    data: "ModelData"
+    data: ModelData
     iteration: int
     n_iterations: int
     batch_size: int
-    model: "MultiStateJointModel"
-    sampler: "MetropolisHastingsSampler"
+    model: MultiStateJointModel
+    sampler: MetropolisHastingsSampler
     optimizer: torch.optim.Optimizer
     b: torch.Tensor
     logpdfs: torch.Tensor
