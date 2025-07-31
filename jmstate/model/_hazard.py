@@ -17,7 +17,6 @@ class HazardMixin:
     model_design: ModelDesign
     n_quad: int
     n_bissect: int
-    enable_cache: bool
     cache_limit: int | None
     _std_nodes: torch.Tensor
     _std_weights: torch.Tensor
@@ -26,7 +25,6 @@ class HazardMixin:
         self,
         n_quad: int,
         n_bissect: int,
-        enable_cache: bool,
         cache_limit: int | None,
         **kwargs: Any,
     ):
@@ -38,11 +36,24 @@ class HazardMixin:
             enable_cache (bool): Enables caching.
             cache_limit (int | None): Max length of cache.
             kwargs (Any): Additional kwargs.
+
+        Raises:
+            ValueError: If n_quad is not greater than 0.
+            ValueError: If n_bissect is not greater than 0.
+            ValueError: If cache_limit is not None and negative.
         """
         self.n_quad = n_quad
         self.n_bissect = n_bissect
-        self.enable_cache = enable_cache
         self.cache_limit = cache_limit
+
+        if self.n_quad <= 0:
+            raise ValueError(f"n_quad must be greater than 0, got {self.n_quad}")
+        if self.n_bissect <= 0:
+            raise ValueError(f"n_bissect must be greater than 0, got {self.n_bissect}")
+        if self.cache_limit is not None and self.cache_limit < 0:
+            raise ValueError(
+                f"cache_limit must be None or positive integer, got {self.cache_limit}"
+            )
 
         self._std_nodes, self._std_weights = legendre_quad(n_quad)
 
@@ -68,9 +79,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The cached tensor.
         """
-        if self.cache_limit is not None and self.cache_limit <= 0:
-            return missing()
-
         cache = self._cache[name]
         if key in cache:
             cache.move_to_end(key)
@@ -334,7 +342,7 @@ class HazardMixin:
                 beta,
                 base_hazard_fn,
                 link_fn,
-                self.enable_cache,
+                self.cache_limit != 0,
             )
 
             # Update search bounds
@@ -464,7 +472,7 @@ class HazardMixin:
                     alphas[key],
                     betas[key] if betas is not None else None,
                     *surv[key],
-                    self.enable_cache,
+                    self.cache_limit != 0,
                 )
 
                 nlogps[:, k].index_add_(0, idx, alts_logliks)
@@ -542,7 +550,7 @@ class HazardMixin:
                 alphas[key],
                 betas[key] if betas is not None else None,
                 *surv[key],
-                self.enable_cache,
+                self.cache_limit != 0,
             )
 
             vals = obs * obs_logliks - alts_logliks
