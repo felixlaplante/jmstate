@@ -22,7 +22,7 @@ class LongitudinalMixin:
         Returns:
             torch.Tensor: The computed log likelihood.
         """
-        predicted = self.model_design.regression_fn(t=data.valid_t, psi=psi)
+        predicted = self.model_design.regression_fn(data.valid_t, psi)
         diffs = data.valid_y - predicted * data.valid_mask
 
         R_inv_cholesky, R_log_eigvals = get_cholesky_and_log_eigvals(self.params_, "R")
