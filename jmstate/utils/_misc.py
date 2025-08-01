@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -8,9 +8,6 @@ from beartype import beartype
 
 from ..typedefs._defs import Info, Job, Metrics, Tensor1D, Tensor2D
 from ..typedefs._params import ModelParams
-
-if TYPE_CHECKING:
-    from ..model._base import MultiStateJointModel
 
 
 def legendre_quad(n_quad: int) -> tuple[Tensor1D | Tensor2D, ...]:
@@ -85,33 +82,6 @@ def params_like_from_flat(ref_params: ModelParams, flat: Tensor1D) -> ModelParam
         betas,
         skip_validation=True,
     )
-
-
-@beartype
-def sample_params_from_model(
-    model: MultiStateJointModel, sample_size: int
-) -> list[ModelParams]:
-    """Sample parameters based on asymptotic behavior of the MLE.
-
-    Args:
-        model (MultiStateJointModel): The fitted model.
-        sample_size (int): The desired sample size.
-
-    Raises:
-        ValueError: If the model has not been fitted, or Fisher Information Matrix not computed.
-
-    Returns:
-        list[ModelParams]: A list of model parameters.
-    """
-    if not model.fit_:
-        raise ValueError("Model must be fit")
-
-    dist = torch.distributions.MultivariateNormal(
-        model.params_.as_flat_tensor, model.fim.inverse()
-    )
-    flat_samples = dist.sample((sample_size,))
-
-    return [params_like_from_flat(model.params_, sample) for sample in flat_samples]
 
 
 def do_jobs(

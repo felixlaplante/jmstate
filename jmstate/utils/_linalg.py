@@ -99,8 +99,7 @@ def _flat_from_log_cholesky(L: Tensor2D, method: str = "full") -> Tensor1D:
 
 @beartype
 def cov_from_flat(flat: Tensor1D, n: int, method: str = "full") -> Tensor2D:
-    """Computes covariance matrix from flat representation according to choice of
-    method.
+    """Computes covariance matrix from flat representation according to choice of method.
 
     Args:
         flat (Tensor1D): The flat tensor parameter.

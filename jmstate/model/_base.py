@@ -261,6 +261,29 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             case _:
                 return metrics
 
+    @beartype
+    def sample_params(self, sample_size: int) -> list[ModelParams]:
+        """Sample parameters based on asymptotic behavior of the MLE.
+
+        Args:
+            sample_size (int): The desired sample size.
+
+        Raises:
+            ValueError: If the model has not been fitted, or Fisher Information Matrix not computed.
+
+        Returns:
+            list[ModelParams]: A list of model parameters.
+        """
+        if not self.fit_:
+            raise ValueError("Model must be fit")
+
+        dist = torch.distributions.MultivariateNormal(
+            self.params_.as_flat_tensor, self.fim.inverse()
+        )
+        flat_samples = dist.sample((sample_size,))
+
+        return [params_like_from_flat(self.params_, sample) for sample in flat_samples]
+
     @property
     def fim(self) -> Tensor2D:
         """Returns the Fisher Information Matrix.
