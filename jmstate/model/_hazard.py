@@ -10,6 +10,7 @@ from ..typedefs._defs import (
     LinkFn,
     Tensor1D,
     Tensor2D,
+    Tensor3D,
     Trajectory,
 )
 from ..typedefs._params import ModelParams
@@ -109,23 +110,23 @@ class HazardMixin:
 
     def _log_hazard(
         self,
-        t0: Tensor1D | Tensor2D,
-        t1: Tensor1D | Tensor2D,
+        t0: Tensor2D,
+        t1: Tensor2D,
         x: Tensor2D | None,
-        psi: Tensor2D,
+        psi: Tensor2D | Tensor3D,
         alpha: Tensor1D,
         beta: Tensor1D | None,
         base_hazard_fn: BaseHazardFn,
         link_fn: LinkFn,
         enable_cache: bool,
-    ) -> Tensor2D:
+    ) -> Tensor2D | Tensor3D:
         """Computes log hazard.
 
         Args:
-            t0 (Tensor1D | Tensor2D): Start time.
-            t1 (Tensor1D | Tensor2D): End time.
+            t0 (Tensor2D): Start time.
+            t1 (Tensor2D): End time.
             x (Tensor2D | None): Covariates.
-            psi (Tensor2D): Inidivual parameters.
+            psi (Tensor2D | Tensor3D): Inidivual parameters.
             alpha (Tensor1D): Link linear parameters.
             beta (Tensor1D): Covariate linear parameters.
             base_hazard_fn (BaseHazardFn): Base hazard function.
@@ -133,7 +134,7 @@ class HazardMixin:
             enable_cache (bool): Enables caching.
 
         Returns:
-            Tensor2D: The computed log hazard.
+            Tensor2D | Tensor3D: The computed log hazard.
         """
         # Compute baseline hazard
         key = (
@@ -162,25 +163,25 @@ class HazardMixin:
 
     def _cum_hazard(
         self,
-        t0: Tensor1D | Tensor2D,
-        t1: Tensor1D | Tensor2D,
-        c: Tensor1D | Tensor2D | None,
+        t0: Tensor2D,
+        t1: Tensor2D,
+        c: Tensor2D | None,
         x: Tensor2D | None,
-        psi: Tensor2D,
+        psi: Tensor2D | Tensor3D,
         alpha: Tensor1D,
         beta: Tensor1D | None,
         base_hazard_fn: BaseHazardFn,
         link_fn: LinkFn,
         enable_cache: bool,
-    ) -> Tensor1D:
+    ) -> Tensor1D | Tensor2D:
         """Computes cumulative hazard.
 
         Args:
-            t0 (Tensor1D | Tensor2D): Start time.
-            t1 (Tensor1D | Tensor2D): End time.
-            c (Tensor1D | Tensor2D | None): Integration start or censoring time, t0 if None.
+            t0 (Tensor2D): Start time.
+            t1 (Tensor2D): End time.
+            c (Tensor2D | None): Integration start or censoring time, t0 if None.
             x (Tensor2D | None): Covariates.
-            psi (Tensor2D): Inidivual parameters.
+            psi (Tensor2D | Tensor3D): Inidivual parameters.
             alpha (Tensor1D): Link linear parameters.
             beta (Tensor1D): Covariate linear parameters.
             base_hazard_fn (BaseHazardFn): Base hazard function.
@@ -188,14 +189,9 @@ class HazardMixin:
             enable_cache (bool): Enables caching.
 
         Returns:
-            Tensor1D: The computed cumulative hazard.
+            Tensor1D | Tensor2D: The computed cumulative hazard.
         """
-        # Reshape for broadcasting
-        t0, t1, c = (
-            t0.view(-1, 1),
-            t1.view(-1, 1),
-            t0.view(-1, 1) if c is None else c.view(-1, 1),
-        )
+        c = t0 if c is None else c
 
         # Transform to quadrature interval
         key = (hash(c.numpy().tobytes()), hash(t1.numpy().tobytes()))  # type: ignore
@@ -222,29 +218,30 @@ class HazardMixin:
         vals = self._log_hazard(
             t0, quad_c, x, psi, alpha, beta, base_hazard_fn, link_fn, enable_cache
         )
-        vals.clamp_(min=-50.0, max=50.0).exp_()
 
-        return half.view(-1) * (vals @ self._std_weights)
+        return half.view(-1) * (
+            vals.clamp(min=-50.0, max=50.0).exp() @ self._std_weights
+        )
 
     def _log_and_cum_hazard(
         self,
-        t0: Tensor1D | Tensor2D,
-        t1: Tensor1D | Tensor2D,
+        t0: Tensor2D,
+        t1: Tensor2D,
         x: Tensor2D | None,
-        psi: Tensor2D,
+        psi: Tensor2D | Tensor3D,
         alpha: Tensor1D,
         beta: Tensor1D | None,
         base_hazard_fn: BaseHazardFn,
         link_fn: LinkFn,
         enable_cache: bool,
-    ) -> tuple[Tensor1D, Tensor1D]:
+    ) -> tuple[Tensor1D | Tensor2D, Tensor1D | Tensor2D,]:
         """Computes both log and cumulative hazard.
 
         Args:
-            t0 (Tensor1D | Tensor2D): Start time.
-            t1 (Tensor1D | Tensor2D): End time.
+            t0 (Tensor2D): Start time.
+            t1 (Tensor2D): End time.
             x (Tensor2D | None): Covariates.
-            psi (Tensor2D): Inidivual parameters.
+            psi (Tensor2D | Tensor3D): Inidivual parameters.
             alpha (Tensor1D): Link linear parameters.
             beta (Tensor1D): Covariate linear parameters.
             base_hazard_fn (BaseHazardFn): Base hazard function.
@@ -255,11 +252,8 @@ class HazardMixin:
             RuntimeError: If the computation fails.
 
         Returns:
-            tuple[Tensor1D, Tensor1D]: The log and cumulative hazard.
+            tuple[Tensor1D | Tensor2D, Tensor1D | Tensor2D,]: The log and cumulative hazard.
         """
-        # Reshape for broadcasting
-        t0, t1 = t0.view(-1, 1), t1.view(-1, 1)
-
         # Transform to quadrature interval
         key = (hash(t0.numpy().tobytes()), hash(t1.numpy().tobytes()))  # type: ignore
 
@@ -287,13 +281,14 @@ class HazardMixin:
         all_vals = self._log_hazard(
             t0, quad_lc, x, psi, alpha, beta, base_hazard_fn, link_fn, enable_cache
         )
-        all_vals[:, 1:].clamp_(min=-50.0, max=50.0).exp_()
 
-        return all_vals[:, 0], half.view(-1) * (all_vals[:, 1:] @ self._std_weights)
+        return all_vals[..., 0], half.view(-1) * (
+            all_vals[..., 1:].clamp(min=-50.0, max=50.0).exp() @ self._std_weights
+        )
 
     def _sample_transition(
         self,
-        t0: Tensor1D | Tensor2D,
+        t0: Tensor2D,
         c_max: Tensor1D | Tensor2D,
         x: Tensor2D | None,
         psi: Tensor2D,
@@ -302,30 +297,29 @@ class HazardMixin:
         base_hazard_fn: BaseHazardFn,
         link_fn: LinkFn,
         *,
-        c: Tensor1D | Tensor2D | None = None,
+        c: Tensor2D | None = None,
     ) -> Tensor1D:
         """Sample survival times using inverse transform sampling.
 
         Args:
-            t0 (Tensor1D | Tensor2D): Starting time.
+            t0 (Tensor2D): Starting time.
             c_max (Tensor1D | Tensor2D): Right censoring sampling time.
             x (Tensor2D | None): Covariates.
-            psi (Tensor2D): Inidivual parameters.
+            psi (Tensor2D | Tensor3D): Inidivual parameters.
             alpha (Tensor1D): Link linear parameters.
             beta (Tensor1D | None): Covariate linear parameters.
             base_hazard_fn (BaseHazardFn): Base hazard function.
             link_fn (LinkFn): Link function.
-            c (Tensor1D | Tensor2D | None, optional): Conditionning time. Defaults to None.
+            c (Tensor2D | None, optional): Conditionning time. Defaults to None.
 
         Returns:
             Tensor1D: The computed pre transition times.
         """
         # Initialize for bisection search
-        t0 = t0.view(-1, 1)
-        t_left, t_right = t0.clone().view(-1, 1), c_max.clone().view(-1, 1)
+        t_left, t_right = t0.clone(), c_max.clone()
 
         # Generate exponential random variables
-        target = -torch.log(torch.rand(t_left.numel()))
+        target = -torch.log(torch.rand_like(t_left))
 
         # Bisection search for survival times
         for _ in range(self.n_bissect):
@@ -345,11 +339,12 @@ class HazardMixin:
             )
 
             # Update search bounds
-            accept_mask = surv_logps < target
-            t_left[accept_mask] = t_mid[accept_mask]
-            t_right[~accept_mask] = t_mid[~accept_mask]
+            accept_mask = surv_logps.view(target.shape) < target
+            torch.where(accept_mask, t_mid, t_left, out=t_left)
+            torch.where(accept_mask, t_right, t_mid, out=t_right)
 
-        return t_right.view(-1)
+
+        return t_right
 
     def _sample_trajectory_step(
         self,
@@ -397,14 +392,14 @@ class HazardMixin:
                 t0,
                 t1,
                 None if x is None else x.index_select(0, idx),
-                psi.index_select(0, idx),
+                psi.index_select(-2, idx),
                 alphas[key],
                 None if betas is None else betas[key],
                 *surv[key],
                 c=None if c is None else c.index_select(0, idx),
             )
 
-            t_candidates[idx, j] = t_sample
+            t_candidates[idx, j] = t_sample.view(-1)
 
         # Find earliest transition
         min_times, argmin_indices = torch.min(t_candidates, dim=1)
@@ -447,7 +442,7 @@ class HazardMixin:
         for key, bucket in buckets.items():
             for k in range(u.shape[1]):
                 idx, t0, _, _ = bucket
-                t1 = u[:, k]
+                t1 = u[:, [k]]
 
                 x = sample_data.x
                 psi = sample_data.psi
@@ -462,14 +457,14 @@ class HazardMixin:
                     t1,
                     c,
                     None if x is None else x.index_select(0, idx),
-                    psi.index_select(0, idx),
+                    psi.index_select(-2, idx),
                     alphas[key],
                     None if betas is None else betas[key],
                     *surv[key],
                     self.cache_limit != 0,
                 )
 
-                nlogps[:, k].index_add_(0, idx, alts_logliks)
+                nlogps[:, k] = nlogps[:, k].index_add(0, idx, alts_logliks)
 
         return torch.clamp(-nlogps, max=0.0)
 
@@ -511,18 +506,18 @@ class HazardMixin:
             for i, trajectory in enumerate(trajectories)
         ]
 
-    def _hazard_logliks(self, psi: Tensor2D, data: CompleteModelData) -> Tensor1D:
+    def _hazard_logliks(self, psi: Tensor3D, data: CompleteModelData) -> Tensor1D:
         """Computes the hazard log likelihood.
 
         Args:
             psi (Tensor2D): A matrix of individual parameters.
-            data (ModelData): Dataset on which likelihood is computed.
+            data (CompleteModelData): Dataset on which likelihood is computed.
             enable_cache (bool): Enable caching
 
         Returns:
             Tensor1D: The computed log likelihood.
         """
-        logliks = torch.zeros(data.size, dtype=torch.float32)
+        logliks = torch.zeros((data.n_chains, data.size), dtype=torch.float32) 
 
         for key, bucket in data.buckets.items():
             idx, t0, t1, obs = bucket
@@ -536,7 +531,7 @@ class HazardMixin:
                 t0,
                 t1,
                 None if x is None else x.index_select(0, idx),
-                psi.index_select(0, idx),
+                psi.index_select(-2, idx),
                 alphas[key],
                 None if betas is None else betas[key],
                 *surv[key],
@@ -544,6 +539,6 @@ class HazardMixin:
             )
 
             vals = obs * obs_logliks - alts_logliks
-            logliks.index_add_(0, idx, vals)
+            logliks = logliks.index_add(1, idx, vals)
 
         return logliks

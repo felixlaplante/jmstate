@@ -107,7 +107,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 self.params_, "Q"
             )
 
-            Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=1)
+            Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
             Q_log_det = (Q_log_eigvals - LOGTWOPI).sum()
 
             return 0.5 * (Q_log_det - Q_quad_form)
@@ -129,6 +129,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     def _setup_mcmc(
         self,
         data: CompleteModelData,
+        n_chains: int,
         init_step_size: float,
         adapt_rate: float,
         target_accept_rate: float,
@@ -137,6 +138,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         Args:
             data (CompleteModelData): The dataset on which the likelihood is to be computed.
+            n_chains (int): The number of parallel MCMC chains.
             init_step_size (float, optional): Kernel standard error in Metropolis Hastings.
             adapt_rate (float, optional): Adaptation rate for the step_size.
             target_accept_rate (float, optional): Mean acceptance target.
@@ -145,11 +147,14 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             MetropolisHastingsSampler: The intialized Markov kernel.
         """
         # Initialize random effects
-        init_b = torch.zeros((data.size, self.params_.Q_dim_), dtype=torch.float32)
+        init_b = torch.zeros(
+            (data.n_chains, data.size, self.params_.Q_dim_), dtype=torch.float32
+        )
 
         return MetropolisHastingsSampler(
             lambda b: self._logliks(b, data),
             init_b,
+            n_chains,
             init_step_size,
             adapt_rate,
             target_accept_rate,
@@ -197,26 +202,21 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             raise ValueError(f"n_iterations must be greater than 0, got {n_iterations}")
         if n_chains < 1:
             raise ValueError(f"n_chains must be greater than 0, got {n_chains}")
-
         # Load and complete data
         if new_data is None and self.data is None:
             raise ValueError("data must not be None if self.data is None")
 
         # Repeat data to do minibatch in a vectorized fashion
         data = cast(ModelData, new_data if new_data is not None else self.data)
-        x_rep = data.x.repeat(n_chains, 1) if data.x is not None else None
-        t_rep = data.t if data.t.ndim == 1 else data.t.repeat(n_chains, 1)
-        y_rep = data.y.repeat(n_chains, 1, 1)
-        trajectories_rep = data.trajectories * n_chains
-        c_rep = data.c.repeat(n_chains)
-
-        data_rep = CompleteModelData(
-            x_rep, t_rep, y_rep, trajectories_rep, c_rep, skip_validation=True
+        complete_data = CompleteModelData(
+            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
-        data_rep.prepare(self.model_design)
+        complete_data.init(self.model_design, n_chains)
 
         # Set up MCMC
-        sampler = self._setup_mcmc(data_rep, init_step_size, adapt_rate, accept_target)
+        sampler = self._setup_mcmc(
+            complete_data, n_chains, init_step_size, adapt_rate, accept_target
+        )
         sampler.warmup(init_warmup)
 
         # Initialize metrics

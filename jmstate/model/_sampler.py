@@ -3,7 +3,7 @@ from typing import Any, Callable
 import torch
 from tqdm import tqdm
 
-from ..typedefs._defs import Tensor0D, Tensor1D, Tensor2D
+from ..typedefs._defs import Tensor0D, Tensor1D, Tensor2D, Tensor3D
 
 
 class MetropolisHastingsSampler:
@@ -11,10 +11,11 @@ class MetropolisHastingsSampler:
 
     pdf_fn: Callable[[Tensor2D], tuple[Tensor1D | Tensor2D, Any]]
     init_state: Tensor2D
+    n_chains: int
     init_step_size: float
     adapt_rate: float
     target_accept_rate: float
-    current_state: Tensor2D
+    current_state: Tensor3D
     current_pdf: Tensor2D
     step_sizes: Tensor1D
     n_samples: Tensor0D
@@ -24,6 +25,7 @@ class MetropolisHastingsSampler:
         self,
         pdf_fn: Callable[[Tensor2D], tuple[Tensor2D, Any]],
         init_state: Tensor2D,
+        n_chains: int,
         init_step_size: float,
         adapt_rate: float,
         target_accept_rate: float,
@@ -33,6 +35,7 @@ class MetropolisHastingsSampler:
         Args:
             pdf_fn (Callable[[Tensor2D], tuple[Tensor1D | Tensor2D, Any]]): pdf with aux.
             init_state (Tensor2D): Starting state for the chain.
+            n_chains (int): The number of parallel chains to spawn.
             init_step_size (float, optional): Kernel step in Metropolis Hastings.
             adapt_rate (float, optional): Adaptation rate for the step_size.
             target_accept_rate (float, optional): Mean acceptance target.
@@ -41,26 +44,24 @@ class MetropolisHastingsSampler:
             RuntimeError: If the initial log prob fails to be computed.
         """
         self.pdf_fn = pdf_fn
+        self.n_chains = n_chains
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
 
         # Initialize state
-        self.current_state = init_state.clone().detach()
+        self.current_state = init_state
 
         # Compute initial log pdf
-        try:
-            self.current_pdf, _ = self.pdf_fn(self.current_state)
-        except Exception as e:
-            raise RuntimeError(f"Failed to compute initial log pdf: {e}") from e
+        self.current_pdf, _ = self.pdf_fn(self.current_state)
 
         # Steps initialization
         self.step_sizes = torch.full(
-            (self.current_state.shape[0],), init_step_size, dtype=torch.float32
+            (init_state.shape[-2],), init_step_size, dtype=torch.float32
         )
 
         # Statistics tracking
         self.n_samples = torch.tensor(0, dtype=torch.int64)
-        self.n_accepted = torch.zeros((self.current_state.shape[0],), dtype=torch.int64)
+        self.n_accepted = torch.zeros((init_state.shape[-2],), dtype=torch.float32)
 
         self._check()
 
@@ -99,25 +100,20 @@ class MetropolisHastingsSampler:
         noise = torch.randn_like(self.current_state, dtype=torch.float32)
 
         # Get the proposal
-        proposed_state = self.current_state + noise * self.step_sizes.unsqueeze(1)
-
-        # Compute proposal log pdf
+        proposed_state = self.current_state + noise * self.step_sizes.view(1, -1, 1)
         proposed_pdf, aux = self.pdf_fn(proposed_state)
-
-        # Compute acceptance pdf
         pdf_diff = proposed_pdf - self.current_pdf
 
         # Vectorized acceptance decision
         log_uniform = torch.log(torch.rand_like(pdf_diff))
         accept_mask = log_uniform < pdf_diff
 
-        # Update accepted states
-        self.current_state[accept_mask] = proposed_state[accept_mask]
-        self.current_pdf[accept_mask] = proposed_pdf[accept_mask]
+        self.current_state = torch.where(accept_mask.unsqueeze(-1), proposed_state, self.current_state)
+        self.current_pdf = torch.where(accept_mask, proposed_pdf, self.current_pdf)
 
         # Update statistics
         self.n_samples += 1
-        self.n_accepted += accept_mask
+        self.n_accepted += accept_mask.to(torch.float32).mean(dim=0)
 
         # Adapt step sizes
         self._adapt_step_sizes(accept_mask)
@@ -125,7 +121,9 @@ class MetropolisHastingsSampler:
         return (self.current_state, self.current_pdf), aux
 
     def _adapt_step_sizes(self, accept_mask: Tensor1D):
-        adaptation = (accept_mask.float() - self.target_accept_rate) * self.adapt_rate
+        adaptation = (
+            accept_mask.to(torch.float32).mean(dim=0) - self.target_accept_rate
+        ) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 
     def warmup(self, warmup: int) -> None:

@@ -24,7 +24,7 @@ class LongitudinalMixin:
         diffs = data.valid_y - predicted * data.valid_mask
 
         R_inv_cholesky, R_log_eigvals = get_cholesky_and_log_eigvals(self.params_, "R")
-        R_quad_forms = (diffs @ R_inv_cholesky).pow(2).sum(dim=(1, 2))
+        R_quad_forms = (diffs @ R_inv_cholesky).pow(2).sum(dim=(-2, -1))
         R_log_dets = data.n_valid @ (R_log_eigvals - LOGTWOPI)
 
         return 0.5 * (R_log_dets - R_quad_forms)

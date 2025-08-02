@@ -53,7 +53,7 @@ class ModelData:
     t: Tensor1D | Tensor2D
     y: Tensor3D
     trajectories: list[Trajectory]
-    c: Tensor1D | Tensor2D
+    c: Tensor2D
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
@@ -100,13 +100,15 @@ class CompleteModelData(ModelData):
     valid_t: Tensor1D | Tensor2D = field(init=False)
     valid_y: Tensor3D = field(init=False)
     buckets: dict[tuple[int, int], tuple[Tensor1D, ...]] = field(init=False)
+    n_chains: int = field(init=False)
 
-    def prepare(self, model_design: ModelDesign):
+    def init(self, model_design: ModelDesign, n_chains: int):
         self.valid_mask = (~torch.isnan(self.y)).to(torch.float32)
         self.n_valid = self.valid_mask.sum(dim=1)
         self.valid_t = torch.nan_to_num(self.t)
         self.valid_y = torch.nan_to_num(self.y)
         self.buckets = build_vec_rep(self.trajectories, self.c, model_design.surv)
+        self.n_chains = n_chains
 
 
 @dataclass
@@ -116,7 +118,7 @@ class SampleData:
     x: Tensor2D | None
     trajectories: list[Trajectory]
     psi: Tensor2D
-    c: Tensor1D | Tensor2D | None = None
+    c: Tensor2D | None = None
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):

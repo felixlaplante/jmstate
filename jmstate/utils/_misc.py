@@ -17,7 +17,7 @@ def legendre_quad(n_quad: int) -> tuple[Tensor1D | Tensor2D, ...]:
         n_quad (int, optional): The number of quadrature points.
 
     Returns:
-        tuple[Tensor1D | Tensor2D, ...]: The nodes and weights.
+        tuple[Tensor1D | Tensor2D, ...]: The nodes and weights.
     """
     nodes, weights = cast(
         tuple[

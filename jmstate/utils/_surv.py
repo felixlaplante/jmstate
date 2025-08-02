@@ -34,8 +34,8 @@ def build_buckets(
     return {
         key: BucketData(
             torch.tensor(vals[0], dtype=torch.int64),
-            torch.tensor(vals[1], dtype=torch.float32),
-            torch.tensor(vals[2], dtype=torch.float32),
+            torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
+            torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),
         )
         for key, vals in buckets.items()
         if vals[0]  # skip empty
@@ -97,8 +97,8 @@ def build_vec_rep(
     return {
         key: (
             torch.tensor(vals[0], dtype=torch.int64),
-            torch.tensor(vals[1], dtype=torch.float32),
-            torch.tensor(vals[2], dtype=torch.float32),
+            torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
+            torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),
             torch.tensor(vals[3], dtype=torch.bool),
         )
         for key, vals in buckets.items()
