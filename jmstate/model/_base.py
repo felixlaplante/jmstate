@@ -11,7 +11,6 @@ from ..typedefs._defs import (
     Job,
     Metrics,
     Tensor0D,
-    Tensor1D,
     Tensor2D,
 )
 from ..typedefs._params import ModelParams
@@ -89,9 +88,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         self.metrics_: Metrics | None = None
         self.fit_ = False
 
-    def _logliks(
+    def _logliks_and_aux(
         self, b: Tensor2D, data: CompleteModelData
-    ) -> tuple[Tensor1D, Tensor1D]:
+    ) -> tuple[Tensor2D, list[torch.Tensor]]:
         """Computes the total log likelihood up to a constant.
 
         Args:
@@ -99,7 +98,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             data (CompleteModelData): Dataset on which the likeihood is computed.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor]: The computed total log logpdf/likelihood.
+            tuple[Tensor2D, list[torch.Tensor]]: The computed quantities.
         """
 
         def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
@@ -124,7 +123,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         logliks = long_logliks + hazard_logliks
         logpdfs = logliks + prior_logliks
 
-        return logpdfs, logliks
+        return logpdfs, [logliks, psi]
 
     def _setup_mcmc(
         self,
@@ -137,9 +136,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         """Setup the MCMC kernel and hyperparameters.
 
         Args:
-            data (CompleteModelData): The dataset on which the likelihood is to be computed.
+            data (CompleteModelData): The complete dataset.
             n_chains (int): The number of parallel MCMC chains.
-            init_step_size (float, optional): Kernel standard error in Metropolis Hastings.
+            init_step_size (float, optional): Kernel standard error in Metropolis.
             adapt_rate (float, optional): Adaptation rate for the step_size.
             target_accept_rate (float, optional): Mean acceptance target.
 
@@ -152,7 +151,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
 
         return MetropolisHastingsSampler(
-            lambda b: self._logliks(b, data),
+            lambda b: self._logliks_and_aux(b, data),
             init_b,
             n_chains,
             init_step_size,
@@ -166,10 +165,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         new_data: ModelData | None = None,
         *,
         jobs: Job | list[Job],
-        n_iterations: int = 2000,
-        n_chains: int = 1,
+        n_iterations: int = 500,
+        n_chains: int = 10,
         init_step_size: float = 0.1,
-        adapt_rate: float = 0.01,
+        adapt_rate: float = 0.1,
         accept_target: float = 0.234,
         init_warmup: int = 500,
         cont_warmup: int = 5,
@@ -180,9 +179,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
-            n_iterations (int, optional): Number of iterations for optimization. Defaults to 2000.
-            n_chains (int, optional): Batch size used. Defaults to 1.
-            init_step_size (float, optional): Kernel standard error in Metropolis Hastings. Defaults to 0.1.
+            n_iterations (int, optional): Number of iterations for optimization. Defaults to 500.
+            n_chains (int, optional): Batch size used. Defaults to 10.
+            init_step_size (float, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
             init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
@@ -226,7 +225,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             data=data,
             iteration=-1,
             n_iterations=n_iterations,
-            n_chains=n_chains,
             model=self,
             sampler=sampler,
         )
@@ -235,7 +233,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         def _do(iteration: int):
             nonlocal info
 
-            (info.b, info.logpdfs), info.logliks = sampler.step()
+            (info.b, info.logpdfs), (info.logliks, info.psi) = sampler.step()
             info.iteration = iteration
 
             do_jobs("run", jobs, info, metrics)

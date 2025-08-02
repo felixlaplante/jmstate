@@ -4,7 +4,13 @@ from typing import Any, cast
 
 import torch
 
-from ..typedefs._defs import BaseHazardFn, BucketData, LinkFn, Tensor1D, Trajectory
+from ..typedefs._defs import (
+    BaseHazardFn,
+    BucketData,
+    LinkFn,
+    Trajectory,
+    VecRep,
+)
 
 
 def build_buckets(
@@ -17,7 +23,7 @@ def build_buckets(
 
 
     Returns:
-        dict[tuple[int, int], BucketData]: A dictionnary of transition keys with a triplet of tensors (idxs, t0, t1).
+        dict[tuple[int, int], BucketData]: Transition keys with values (idxs, t0, t1).
     """
     # Process each individual trajectory
     buckets: defaultdict[tuple[int, int], list[list[Any]]] = defaultdict(
@@ -46,19 +52,19 @@ def build_vec_rep(
     trajectories: list[Trajectory],
     c: torch.Tensor,
     surv: dict[tuple[int, int], tuple[BaseHazardFn, LinkFn]],
-) -> dict[tuple[int, int], tuple[Tensor1D, ...]]:
+) -> dict[tuple[int, int], VecRep]:
     """Build vectorizable bucket representation.
 
     Args:
         trajectories (list[Trajectory]): The trajectories.
         c (torch.Tensor): Censoring times.
-        surv (dict[tuple[int, int], tuple[BaseHazardFn, LinkFn]]) : The model survival dict.
+        surv (dict[tuple[int, int], tuple[BaseHazardFn, LinkFn]]) : The survival dict.
 
     Raises:
         ValueError: If some keys are not in surv.
 
     Returns:
-        dict[tuple[int, int], tuple[torch.Tensor, ...]]: The vectorizable buckets representation.
+        dict[tuple[int, int], VecRep]: The vectorizable buckets representation.
     """
     # Get survival transitions defined in the model
     trans = set(surv.keys())
@@ -76,7 +82,7 @@ def build_vec_rep(
     # Process each individual trajectory
     for i, trajectory in enumerate(trajectories):
         # Add censoring
-        ext_trajectory = [*trajectory, (float(c[i]), None)]
+        ext_trajectory = [*trajectory, (c[i].item(), None)]
 
         for (t0, s0), (t1, s1) in itertools.pairwise(ext_trajectory):
             if t0 >= t1:
@@ -95,7 +101,7 @@ def build_vec_rep(
                 buckets[key][3].append(alt_state == s1)
 
     return {
-        key: (
+        key: VecRep(
             torch.tensor(vals[0], dtype=torch.int64),
             torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
             torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),

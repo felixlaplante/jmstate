@@ -9,22 +9,23 @@ from ..typedefs._defs import Tensor0D, Tensor1D, Tensor2D, Tensor3D
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
-    pdf_fn: Callable[[Tensor2D], tuple[Tensor1D | Tensor2D, Any]]
-    init_state: Tensor2D
+    pdf_fn: Callable[[Tensor3D], tuple[Tensor2D, list[torch.Tensor]]]
+    init_state: Tensor3D
     n_chains: int
     init_step_size: float
     adapt_rate: float
     target_accept_rate: float
     current_state: Tensor3D
     current_pdf: Tensor2D
+    current_aux: list[torch.Tensor]
     step_sizes: Tensor1D
     n_samples: Tensor0D
     n_accepted: Tensor1D
 
     def __init__(
         self,
-        pdf_fn: Callable[[Tensor2D], tuple[Tensor2D, Any]],
-        init_state: Tensor2D,
+        pdf_fn: Callable[[Tensor3D], tuple[Tensor2D, list[torch.Tensor]]],
+        init_state: Tensor3D,
         n_chains: int,
         init_step_size: float,
         adapt_rate: float,
@@ -33,8 +34,8 @@ class MetropolisHastingsSampler:
         """Initialize the Metropolis-Hastings sampler kernel.
 
         Args:
-            pdf_fn (Callable[[Tensor2D], tuple[Tensor1D | Tensor2D, Any]]): pdf with aux.
-            init_state (Tensor2D): Starting state for the chain.
+            pdf_fn (Callable[[Tensor3D], tuple[Tensor2D, list[torch.Tensor]]]): pdf with aux.
+            init_state (Tensor3D): Starting state for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (float, optional): Kernel step in Metropolis Hastings.
             adapt_rate (float, optional): Adaptation rate for the step_size.
@@ -52,7 +53,7 @@ class MetropolisHastingsSampler:
         self.current_state = init_state
 
         # Compute initial log pdf
-        self.current_pdf, _ = self.pdf_fn(self.current_state)
+        self.current_pdf, self.current_aux = self.pdf_fn(self.current_state)
 
         # Steps initialization
         self.step_sizes = torch.full(
@@ -69,28 +70,31 @@ class MetropolisHastingsSampler:
         """Check if every input is valid.
 
         Raises:
-            TypeError: If the function is not callable.
+            TypeError: If n_chains is not strictly positive.
             ValueError: If init_step_size is not strictly positive.
             ValueError: If adapt_rate is not strictly positive.
             ValueError: If target_accept_rate is not in (0, 1).
         """
-        if not callable(self.pdf_fn):
-            raise TypeError("pdf_fn must be callable")
-
+        if self.n_chains <= 0:
+            raise ValueError(f"n_chains must be strictly positive, got {self.n_chains}")
         if self.step_sizes[0] <= 0:
-            raise ValueError("step_size must be strictly positive")
-
+            raise ValueError(
+                f"init_step_size must be strictly positive, got {self.step_sizes[0]}"
+            )
         if self.adapt_rate <= 0:
-            raise ValueError("adapt_rate must be strictly positive")
-
+            raise ValueError(
+                f"adapt_rate must be strictly positive, got {self.adapt_rate}"
+            )
         if not 0 < self.target_accept_rate < 1:
-            raise ValueError("target_accept_rate must be between 0 and 1")
+            raise ValueError(
+                f"target_accept_rate must be in (0, 1), got {self.target_accept_rate}"
+            )
 
-    def step(self) -> tuple[tuple[Tensor2D, Tensor2D], Any]:
+    def step(self) -> tuple[tuple[Tensor2D, Tensor2D], list[torch.Tensor]]:
         """Performs a single kernel step.
 
         Returns:
-            tuple[Tensor2D, Tensor2D]: A tuple containing state and pdf.
+            list[torch.Tensor]: A tuple containing state and pdf.
         """
         # Detach current state to avoid gradient accumulation
         self.current_state = self.current_state.detach()
@@ -101,24 +105,26 @@ class MetropolisHastingsSampler:
 
         # Get the proposal
         proposed_state = self.current_state + noise * self.step_sizes.view(1, -1, 1)
-        proposed_pdf, aux = self.pdf_fn(proposed_state)
+        proposed_pdf, proposed_aux = self.pdf_fn(proposed_state)
         pdf_diff = proposed_pdf - self.current_pdf
 
         # Vectorized acceptance decision
         log_uniform = torch.log(torch.rand_like(pdf_diff))
         accept_mask = log_uniform < pdf_diff
 
-        self.current_state = torch.where(accept_mask.unsqueeze(-1), proposed_state, self.current_state)
-        self.current_pdf = torch.where(accept_mask, proposed_pdf, self.current_pdf)
+        self.current_state[accept_mask] = proposed_state[accept_mask]
+        self.current_pdf[accept_mask] = self.current_pdf[accept_mask]
+
+        for i, _ in enumerate(self.current_aux):
+            self.current_aux[i][accept_mask] = proposed_aux[i][accept_mask]
 
         # Update statistics
         self.n_samples += 1
         self.n_accepted += accept_mask.to(torch.float32).mean(dim=0)
 
-        # Adapt step sizes
         self._adapt_step_sizes(accept_mask)
 
-        return (self.current_state, self.current_pdf), aux
+        return (self.current_state, self.current_pdf), self.current_aux
 
     def _adapt_step_sizes(self, accept_mask: Tensor1D):
         adaptation = (

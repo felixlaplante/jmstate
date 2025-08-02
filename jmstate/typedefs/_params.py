@@ -50,7 +50,7 @@ class ModelParams:
             return
 
         for val in self.as_groups.values():
-            check_inf(list(val))
+            check_inf(tuple(val))
 
     def _set_dims(self, matrix: str):
         """Sets dimensions for matrix.

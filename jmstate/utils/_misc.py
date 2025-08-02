@@ -6,18 +6,18 @@ import numpy as np
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Info, Job, Metrics, Tensor1D, Tensor2D
+from ..typedefs._defs import Info, Job, Metrics, Tensor1D, TensorRow
 from ..typedefs._params import ModelParams
 
 
-def legendre_quad(n_quad: int) -> tuple[Tensor1D | Tensor2D, ...]:
+def legendre_quad(n_quad: int) -> tuple[TensorRow, Tensor1D]:
     """Get the Legendre quadrature nodes and weights.
 
     Args:
         n_quad (int, optional): The number of quadrature points.
 
     Returns:
-        tuple[Tensor1D | Tensor2D, ...]: The nodes and weights.
+        tuple[TensorRow, Tensor1D]: The nodes and weights.
     """
     nodes, weights = cast(
         tuple[

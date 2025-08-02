@@ -1,33 +1,40 @@
+import inspect
 import warnings
 from typing import Any
 
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Info, Job, Metrics
+from ..typedefs._defs import DEFAULT_OPT_KWARGS, Info, Job, Metrics
 
 
 class Fit(Job):
     """Job to fit the model."""
 
     optimizer_factory: type[torch.optim.Optimizer]
-    optimizer_params: dict[str, Any] | None
     retain_graph: bool
+    kwargs: Any
 
     @beartype
     def __init__(
         self,
         optimizer_factory: type[torch.optim.Optimizer] = torch.optim.Adam,
-        optimizer_params: dict[str, Any] | None = None,
         retain_graph: bool = False,
+        **kwargs: Any,
     ):
         self.optimizer_factory = optimizer_factory
-        self.optimizer_params = optimizer_params
         self.retain_graph = retain_graph
 
-    def init(self, info: Info, metrics: Metrics):
+        kwargs = {**DEFAULT_OPT_KWARGS, **kwargs}
+        accepted_kwargs = inspect.signature(self.optimizer_factory).parameters
+        self.kwargs = {
+            key: val for key, val in kwargs.items() if key in accepted_kwargs
+        }
+
+    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
         info.model.data = info.data
         info.model.params_.require_grad(True)
+
         param_groups = [
             {
                 "params": val,
@@ -35,12 +42,13 @@ class Fit(Job):
             }
             for key, val in info.model.params_.as_groups.items()
         ]
+
         info.optimizer = self.optimizer_factory(
             param_groups,
-            **(self.optimizer_params or {"lr": 0.01}),
+            **self.kwargs,
         )
 
-    def run(self, info: Info, metrics: Metrics):
+    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
         loss = (
             -info.logpdfs.mean() + info.model.pen(info.model.params_)
             if info.model.pen is not None
@@ -51,7 +59,7 @@ class Fit(Job):
         loss.backward(retain_graph=self.retain_graph)  # type: ignore
         info.optimizer.step()  # type: ignore
 
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         params_flat_tensor = info.model.params_.as_flat_tensor
         if (
             torch.isnan(params_flat_tensor).any()
@@ -67,24 +75,25 @@ class Scheduling(Job):
     """Job to run a scheduler during the optimization."""
 
     scheduler_factory: type[torch.optim.lr_scheduler.LRScheduler]
-    scheduler_params: dict[str, Any]
     scheduler: torch.optim.lr_scheduler.LRScheduler
+    kwargs: Any
 
     @beartype
     def __init__(
         self,
         scheduler_factory: type[torch.optim.lr_scheduler.LRScheduler],
-        scheduler_params: dict[str, Any],
+        **kwargs: Any,
     ):
         self.scheduler_factory = scheduler_factory
-        self.scheduler_params = scheduler_params
+        self.kwargs = kwargs
 
-    def init(self, info: Info, metrics: Metrics):
+    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not hasattr(info, "optimizer"):
             raise ValueError("Optimizer must be initialized before scheduler")
-        self.scheduler = self.scheduler_factory(info.optimizer, **self.scheduler_params)
 
-    def run(self, info: Info, metrics: Metrics):
+        self.scheduler = self.scheduler_factory(info.optimizer, **self.kwargs)
+
+    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
         self.scheduler.step()
 
     def end(self, info: Info, metrics: Metrics):
@@ -107,7 +116,7 @@ class AdamL1Proximal(Job):
                 f"Group must be either 'alphas' or 'betas', got {self.group}"
             )
 
-    def init(self, info: Info, metrics: Metrics):
+    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not hasattr(info, "optimizer"):
             raise ValueError("Optimizer must be initialized before AdamL1Proximal")
         if not isinstance(info.optimizer, torch.optim.Adam):
@@ -121,7 +130,7 @@ class AdamL1Proximal(Job):
         if self.param_groups == []:
             raise ValueError(f"Optimizer does not optimize group {self.group}")
 
-    def run(self, info: Info, metrics: Metrics):
+    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
         for g in self.param_groups:
             for p in g["params"]:
                 if p.grad is None:

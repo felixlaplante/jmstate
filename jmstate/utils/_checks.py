@@ -2,14 +2,14 @@ import itertools
 
 import torch
 
-from ..typedefs._defs import Tensor1D, Tensor2D, Trajectory
+from ..typedefs._defs import Tensor2D, Tensor3D, TensorCol, Trajectory
 
 
-def check_inf(tensors: list[torch.Tensor | None]):
+def check_inf(tensors: tuple[torch.Tensor | None, ...]):
     """Check if any of the tensors contains infinity.
 
     Args:
-        tensors (list[torch.Tensor  |  None]): The tensors to check.
+        tensors (tuple[torch.Tensor | None, ...]): The tensors to check.
 
     Raises:
         ValueError: If one tensor contains infinity.
@@ -18,17 +18,23 @@ def check_inf(tensors: list[torch.Tensor | None]):
         raise ValueError("Tensors cannot contain inf values")
 
 
-def check_consistent_size(tensors: list[torch.Tensor | None], n: int):
+def check_consistent_size(
+    tensors: tuple[Tensor2D | Tensor3D | None, ...], dims: tuple[int, ...], n: int
+):
     """Checks it the number of individuals is consistent.
 
     Args:
-        tensors (list[torch.Tensor  |  None]): The tensors to check.
+        tensors (tuple[Tensor2D | Tensor3D | None, ...]): The tensors to check.
+        dims (tuple[int, ...]): The dimensions to check.
         n (int): The expected size.
 
     Raises:
         ValueError: If the number of inconsistent.
     """
-    if any(tensor is not None and tensor.shape[0] != n for tensor in tensors):
+    if any(
+        tensor is not None and tensor.size(dim) != n
+        for tensor, dim in zip(tensors, dims)
+    ):
         raise ValueError("Inconsistent number of individuals")
 
 
@@ -48,12 +54,12 @@ def check_trajectory_sorting(trajectories: list[Trajectory]):
         raise ValueError("Trajectories must be sorted by time")
 
 
-def check_trajectory_c(trajectories: list[Trajectory], c: Tensor1D | Tensor2D | None):
+def check_trajectory_c(trajectories: list[Trajectory], c: TensorCol | None):
     """Check if the trajectories are compatible with censoring times.
 
     Args:
         trajectories (list[Trajectory]): The trajectories.
-        c (Tensor1D | Tensor2D | None): The censoring times.
+        c (TensorCol | None): The censoring times.
 
     Raises:
         ValueError: If some trajectory is not compatible with the censoring.

@@ -1,5 +1,5 @@
 from ..typedefs._data import CompleteModelData, ModelDesign
-from ..typedefs._defs import LOGTWOPI, Tensor1D, Tensor2D
+from ..typedefs._defs import LOGTWOPI, Tensor1D, Tensor3D
 from ..typedefs._params import ModelParams
 from ..utils._linalg import get_cholesky_and_log_eigvals
 
@@ -10,11 +10,11 @@ class LongitudinalMixin:
     params_: ModelParams
     model_design: ModelDesign
 
-    def _long_logliks(self, psi: Tensor2D, data: CompleteModelData) -> Tensor1D:
+    def _long_logliks(self, psi: Tensor3D, data: CompleteModelData) -> Tensor1D:
         """Computes the longitudinal log likelihood.
 
         Args:
-            psi (Tensor2D): A matrix of individual parameters.
+            psi (Tensor3D): A 3D tensor of individual parameters.
             data (ModelData): Dataset on which likelihood is computed.
 
         Returns:

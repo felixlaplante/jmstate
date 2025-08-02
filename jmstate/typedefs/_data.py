@@ -18,7 +18,9 @@ from ._defs import (
     Tensor1D,
     Tensor2D,
     Tensor3D,
+    TensorCol,
     Trajectory,
+    VecRep,
 )
 
 
@@ -53,7 +55,7 @@ class ModelData:
     t: Tensor1D | Tensor2D
     y: Tensor3D
     trajectories: list[Trajectory]
-    c: Tensor2D
+    c: TensorCol
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
@@ -63,13 +65,13 @@ class ModelData:
             ValueError: If the shape of t is not broadcastable with y.
             ValueError: If t contains torch.nan where y is not.
         """
+        if self.skip_validation:
+            return
+
         self.x = None if self.x is None else self.x.to(torch.float32)
         self.t = self.t.to(torch.float32)
         self.y = self.y.to(torch.float32)
         self.c = self.c.to(torch.float32)
-
-        if self.skip_validation:
-            return
 
         # Check NaNs
         if (
@@ -78,8 +80,8 @@ class ModelData:
         ):
             raise ValueError("Invalid time values on non NaN y values")
 
-        check_inf([self.x, self.t, self.y, self.c])
-        check_consistent_size([self.x, self.y, self.c], self.size)
+        check_inf((self.x, self.t, self.y, self.c))
+        check_consistent_size((self.x, self.y, self.c), (0, 0, 0), self.size)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
 
@@ -93,13 +95,14 @@ class ModelData:
         return len(self.trajectories)
 
 
+@beartype
 @dataclass
 class CompleteModelData(ModelData):
     valid_mask: Tensor3D = field(init=False)
     n_valid: Tensor2D = field(init=False)
     valid_t: Tensor1D | Tensor2D = field(init=False)
-    valid_y: Tensor3D = field(init=False)
-    buckets: dict[tuple[int, int], tuple[Tensor1D, ...]] = field(init=False)
+    valid_y: Tensor2D | Tensor3D = field(init=False)
+    buckets: dict[tuple[int, int], VecRep] = field(init=False)
     n_chains: int = field(init=False)
 
     def init(self, model_design: ModelDesign, n_chains: int):
@@ -111,27 +114,28 @@ class CompleteModelData(ModelData):
         self.n_chains = n_chains
 
 
+@beartype
 @dataclass
 class SampleData:
     """""Dataclass for data used in sampling.""" ""
 
     x: Tensor2D | None
     trajectories: list[Trajectory]
-    psi: Tensor2D
-    c: Tensor2D | None = None
+    psi: Tensor2D | Tensor3D
+    c: TensorCol | None = None
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
         """Runs the post init conversions and checks."""
+        if self.skip_validation:
+            return
+
         self.x = None if self.x is None else self.x.to(torch.float32)
         self.c = None if self.c is None else self.c.to(torch.float32)
         self.psi = self.psi.to(torch.float32)
 
-        if self.skip_validation:
-            return
-
-        check_inf([self.c, self.x, self.psi])
-        check_consistent_size([self.x, self.psi, self.c], self.size)
+        check_inf((self.c, self.x, self.psi))
+        check_consistent_size((self.x, self.psi, self.c), (0, -2, 0), self.size)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
 
