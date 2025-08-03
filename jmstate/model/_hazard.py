@@ -1,12 +1,12 @@
-from collections import OrderedDict
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any
 
 import torch
 from beartype import beartype
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import (
+    HAZARD_CACHE_KEYS,
     HazardInfo,
     Tensor1D,
     Tensor2D,
@@ -19,6 +19,7 @@ from ..typedefs._params import ModelParams
 from ..utils._checks import check_consistent_size
 from ..utils._misc import legendre_quad
 from ..utils._surv import build_vec_rep
+from ._cache import Cache
 
 
 class HazardMixin:
@@ -31,12 +32,14 @@ class HazardMixin:
     cache_limit: int | None
     _std_nodes: TensorRow
     _std_weights: Tensor1D
+    _cache: Cache
 
     def __init__(
         self,
         n_quad: int,
         n_bissect: int,
         cache_limit: int | None,
+        *args: Any,
         **kwargs: Any,
     ):
         """Initializes the class.
@@ -44,14 +47,13 @@ class HazardMixin:
         Args:
             n_quad (int): Number of quadrature nodes.
             n_bissect (int): The number of bissection steps.
-            enable_cache (bool): Enables caching.
             cache_limit (int | None): Max length of cache.
+            args (Any): Additional args.
             kwargs (Any): Additional kwargs.
 
         Raises:
             ValueError: If n_quad is not greater than 0.
             ValueError: If n_bissect is not greater than 0.
-            ValueError: If cache_limit is not None and negative.
         """
         self.n_quad = n_quad
         self.n_bissect = n_bissect
@@ -61,54 +63,11 @@ class HazardMixin:
             raise ValueError(f"n_quad must be greater than 0, got {self.n_quad}")
         if self.n_bissect <= 0:
             raise ValueError(f"n_bissect must be greater than 0, got {self.n_bissect}")
-        if self.cache_limit is not None and self.cache_limit < 0:
-            raise ValueError(
-                f"cache_limit must be None or positive integer, got {self.cache_limit}"
-            )
 
         self._std_nodes, self._std_weights = legendre_quad(n_quad)
+        self._cache = Cache(cache_limit, HAZARD_CACHE_KEYS)
 
-        self._cache: dict[str, OrderedDict[tuple[int, ...], torch.Tensor]] = {
-            "base": OrderedDict(),
-            "half": OrderedDict(),
-            "quad_c": OrderedDict(),
-            "quad_lc": OrderedDict(),
-        }
-
-        super().__init__(**kwargs)
-
-    def _get_cache(
-        self, name: str, key: Any, missing: Callable[[], torch.Tensor]
-    ) -> torch.Tensor:
-        """Gets the cache [name][key].
-
-        Args:
-            name (str): The name of the cache info.
-            key (Any): The key inside the current info.
-            missing (Callable[[], torch.Tensor]): The fallback function.
-
-        Returns:
-            torch.Tensor: The cached tensor.
-        """
-        cache = self._cache[name]
-        if key in cache:
-            cache.move_to_end(key)
-        else:
-            cache[key] = missing()
-
-        if self.cache_limit is not None and len(cache) > self.cache_limit:
-            cache.popitem(last=False)
-
-        return cache[key]
-
-    def clear_cache(self):
-        """Clears the cached tensors."""
-        self._cache = {
-            "base": OrderedDict(),
-            "half": OrderedDict(),
-            "quad_c": OrderedDict(),
-            "quad_lc": OrderedDict(),
-        }
+        super().__init__(*args, **kwargs)
 
     def _log_hazard(
         self,
@@ -138,7 +97,7 @@ class HazardMixin:
             return base_hazard_fn(t0, t1)
 
         base = (
-            self._get_cache("base", key, _base_create)
+            self._cache.get_cache("base", key, _base_create)
             if enable_cache
             else _base_create()
         )
@@ -179,7 +138,7 @@ class HazardMixin:
             return 0.5 * (t1 - c)
 
         half = (
-            self._get_cache("half", key, _half_create)
+            self._cache.get_cache("half", key, _half_create)
             if enable_cache
             else _half_create()
         )
@@ -188,7 +147,7 @@ class HazardMixin:
             return 0.5 * (c + t1) + half * self._std_nodes
 
         quad_c = (
-            self._get_cache("quad_c", key, _quad_c_create)
+            self._cache.get_cache("quad_c", key, _quad_c_create)
             if enable_cache
             else _quad_c_create()
         )
@@ -226,7 +185,7 @@ class HazardMixin:
             return 0.5 * (t1 - t0)
 
         half = (
-            self._get_cache("half", key, _half_create)
+            self._cache.get_cache("half", key, _half_create)
             if enable_cache
             else _half_create()
         )
@@ -235,7 +194,7 @@ class HazardMixin:
             return torch.cat([t1, 0.5 * (t0 + t1) + half * self._std_nodes], dim=-1)
 
         quad_lc = (
-            self._get_cache("quad_lc", key, _quad_lc_create)
+            self._cache.get_cache("quad_lc", key, _quad_lc_create)
             if enable_cache
             else _quad_lc_create()
         )

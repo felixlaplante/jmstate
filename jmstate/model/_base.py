@@ -99,14 +99,13 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             data (CompleteModelData): Dataset on which the likeihood is computed.
 
         Returns:
-            tuple[Tensor2D, tuple[torch.Tensor, ...]]: The computed quantities.
+            tuple[Tensor2D, Tensor2D, Tensor3D]: The computed quantities.
         """
 
         def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
             Q_inv_cholesky, Q_log_eigvals = get_cholesky_and_log_eigvals(
                 self.params_, "Q"
             )
-
             Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
             Q_log_det = (Q_log_eigvals - LOGTWOPI).sum()
 
@@ -250,7 +249,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         info.iteration += 1
         do_jobs("end", jobs, info, metrics)
 
-        self.clear_cache()
+        self._cache.clear_cache()
 
         if new_data is None:
             self.metrics_ = metrics

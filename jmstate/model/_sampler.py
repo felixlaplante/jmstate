@@ -86,42 +86,40 @@ class MetropolisHastingsSampler:
                 f"target_accept_rate must be in (0, 1), got {self.target_accept_rate}"
             )
 
+    @torch.no_grad()  # type: ignore
     def step(self) -> Tensor2D:
         """Performs a single kernel step.
 
         Returns:
             Tensor2D: current state.
         """
-        with torch.no_grad():
-            # Generate proposal isotropic noise
-            noise = torch.randn_like(self.current_state, dtype=torch.float32)
+        # Generate proposal noise
+        noise = torch.randn_like(self.current_state, dtype=torch.float32)
 
-            # Get the proposal
-            proposed_state = self.current_state + noise * self.step_sizes.view(1, -1, 1)
-            proposed_pdf = self.pdf_fn(proposed_state)
-            pdf_diff = proposed_pdf - self.current_pdf
+        # Get the proposal
+        proposed_state = self.current_state + noise * self.step_sizes.view(1, -1, 1)
+        proposed_pdf = self.pdf_fn(proposed_state)
+        pdf_diff = proposed_pdf - self.current_pdf
 
-            # Vectorized acceptance decision
-            log_uniform = torch.log(torch.rand_like(pdf_diff))
-            accept_mask = log_uniform < pdf_diff
+        # Vectorized acceptance decision
+        log_uniform = torch.log(torch.rand_like(pdf_diff))
+        accept_mask = log_uniform < pdf_diff
 
-            torch.where(
-                accept_mask.unsqueeze(-1),
-                proposed_state,
-                self.current_state,
-                out=self.current_state,
-            )
-            torch.where(
-                accept_mask, proposed_pdf, self.current_pdf, out=self.current_pdf
-            )
+        torch.where(
+            accept_mask.unsqueeze(-1),
+            proposed_state,
+            self.current_state,
+            out=self.current_state,
+        )
+        torch.where(accept_mask, proposed_pdf, self.current_pdf, out=self.current_pdf)
 
-            # Update statistics
-            self.n_samples += 1
-            self.n_accepted += accept_mask.to(torch.float32).mean(dim=0)
+        # Update statistics
+        self.n_samples += 1
+        self.n_accepted += accept_mask.to(torch.float32).mean(dim=0)
 
-            self._adapt_step_sizes(accept_mask)
+        self._adapt_step_sizes(accept_mask)
 
-            return self.current_state
+        return self.current_state
 
     def _adapt_step_sizes(self, accept_mask: Tensor1D):
         adaptation = (
@@ -129,7 +127,7 @@ class MetropolisHastingsSampler:
         ) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 
-    def warmup(self, warmup: int) -> None:
+    def warmup(self, warmup: int):
         """Warmups the MCMC.
 
         Args:

@@ -138,5 +138,6 @@ class Job(ABC):
 
 
 # Constants
-LOGTWOPI: Final = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float32))
-DEFAULT_OPT_KWARGS: Final = {"lr": 0.1, "fused": True}
+LOGTWOPI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float32))
+HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
+DEFAULT_OPT_KWARGS: Final[dict[str, Any]] = {"lr": 0.1, "fused": True}

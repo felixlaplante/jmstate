@@ -1,3 +1,5 @@
+from typing import Any
+
 from ..typedefs._data import CompleteModelData, ModelDesign
 from ..typedefs._defs import LOGTWOPI, Tensor1D, Tensor3D
 from ..typedefs._params import ModelParams
@@ -9,6 +11,15 @@ class LongitudinalMixin:
 
     params_: ModelParams
     model_design: ModelDesign
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initializes the class.
+
+        Args:
+            args (Any): Additional args.
+            kwargs (Any): Additional kwargs.
+        """
+        super().__init__(*args, **kwargs)
 
     def _long_logliks(self, psi: Tensor3D, data: CompleteModelData) -> Tensor1D:
         """Computes the longitudinal log likelihood.

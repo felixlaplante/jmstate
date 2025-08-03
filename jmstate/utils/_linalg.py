@@ -128,7 +128,16 @@ def cov_from_flat(flat: Tensor1D, n: int, method: str = "full") -> Tensor2D:
     L = _log_cholesky_from_flat(flat, n, method)
     L.diagonal().exp_()
 
-    return (L @ L.T).inverse()
+    L_inv = cast(
+        Tensor2D,
+        torch.linalg.solve_triangular(  # type: ignore
+            L,
+            torch.eye(n, dtype=L.dtype),
+            upper=False,
+        ),
+    )
+
+    return L_inv.T @ L_inv
 
 
 @beartype
