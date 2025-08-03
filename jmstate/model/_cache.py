@@ -3,9 +3,13 @@ from typing import Any, Callable
 
 
 class Cache:
-    def __init__(
-        self, cache_limit: int | None, keys: tuple[str, ...], *args: Any, **kwargs: Any
-    ):
+    """Cache data."""
+
+    cache_limit: int | None
+    keys: tuple[str, ...]
+    cache: dict[str, OrderedDict[tuple[int, ...], Any]]
+
+    def __init__(self, cache_limit: int | None, keys: tuple[str, ...]):
         """Inits the cache.
 
         Args:
