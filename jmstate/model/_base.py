@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Callable, cast
+from typing import Any, Callable, SupportsFloat, cast
 
 import torch
 from beartype import beartype
@@ -12,6 +12,7 @@ from ..typedefs._defs import (
     Metrics,
     Tensor0D,
     Tensor2D,
+    Tensor3D,
 )
 from ..typedefs._params import ModelParams
 from ..utils._linalg import get_cholesky_and_log_eigvals
@@ -90,7 +91,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
     def _logliks_and_aux(
         self, b: Tensor2D, data: CompleteModelData
-    ) -> tuple[Tensor2D, list[torch.Tensor]]:
+    ) -> tuple[Tensor2D, Tensor2D, Tensor3D]:
         """Computes the total log likelihood up to a constant.
 
         Args:
@@ -98,7 +99,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             data (CompleteModelData): Dataset on which the likeihood is computed.
 
         Returns:
-            tuple[Tensor2D, list[torch.Tensor]]: The computed quantities.
+            tuple[Tensor2D, tuple[torch.Tensor, ...]]: The computed quantities.
         """
 
         def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
@@ -123,24 +124,24 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         logliks = long_logliks + hazard_logliks
         logpdfs = logliks + prior_logliks
 
-        return logpdfs, [logliks, psi]
+        return logpdfs, logliks, psi
 
     def _setup_mcmc(
         self,
         data: CompleteModelData,
         n_chains: int,
-        init_step_size: float,
-        adapt_rate: float,
-        target_accept_rate: float,
+        init_step_size: SupportsFloat,
+        adapt_rate: SupportsFloat,
+        target_accept_rate: SupportsFloat,
     ) -> MetropolisHastingsSampler:
         """Setup the MCMC kernel and hyperparameters.
 
         Args:
             data (CompleteModelData): The complete dataset.
             n_chains (int): The number of parallel MCMC chains.
-            init_step_size (float, optional): Kernel standard error in Metropolis.
-            adapt_rate (float, optional): Adaptation rate for the step_size.
-            target_accept_rate (float, optional): Mean acceptance target.
+            init_step_size (SupportsFloat): Kernel standard error in Metropolis.
+            adapt_rate (SupportsFloat): Adaptation rate for the step_size.
+            target_accept_rate (SupportsFloat): Mean acceptance target.
 
         Returns:
             MetropolisHastingsSampler: The intialized Markov kernel.
@@ -151,7 +152,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
 
         return MetropolisHastingsSampler(
-            lambda b: self._logliks_and_aux(b, data),
+            lambda b: self._logliks_and_aux(b, data)[0],
             init_b,
             n_chains,
             init_step_size,
@@ -165,25 +166,25 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         new_data: ModelData | None = None,
         *,
         jobs: Job | list[Job],
-        n_iterations: int = 500,
+        n_iterations: int = 200,
         n_chains: int = 10,
-        init_step_size: float = 0.1,
-        adapt_rate: float = 0.1,
-        accept_target: float = 0.234,
+        init_step_size: SupportsFloat = 0.1,
+        adapt_rate: SupportsFloat = 0.1,
+        accept_target: SupportsFloat = 0.234,
         init_warmup: int = 500,
         cont_warmup: int = 5,
         verbose: bool = True,
-    ) -> Any | Metrics | None:
+    ) -> Metrics | Any | None:
         """Runs the MultiStateJointModel loop and some jobs.
 
         Args:
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
-            n_iterations (int, optional): Number of iterations for optimization. Defaults to 500.
+            n_iterations (int, optional): Number of iterations for optimization. Defaults to 200.
             n_chains (int, optional): Batch size used. Defaults to 10.
-            init_step_size (float, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
-            adapt_rate (float, optional): Adaptation rate for the step_size. Defaults to 0.01.
-            accept_target (float, optional): Mean acceptation target. Defaults to 0.234.
+            init_step_size (SupportsFloat, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
+            adapt_rate (SupportsFloat, optional): Adaptation rate for the step_size. Defaults to 0.01.
+            accept_target (SupportsFloat, optional): Mean acceptation target. Defaults to 0.234.
             init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
             cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
@@ -194,7 +195,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             TypeError: If some callback is not callable.
 
         Returns:
-            Any | dict[str, Any] | None: The metrics dict, or its single element, possibly None if none were recorded.
+            dict[str, Any] | Any | None: The metrics dict, its single element, pr None.
         """
         # Verify n_chains
         if n_iterations < 1:
@@ -233,7 +234,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         def _do(iteration: int):
             nonlocal info
 
-            (info.b, info.logpdfs), (info.logliks, info.psi) = sampler.step()
+            info.b = sampler.step()
+            info.logpdfs, info.logliks, info.psi = self._logliks_and_aux(
+                info.b, complete_data
+            )
             info.iteration = iteration
 
             do_jobs("run", jobs, info, metrics)
@@ -290,7 +294,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             ValueError: If Fisher Information Matrix has not yet been computed.
 
         Returns:
-            torch.Tensor: The Fisher Information Matrix.
+            Tensor2D: The Fisher Information Matrix.
         """
         if self.metrics_ is None or not hasattr(self.metrics_, "fim"):
             raise ValueError("Fisher Information Matrix must be previously computed.")

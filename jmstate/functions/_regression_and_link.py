@@ -11,7 +11,7 @@ def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: The computed transformation.
     """
-    return psi.unsqueeze(-1).repeat(1, t.shape[-1], 1)
+    return psi.unsqueeze(-1).expand(-1, t.size(-1), -1)
 
 
 def sigmoid(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:

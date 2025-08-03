@@ -1,7 +1,6 @@
 import warnings
 
 import torch
-from beartype import beartype
 
 from ..typedefs._defs import Info, Job, Metrics, Tensor1D, Tensor2D
 
@@ -14,7 +13,6 @@ class ComputeFIM(Job):
     grad_m2: Tensor2D
     scale: float
 
-    @beartype
     def __init__(self, retain_graph: bool = False):
         self.retain_graph = retain_graph
 
@@ -25,29 +23,31 @@ class ComputeFIM(Job):
                 stacklevel=2,
             )
 
-        info.model.params_.require_grad(True)
+        info.model.params_.requires_grad_(True)
 
         d = info.model.params_.numel
         self.grad_m1 = torch.zeros(d, dtype=torch.float32)
         self.grad_m2 = torch.zeros((d, d), dtype=torch.float32)
 
-        self.scale = 1.0 / (info.n_iterations * info.n_chains)
+        self.scale = 1.0 / (info.n_iterations * info.sampler.n_chains)
 
     def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
-        for i in range(info.n_chains):
+        for i in range(info.sampler.n_chains):
+            retain_graph = i < info.sampler.n_chains - 1 or self.retain_graph
+
             grads = torch.autograd.grad(
                 outputs=info.logpdfs[i].sum(),
                 inputs=info.model.params_.as_list,
-                retain_graph=(i - self.retain_graph) < (info.n_chains - 1),
+                retain_graph=retain_graph,
             )
-            grads = torch.cat([p.view(-1) for p in grads])
 
+            grads = torch.cat([p.view(-1) for p in grads])
             self.grad_m1.add_(grads, alpha=self.scale)
             self.grad_m2.add_(torch.outer(grads, grads), alpha=self.scale)
 
     def end(self, info: Info, metrics: Metrics):
         metrics.fim = self.grad_m2 - torch.outer(self.grad_m1, self.grad_m1)
-        info.model.params_.require_grad(False)
+        info.model.params_.requires_grad_(False)
 
 
 class ComputeCriteria(Job):
@@ -58,7 +58,7 @@ class ComputeCriteria(Job):
 
     def init(self, info: Info, metrics: Metrics):
         self.n = info.data.size
-        self.scale = 1.0 / (info.n_iterations * info.n_chains)
+        self.scale = 1.0 / (info.n_iterations * info.sampler.n_chains)
         metrics.loglik = 0.0
 
     def run(self, info: Info, metrics: Metrics):
@@ -89,7 +89,7 @@ class ComputeEBEs(Job):
         self.ebes = torch.zeros(
             info.sampler.current_state.shape[1:], dtype=torch.float32
         )
-        self.scale = 1.0 / (info.n_iterations * info.n_chains)
+        self.scale = 1.0 / (info.n_iterations)
 
     def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
         self.ebes.add_(info.b.detach().mean(dim=0), alpha=self.scale)

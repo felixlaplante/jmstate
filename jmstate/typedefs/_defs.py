@@ -22,14 +22,15 @@ if TYPE_CHECKING:
     from ._data import ModelData
     from ._params import ModelParams
 
+
 # Beartype checks
 Tensor0D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 0]]  # type: ignore
 Tensor1D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 1]]  # type: ignore
-Tensor2D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2]]  # type: ignore  # noqa: PLR2004
-Tensor3D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 3]]  # type: ignore  # noqa: PLR2004
-Tensor4D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 4]]  # type: ignore  # noqa: PLR2004
-TensorRow = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(0) == 1]]  # type: ignore  # noqa: PLR2004
-TensorCol = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(1) == 1]]  # type: ignore  # noqa: PLR2004
+Tensor2D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2]]  # type: ignore
+Tensor3D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 3]]  # type: ignore
+Tensor4D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 4]]  # type: ignore
+TensorRow = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(0) == 1]]  # type: ignore
+TensorCol = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(1) == 1]]  # type: ignore
 
 
 # Type Aliases
@@ -60,16 +61,12 @@ class IndividualEffectsFn(Protocol):
 
 @runtime_checkable
 class BaseHazardFn(Protocol):
-    def __call__(
-        self, t: Tensor1D | Tensor2D, z: Tensor1D | Tensor2D
-    ) -> Tensor1D | Tensor2D: ...
+    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
 
 
 @runtime_checkable
 class ClockMethod(Protocol):
-    def __call__(
-        self, t: Tensor1D | Tensor2D, z: Tensor1D | Tensor2D
-    ) -> Tensor1D | Tensor2D: ...
+    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
 
 
 # Named tuples
@@ -120,7 +117,7 @@ class Metrics(SimpleNamespace):
     bic: float
     pred_y: list[Tensor3D]
     pred_surv_logps: list[Tensor2D]
-    pred_trajectories: list[list[Trajectory]]
+    pred_trajectories: list[Trajectory]
     params_history: list[ModelParams]
     mcmc_diagnostics: list[dict[str, Any]]
 
@@ -142,4 +139,4 @@ class Job(ABC):
 
 # Constants
 LOGTWOPI: Final = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float32))
-DEFAULT_OPT_KWARGS: Final = {"lr": 0.1, "fused": True, "amsgrad": True}
+DEFAULT_OPT_KWARGS: Final = {"lr": 0.1, "fused": True}

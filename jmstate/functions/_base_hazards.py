@@ -1,43 +1,42 @@
-from typing import cast
+from typing import SupportsFloat, cast
 
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import BaseHazardFn, ClockMethod
+from ..typedefs._defs import BaseHazardFn, ClockMethod, Tensor2D, TensorCol
 
 
-def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+def clock_forward(t0: TensorCol, t1: Tensor2D) -> Tensor2D:
     """Time transformation for clock forward method.
 
     Args:
-        _t0 (torch.Tensor): Past transition time.
-        t1 (torch.Tensor): Current time
+        t0 (TensorCol): Past transition time.
+        t1 (Tensor2D): Current time
 
     Returns:
-        torch.Tensor: Current time.
+        Tensor2D: Current time.
     """
     return t1
 
 
-def clock_reset(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+def clock_reset(t0: TensorCol, t1: Tensor2D) -> Tensor2D:
     """Time transformation for clock reset method.
 
     Args:
-        t0 (torch.Tensor): Past transition time.
-        t1 (torch.Tensor): Current time
+        t0 (TensorCol): Past transition time.
+        t1 (Tensor2D): Current time
 
     Returns:
-        torch.Tensor: Current time - Past transition time.
+        Tensor2D: Current time - Past transition time.
     """
     return t1 - t0
 
 
-@beartype
-def exponential(lmda: torch.Tensor | float | int) -> BaseHazardFn:
+def exponential(lmda: SupportsFloat) -> BaseHazardFn:
     """Returns the exponential base hazard function.
 
     Args:
-        lmda (torch.Tensor | float | int): The scale parameter.
+        lmda (SupportsFloat): The scale parameter.
 
     Raises:
         ValueError: If lmda is not strictly positive.
@@ -61,15 +60,15 @@ def exponential(lmda: torch.Tensor | float | int) -> BaseHazardFn:
 
 @beartype
 def weibull(
-    k: torch.Tensor | float | int,
-    lmda: torch.Tensor | float | int,
+    k: SupportsFloat,
+    lmda: SupportsFloat,
     clock_method: ClockMethod = clock_reset,
 ) -> BaseHazardFn:
     """Returns the weibull base hazard function.
 
     Args:
-        k (torch.Tensor | float | int): The shape parameter.
-        lmda (torch.Tensor | float | int): The scale parameter.
+        k (SupportsFloat): The shape parameter.
+        lmda (SupportsFloat): The scale parameter.
         clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
 
     Raises:
@@ -101,15 +100,15 @@ def weibull(
 
 @beartype
 def gompertz(
-    a: torch.Tensor | float | int,
-    b: torch.Tensor | float | int,
+    a: SupportsFloat,
+    b: SupportsFloat,
     clock_method: ClockMethod = clock_reset,
 ) -> BaseHazardFn:
     """Returns the gompertz base hazard function.
 
     Args:
-        a (torch.Tensor | float): The baseline hazard.
-        b (torch.Tensor | float): The shape parameter.
+        a (SupportsFloat): The baseline hazard.
+        b (SupportsFloat): The shape parameter.
         clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
 
     Raises:
@@ -138,15 +137,15 @@ def gompertz(
 
 @beartype
 def log_normal(
-    mu: torch.Tensor | float | int,
-    scale: torch.Tensor | float | int,
+    mu: SupportsFloat,
+    scale: SupportsFloat,
     clock_method: ClockMethod = clock_reset,
 ) -> BaseHazardFn:
     """Returns the log normal base hazard function.
 
     Args:
-        mu (torch.Tensor | float):  log time mean.
-        scale (torch.Tensor | float): The log time scale.
+        mu (SupportsFloat):  log time mean.
+        scale (SupportsFloat): The log time scale.
         clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
 
     Raises:

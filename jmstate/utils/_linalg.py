@@ -156,15 +156,9 @@ def get_cholesky_and_log_eigvals(
         params (ModelParams): The model parameters.
         matrix (str): Either "Q" or "R".
 
-    Raises:
-        ValueError: If the matrix is not in ("Q", "R")
-
     Returns:
         tuple[torch.Tensor, torch.Tensor]: Precision matrix and log eigenvalues.
     """
-    if matrix not in ("Q", "R"):
-        raise ValueError(f"matrix should be either Q or R, got {matrix}")
-
     # Get flat then log cholesky
     flat, method = getattr(params, matrix + "_repr")
     n = getattr(params, matrix + "_dim_")

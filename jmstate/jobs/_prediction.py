@@ -4,7 +4,15 @@ import torch
 from beartype import beartype
 
 from ..typedefs._data import SampleData
-from ..typedefs._defs import Info, Job, Metrics, Tensor2D, Tensor3D, TensorCol
+from ..typedefs._defs import (
+    Info,
+    Job,
+    Metrics,
+    Tensor2D,
+    Tensor3D,
+    TensorCol,
+    Trajectory,
+)
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_consistent_size
 
@@ -65,66 +73,41 @@ class PredictTrajectories(Job):
     """Job to predict trajectories."""
 
     c_max: torch.Tensor
-    n_trajectories_samples_per_b: int
     max_length: int
+    pred_trajectories: list[Trajectory]
 
     @beartype
     def __init__(
         self,
         c_max: TensorCol,
-        n_trajectories_samples_per_b: int,
         max_length: int = 10,
     ):
         self.c_max = c_max.to(torch.float32)
-        self.n_trajectories_samples_per_b = n_trajectories_samples_per_b
         self.max_length = max_length
-        if self.n_trajectories_samples_per_b < 1:
-            raise ValueError(
-                f"n_trajectories_samples_per_b must be greater than 0, got {n_trajectories_samples_per_b}"
-            )
 
     def init(self, info: Info, metrics: Metrics):
-        if info.sampler.n_chains != 1:
-            raise ValueError(
-                f"n_chains must be equal to 1 for trajectory prediction, got {info.sampler.n_chains}"
-            )
-
         check_consistent_size((self.c_max,), (0,), info.data.size)
 
-        self.x_rep = (
-            None
-            if info.data.x is None
-            else info.data.x.repeat(self.n_trajectories_samples_per_b, 1)
-        )
-        self.trajectories_rep = (
-            info.data.trajectories * self.n_trajectories_samples_per_b
-        )
-        self.c_rep = info.data.c.repeat(self.n_trajectories_samples_per_b, 1)
-        self.c_max_rep = self.c_max.repeat(self.n_trajectories_samples_per_b, 1)
-
-        metrics.pred_trajectories = []
+        self.pred_trajectories = []
 
     def run(self, info: Info, metrics: Metrics):
-        psi_rep = (
-            info.psi.detach().squeeze(0).repeat(self.n_trajectories_samples_per_b, 1)
-        )
+        for i in range(info.psi.size(0)):
+            sample_data = SampleData(
+                info.data.x,
+                info.data.trajectories,
+                info.psi.detach()[i],
+                info.data.c,
+                skip_validation=True,
+            )
 
-        sample_data = SampleData(
-            self.x_rep, self.trajectories_rep, psi_rep, self.c_rep, skip_validation=True
-        )
-        trajectories = info.model.sample_trajectories(
-            sample_data, self.c_max_rep, max_length=self.max_length
-        )
+            trajectories = info.model.sample_trajectories(
+                sample_data, self.c_max, max_length=self.max_length
+            )
 
-        trajectory_chunks = [
-            trajectories[i * info.data.size : (i + 1) * info.data.size]
-            for i in range(self.n_trajectories_samples_per_b)
-        ]
-
-        metrics.pred_trajectories += trajectory_chunks
+            self.pred_trajectories += trajectories
 
     def end(self, info: Info, metrics: Metrics):
-        pass
+        metrics.pred_trajectories = self.pred_trajectories
 
 
 class SwitchParams(Job):

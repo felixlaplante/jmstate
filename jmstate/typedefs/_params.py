@@ -34,11 +34,7 @@ class ModelParams:
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
-        """Validate all tensors are 1D and don't contain inf.
-
-        Raises:
-            ValueError: If any of the tensors contains inf.
-        """
+        """Validate and put to float32 all tensors."""
         for val in self.as_groups.values():
             for i, t in enumerate(val):
                 val[i] = t.to(torch.float32)
@@ -64,7 +60,7 @@ class ModelParams:
             ValueError: If the number of elements is not one and the method is "ball".
         """
         if matrix not in ("Q", "R"):
-            raise ValueError(f"matrix should be either Q or R, got {matrix}")
+            raise ValueError(f"matrix must be either Q or R, got {matrix}")
 
         flat, method = getattr(self, matrix + "_repr")
 
@@ -88,19 +84,19 @@ class ModelParams:
 
     @property
     def as_groups(self) -> dict[str, list[torch.Tensor]]:
-        """Get a dict of all the parameters.
+        """Get a grouped dict of all the parameters.
 
         Returns:
             dict[str, list[torch.Tensor]]: The dict of the parameters.
         """
         groups = {
-            "gamma": [] if self.gamma is None else [self.gamma],
+            "gamma": None if self.gamma is None else [self.gamma],
             "Q": [self.Q_repr[0]],
             "R": [self.R_repr[0]],
             "alphas": list(self.alphas.values()),
-            "betas": [] if self.betas is None else list(self.betas.values()),
+            "betas": None if self.betas is None else list(self.betas.values()),
         }
-        return {key: val for key, val in groups.items() if val != []}
+        return {key: val for key, val in groups.items() if val is not None}
 
     @property
     def as_list(self) -> list[torch.Tensor]:
@@ -129,7 +125,7 @@ class ModelParams:
         """
         return sum(p.numel() for p in self.as_list)
 
-    def require_grad(self, req: bool):
+    def requires_grad_(self, req: bool):
         """Enable gradient computation on all parameters.
 
         Args:

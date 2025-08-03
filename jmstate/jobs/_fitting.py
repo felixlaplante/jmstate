@@ -25,15 +25,19 @@ class Fit(Job):
         self.optimizer_factory = optimizer_factory
         self.retain_graph = retain_graph
 
-        kwargs = {**DEFAULT_OPT_KWARGS, **kwargs}
         accepted_kwargs = inspect.signature(self.optimizer_factory).parameters
         self.kwargs = {
-            key: val for key, val in kwargs.items() if key in accepted_kwargs
+            **{
+                key: val
+                for key, val in DEFAULT_OPT_KWARGS.items()
+                if key in accepted_kwargs
+            },
+            **kwargs,
         }
 
     def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
         info.model.data = info.data
-        info.model.params_.require_grad(True)
+        info.model.params_.requires_grad_(True)
 
         param_groups = [
             {
@@ -67,7 +71,7 @@ class Fit(Job):
         ):
             warnings.warn("Error infering model parameters", stacklevel=2)
 
-        info.model.params_.require_grad(False)
+        info.model.params_.requires_grad_(False)
         info.model.fit_ = True
 
 

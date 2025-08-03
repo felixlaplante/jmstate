@@ -1,47 +1,37 @@
 import torch
 
-
-def gamma_x_cat_b(
-    gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor
-) -> torch.Tensor:
-    """The standard linear transformation [x @ gamma, b].
-
-    Args:
-        gamma (torch.Tensor): The population parameters.
-        x (torch.Tensor): The (fixed) covariates.
-        b (torch.Tensor): The random effects.
-
-    Returns:
-        torch.Tensor: The transformation [x @ gamma, b]
-    """
-    return torch.cat([x @ gamma, b], dim=1)
+from ..typedefs._defs import Tensor2D, Tensor3D
 
 
 def gamma_x_plus_b(
-    gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor
+    gamma: torch.Tensor, x: Tensor2D, b: Tensor2D | Tensor3D
 ) -> torch.Tensor:
     """The standard linear transformation x @ gamma + b.
 
     Args:
         gamma (torch.Tensor): The population parameters.
-        x (torch.Tensor): The (fixed) covariates.
-        b (torch.Tensor): The random effects.
+        x (Tensor2D): The (fixed) covariates.
+        b (Tensor2D | Tensor3D): The random effects.
 
     Returns:
-        torch.Tensor: The transformation x @ gamma + b
+        Tensor2D | Tensor3D: The transformation x @ gamma + b
     """
     return x @ gamma + b
 
 
-def gamma_plus_b(gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+def gamma_plus_b(
+    gamma: torch.Tensor,
+    x: Tensor2D,  # noqa: ARG001
+    b: Tensor2D | Tensor3D,
+) -> Tensor2D | Tensor3D:
     """The linear transformation gamma + b.
 
     Args:
         gamma (torch.Tensor): The population parameters.
         x (torch.Tensor): The (fixed) covariates.
-        b (torch.Tensor): The random effects.
+        b (Tensor2D | Tensor3D): The random effects.
 
     Returns:
-        torch.Tensor: The transformation [x @ gamma, b]
+        Tensor2D | Tensor3D: The transformation gamma + b
     """
     return gamma + b

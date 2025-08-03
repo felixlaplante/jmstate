@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from dataclasses import astuple
+from dataclasses import replace
 from typing import Any, Callable
 
 import torch
@@ -299,7 +299,10 @@ class HazardMixin:
             bool: If the sampling is done.
         """
         # Unpack data
-        x, trajectories, psi, c, *_ = astuple(sample_data)
+        x = sample_data.x
+        trajectories = sample_data.trajectories
+        psi = sample_data.psi
+        c = sample_data.c
 
         # Get initial buckets from last states
         last_states = [trajectory[-1:] for trajectory in trajectories]
@@ -373,19 +376,24 @@ class HazardMixin:
         check_consistent_size((c_max,), (0,), sample_data.size)
 
         # Initialize with copies of current trajectories
-        trajectories = [list(trajectory) for trajectory in sample_data.trajectories]
+        trajectories_copied = [
+            list(trajectory) for trajectory in sample_data.trajectories
+        ]
+        sample_data_copied = replace(
+            sample_data, trajectories=trajectories_copied, skip_validation=True
+        )
 
         # Sample future transitions iteratively
         for _ in range(max_length):
             if not self._sample_trajectory_step(
-                sample_data,
+                sample_data_copied,
                 c_max,
             ):
                 break
 
         return [
             trajectory[:-1] if trajectory[-1][0] > c_max[i] else trajectory
-            for i, trajectory in enumerate(trajectories)
+            for i, trajectory in enumerate(trajectories_copied)
         ]
 
     @beartype
@@ -405,7 +413,10 @@ class HazardMixin:
             Tensor2D | Tensor3D: The computed survival log probabilities.
         """
         # Unpack data
-        x, trajectories, psi, c, *_ = astuple(sample_data)
+        x = sample_data.x
+        trajectories = sample_data.trajectories
+        psi = sample_data.psi
+        c = sample_data.c
 
         # Convert to float32
         u = u.to(torch.float32)
@@ -480,6 +491,6 @@ class HazardMixin:
             )
 
             vals = obs * obs_logliks - alts_logliks
-            logliks = logliks.index_add(1, idx, vals)
+            logliks = logliks.index_add(-1, idx, vals)
 
         return logliks
