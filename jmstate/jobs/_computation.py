@@ -55,16 +55,18 @@ class ComputeCriteria(Job):
 
     n: int
     scale: float
+    loglik: float
 
     def init(self, info: Info, metrics: Metrics):
         self.n = info.data.size
         self.scale = 1.0 / (info.n_iterations * info.sampler.n_chains)
-        metrics.loglik = 0.0
+        self.loglik = 0.0
 
     def run(self, info: Info, metrics: Metrics):
-        metrics.loglik += info.logliks.detach().sum().item() * self.scale
+        self.loglik += info.logliks.detach().sum().item() * self.scale
 
     def end(self, info: Info, metrics: Metrics):
+        metrics.loglik = self.loglik
         metrics.nloglik_pen = (
             self.n * info.model.pen(info.model.params_).item() - metrics.loglik
             if info.model.pen is not None
