@@ -16,7 +16,7 @@ class ModelParams:
     """Dataclass containing model parameters.
 
     Raises:
-       ValueError: If the number of elements is not triangular with method "full".
+        ValueError: If the number of elements is not triangular with method "full".
         ValueError: If the number of elements is not one and the method is "ball".
         ValueError: If the method is unknown.
     """
