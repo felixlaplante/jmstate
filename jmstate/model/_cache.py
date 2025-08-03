@@ -49,5 +49,5 @@ class Cache:
         return cache[key]
 
     def clear_cache(self):
-        """Clears the cached tensors."""
+        """Clears the cache."""
         self.cache = {key: OrderedDict() for key in self.keys}
