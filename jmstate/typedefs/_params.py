@@ -16,12 +16,9 @@ class ModelParams:
     """Dataclass containing model parameters.
 
     Raises:
-        ValueError: If the name matrix is not "Q" nor "R".
-        ValueError: If the number of elements is not triangular and method is "full".
+       ValueError: If the number of elements is not triangular with method "full".
         ValueError: If the number of elements is not one and the method is "ball".
-        ValueError: If the name matrix is not "Q" nor "R".
-        ValueError: If the name matrix is not "Q" nor "R".
-        ValueError: If any of the tensors contains inf.
+        ValueError: If the method is unknown.
     """
 
     gamma: torch.Tensor | None
@@ -55,13 +52,10 @@ class ModelParams:
             matrix (str): Either "Q" or "R".
 
         Raises:
-            ValueError: If the name matrix is not "Q" nor "R".
             ValueError: If the number of elements is not triangular with method "full".
             ValueError: If the number of elements is not one and the method is "ball".
+            ValueError: If the method is unknown.
         """
-        if matrix not in ("Q", "R"):
-            raise ValueError(f"matrix must be either Q or R, got {matrix}")
-
         flat, method = getattr(self, matrix + "_repr")
 
         match method:
