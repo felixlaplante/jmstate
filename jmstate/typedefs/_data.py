@@ -63,6 +63,7 @@ class ModelData:
 
         Raises:
             ValueError: If the shape of t is not broadcastable with y.
+            ValueError: If the last component of y has mixed NaNs.
             ValueError: If t contains torch.nan where y is not.
         """
         if self.skip_validation:
@@ -74,11 +75,13 @@ class ModelData:
         self.c = self.c.to(torch.float32)
 
         # Check NaNs
-        if (
-            self.t.shape == self.y.shape[:2]
-            and (~self.y.isnan().all(dim=2) & self.t.isnan()).any()
-        ):
-            raise ValueError("Invalid time values on non NaN y values")
+        nan_mask = self.y.isnan()
+        any_nan_mask = nan_mask.any(dim=-1)
+        any_not_nan_mask = (~nan_mask).any(dim=-1)
+        if (any_nan_mask & any_not_nan_mask).any():
+            raise ValueError("Last component of y must be all NaNs or all valid.")
+        if (any_not_nan_mask & self.t.isnan()).any():
+            raise ValueError("NaN time values on non NaN y values")
 
         check_inf((self.x, self.t, self.y, self.c))
         check_consistent_size((self.x, self.y, self.c), (0, 0, 0), self.size)
@@ -94,6 +97,17 @@ class ModelData:
         """
         return len(self.trajectories)
 
+    @property
+    def effective_size(self) -> int:
+        """Gets the effective size of the dataset, used for BIC.
+
+        Returns:
+            int: The effective size.
+        """
+        return int((~torch.isnan(self.y)).any(dim=-1).sum()) + sum(
+            len(trajectory) for trajectory in self.trajectories
+        )
+
 
 @beartype
 @dataclass
@@ -105,8 +119,8 @@ class CompleteModelData(ModelData):
     buckets: dict[tuple[int, int], VecRep] = field(init=False)
 
     def init(self, model_design: ModelDesign):
-        self.valid_mask = (~torch.isnan(self.y)).to(torch.float32)
-        self.n_valid = self.valid_mask.sum(dim=1)
+        self.valid_mask = ~torch.isnan(self.y)
+        self.n_valid = self.valid_mask.sum(dim=(-2, -1))
         self.valid_t = torch.nan_to_num(self.t)
         self.valid_y = torch.nan_to_num(self.y)
         self.buckets = build_vec_rep(self.trajectories, self.c, model_design.surv)

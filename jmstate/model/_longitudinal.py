@@ -38,6 +38,6 @@ class LongitudinalMixin:
 
         R_inv_cholesky, R_log_eigvals = get_cholesky_and_log_eigvals(params, "R")
         R_quad_forms = (diffs @ R_inv_cholesky).pow(2).sum(dim=(-2, -1))
-        R_log_dets = data.n_valid @ (R_log_eigvals - LOGTWOPI)
+        R_norm_factor = data.n_valid * (R_log_eigvals.mean() - LOGTWOPI)
 
-        return 0.5 * (R_log_dets - R_quad_forms)
+        return 0.5 * (R_norm_factor - R_quad_forms)

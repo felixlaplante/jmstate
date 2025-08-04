@@ -106,9 +106,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
             Q_inv_cholesky, Q_log_eigvals = get_cholesky_and_log_eigvals(params, "Q")
             Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
-            Q_log_det = (Q_log_eigvals - LOGTWOPI).sum()
+            Q_norm_factor = (Q_log_eigvals - LOGTWOPI).sum()
 
-            return 0.5 * (Q_log_det - Q_quad_form)
+            return 0.5 * (Q_norm_factor - Q_quad_form)
 
         # Transform random effects to individual-specific parameters
         psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)

@@ -69,7 +69,12 @@ class ComputeCriteria(Job):
 
         d = info.model.params_.numel
         aic_pen = 2 * d
-        bic_pen = d * torch.log(torch.tensor(self.n, dtype=torch.float32)).item()
+        bic_pen = (
+            d
+            * torch.log(
+                torch.tensor(info.data.effective_size, dtype=torch.float32)
+            ).item()
+        )
 
         metrics.aic = 2 * metrics.nloglik_pen + aic_pen
         metrics.bic = 2 * metrics.nloglik_pen + bic_pen

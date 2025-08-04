@@ -158,22 +158,22 @@ def flat_from_cov(V: Tensor2D, method: str = "full") -> Tensor1D:
 
 def get_cholesky_and_log_eigvals(
     params: ModelParams, matrix: str
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Get Cholesky factor as well as log eigenvalues.
+) -> tuple[Tensor2D, Tensor1D]:
+    """Get Cholesky factor as well as log eigvals.
 
     Args:
         params (ModelParams): The model parameters.
         matrix (str): Either "Q" or "R".
 
     Returns:
-        tuple[torch.Tensor, torch.Tensor]: Precision matrix and log eigenvalues.
+        tuple[Tensor2D, Tensor1D]: Precision matrix and mean log eigvals.
     """
     # Get flat then log cholesky
     flat, method = getattr(params, matrix + "_repr")
     n = getattr(params, matrix + "_dim_")
 
     L = _log_cholesky_from_flat(flat, n, method)
-    eigvals = 2 * L.diagonal()
+    log_eigvals = 2 * L.diagonal()
     L.diagonal().exp_()
 
-    return L, eigvals
+    return L, log_eigvals
