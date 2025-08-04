@@ -26,13 +26,12 @@ class PredictY(Job):
     @beartype
     def __init__(self, u: torch.Tensor):
         self.u = u.to(torch.float32)
-
-    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
-        check_consistent_size((self.u,), (0,), info.data.size)
-
         self.pred_y = []
 
-    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def init(self, info: Info):
+        check_consistent_size((self.u,), (0,), info.data.size)
+
+    def run(self, info: Info):
         y = info.model.model_design.regression_fn(self.u, info.psi.detach())
         self.pred_y += [y[i] for i in range(y.size(0))]
 
@@ -49,11 +48,12 @@ class PredictSurvLogps(Job):
     @beartype
     def __init__(self, u: Tensor2D):
         self.u = u.to(torch.float32)
-
-    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
         self.pred_surv_logps = []
 
-    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def init(self, info: Info):
+        pass
+
+    def run(self, info: Info):
         sample_data = SampleData(
             info.data.x,
             info.data.trajectories,
@@ -84,13 +84,12 @@ class PredictTrajectories(Job):
     ):
         self.c_max = c_max.to(torch.float32)
         self.max_length = max_length
-
-    def init(self, info: Info, metrics: Metrics):
-        check_consistent_size((self.c_max,), (0,), info.data.size)
-
         self.pred_trajectories = []
 
-    def run(self, info: Info, metrics: Metrics):
+    def init(self, info: Info):
+        check_consistent_size((self.c_max,), (0,), info.data.size)
+
+    def run(self, info: Info):
         for i in range(info.psi.size(0)):
             sample_data = SampleData(
                 info.data.x,
@@ -130,10 +129,10 @@ class SwitchParams(Job):
 
         self.n_params = len(params_list)
 
-    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def init(self, info: Info):
         self.init_params = copy.deepcopy(info.model.params_)
 
-    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def run(self, info: Info):
         if info.iteration % self.n_iterations_per_param == 0:
             info.model.params_ = self.params_list[
                 (info.iteration // self.n_iterations_per_param) % self.n_params

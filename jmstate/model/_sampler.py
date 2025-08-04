@@ -1,7 +1,7 @@
 from typing import Any, Callable, SupportsFloat
 
 import torch
-from tqdm import tqdm
+from tqdm import trange
 
 from ..typedefs._defs import Tensor0D, Tensor1D, Tensor2D, Tensor3D
 
@@ -144,7 +144,7 @@ class MetropolisHastingsSampler:
         self,
         n_iterations: int,
         cont_warmup: int,
-        job: Callable[[int], None],
+        job: Callable[[], bool | None],
         desc: str,
         verbose: bool,
     ) -> None:
@@ -153,7 +153,7 @@ class MetropolisHastingsSampler:
         Args:
             n_iterations (int): The number of iterations to do.
             cont_warmup (int): The sublamping MCMC number.
-            job (Callable[[], None]): The function to execute.
+            job (Callable[[], bool | None]): The function to execute.
             desc (str): The description during the loop.
             verbose (bool): Wheter or not to show progress.
 
@@ -161,14 +161,10 @@ class MetropolisHastingsSampler:
             ValueError: If n_iter is not greater or equal to one.
             RuntimeError: If an iteration fails.
         """
-        for iteration in tqdm(range(n_iterations), desc=desc, disable=not verbose):
-            try:
-                self.warmup(cont_warmup)
-                job(iteration)
-            except Exception as e:
-                raise RuntimeError(
-                    f"Error in Metropolis Hastings iteration {iteration}: {e}"
-                ) from e
+        for _ in trange(n_iterations, desc=desc, disable=not verbose):
+            self.warmup(cont_warmup)
+            if job():
+                break
 
     @property
     def acceptance_rates(self) -> Tensor1D:

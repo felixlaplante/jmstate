@@ -89,27 +89,33 @@ def do_jobs(
     jobs: Job | list[Job],
     info: Info,
     metrics: Metrics,
-):
+) -> bool:
     """Call jobs.
 
     Args:
         method (str): Either 'init', 'run' or 'end'.
-        jobs (Job | list[Job] | None): The jobs to execute.
+        jobs (Job | list[Job]): The jobs to execute.
         info (Info): The information container.
         metrics (Metrics): The computed metrics dict output.
+
+    Returns:
+        bool: Set to true to stop the iterations.
     """
     if isinstance(jobs, Job):
         jobs = [jobs]
 
+    stop = False
     match method:
         case "init":
             for job in jobs:
-                job.init(info, metrics)
+                job.init(info)
         case "run":
             for job in jobs:
-                job.run(info, metrics)
+                stop = job.run(info) or stop
         case "end":
             for job in jobs:
                 job.end(info, metrics)
         case _:
             pass
+
+    return stop

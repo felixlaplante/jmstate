@@ -1,12 +1,11 @@
 from dataclasses import replace
-from typing import Any
+from typing import Any, Final
 
 import torch
 from beartype import beartype
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import (
-    HAZARD_CACHE_KEYS,
     HazardInfo,
     Tensor1D,
     Tensor2D,
@@ -20,6 +19,9 @@ from ..utils._checks import check_consistent_size
 from ..utils._misc import legendre_quad
 from ..utils._surv import build_vec_rep
 from ._cache import Cache
+
+# Constants
+HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
 
 
 class HazardMixin:

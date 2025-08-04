@@ -1,32 +1,45 @@
+from typing import Any
+
 from ..typedefs._defs import Info, Job, Metrics
+from ..typedefs._params import ModelParams
 from ..utils._misc import params_like_from_flat
 
 
 class LogParamsHistory(Job):
     """Job to log the evolution of the paramters during fit."""
 
-    def init(self, info: Info, metrics: Metrics) -> None:  # noqa: ARG002
-        metrics.params_history = []
+    params_history: list[ModelParams]
 
-    def run(self, info: Info, metrics: Metrics) -> None:
-        metrics.params_history.append(
+    def __init__(self):
+        self.params_history = []
+
+    def init(self, info: Info):
+        pass
+
+    def run(self, info: Info):
+        self.params_history.append(
             params_like_from_flat(
                 info.model.params_, info.model.params_.as_flat_tensor.detach().clone()
             )
         )
 
-    def end(self, info: Info, metrics: Metrics) -> None:
-        pass
+    def end(self, info: Info, metrics: Metrics):
+        metrics.params_history = self.params_history
 
 
 class MCMCDiagnostics(Job):
     """Job to log the evolution of the MCMC sampler."""
 
-    def init(self, info: Info, metrics: Metrics) -> None:  # noqa: ARG002
-        metrics.mcmc_diagnostics = []
+    mcmc_diagnostics: list[dict[str, Any]]
 
-    def run(self, info: Info, metrics: Metrics) -> None:
-        metrics.mcmc_diagnostics.append(info.sampler.diagnostics)
+    def __init__(self):
+        self.mcmc_diagnostics = []
 
-    def end(self, info: Info, metrics: Metrics) -> None:
+    def init(self, info: Info):
         pass
+
+    def run(self, info: Info):
+        self.mcmc_diagnostics.append(info.sampler.diagnostics)
+
+    def end(self, info: Info, metrics: Metrics):
+        metrics.mcmc_diagnostics = self.mcmc_diagnostics

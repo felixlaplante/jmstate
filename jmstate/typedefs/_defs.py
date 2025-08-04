@@ -100,7 +100,7 @@ class Info(SimpleNamespace):
     data: ModelData
     logpdfs_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
     iteration: int
-    n_iterations: int
+    max_iterations: int
     model: MultiStateJointModel
     sampler: MetropolisHastingsSampler
     optimizer: torch.optim.Optimizer
@@ -126,11 +126,11 @@ class Metrics(SimpleNamespace):
 # Abstract
 class Job(ABC):
     @abstractmethod
-    def init(self, info: Info, metrics: Metrics) -> None:
+    def init(self, info: Info) -> None:
         pass
 
     @abstractmethod
-    def run(self, info: Info, metrics: Metrics) -> None:
+    def run(self, info: Info) -> bool | None:
         pass
 
     @abstractmethod
@@ -140,6 +140,3 @@ class Job(ABC):
 
 # Constants
 LOGTWOPI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float32))
-HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
-DEFAULT_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
-DEFAULT_OPT_KWARGS: Final[dict[str, Any]] = {"lr": 0.1, "fused": True}

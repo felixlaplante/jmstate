@@ -108,7 +108,7 @@ class ModelParams:
         Returns:
             torch.Tensor: The flattened parameters.
         """
-        return torch.cat([p.view(-1) for p in self.as_list])
+        return torch.cat([p.detach().view(-1) for p in self.as_list])
 
     @property
     def numel(self) -> int:

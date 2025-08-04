@@ -1,17 +1,21 @@
-import inspect
 import warnings
-from typing import Any, SupportsFloat
+from typing import Any, Final
 
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import DEFAULT_OPT_FACTORY, DEFAULT_OPT_KWARGS, Info, Job, Metrics
+from ..typedefs._defs import Info, Job, Metrics
+
+# Constants
+DEFAULT_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
+DEFAULT_OPT_KWARGS: Final[dict[str, Any]] = {"lr": 0.1, "fused": True}
 
 
 class Fit(Job):
     """Job to fit the model."""
 
     optimizer_factory: type[torch.optim.Optimizer]
+    optimizer: torch.optim.Optimizer
     retain_graph: bool
     kwargs: Any
 
@@ -19,23 +23,22 @@ class Fit(Job):
     def __init__(
         self,
         optimizer_factory: type[torch.optim.Optimizer] = DEFAULT_OPT_FACTORY,
+        *,
         retain_graph: bool = False,
         **kwargs: Any,
     ):
         self.optimizer_factory = optimizer_factory
         self.retain_graph = retain_graph
 
-        accepted_kwargs = inspect.signature(self.optimizer_factory).parameters
-        self.kwargs = {
-            **{
-                key: val
-                for key, val in DEFAULT_OPT_KWARGS.items()
-                if key in accepted_kwargs
-            },
-            **kwargs,
-        }
+        if self.optimizer_factory == DEFAULT_OPT_FACTORY:
+            self.kwargs = {
+                **DEFAULT_OPT_KWARGS,
+                **kwargs,
+            }
+        else:
+            self.kwargs = kwargs
 
-    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def init(self, info: Info):
         info.model.data = info.data
         info.model.params_.requires_grad_(True)
 
@@ -47,12 +50,13 @@ class Fit(Job):
             for key, val in info.model.params_.as_groups.items()
         ]
 
-        info.optimizer = self.optimizer_factory(
+        self.optimizer = self.optimizer_factory(
             param_groups,
             **self.kwargs,
         )
+        info.optimizer = self.optimizer
 
-    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def run(self, info: Info):
         logpdfs = info.logpdfs_fn(info.model.params_, info.b)
 
         loss = (
@@ -61,9 +65,9 @@ class Fit(Job):
             else -logpdfs.mean()
         )
 
-        info.optimizer.zero_grad(set_to_none=True)  # type: ignore
+        self.optimizer.zero_grad(set_to_none=True)  # type: ignore
         loss.backward(retain_graph=self.retain_graph)  # type: ignore
-        info.optimizer.step()  # type: ignore
+        self.optimizer.step()  # type: ignore
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         params_flat_tensor = info.model.params_.as_flat_tensor
@@ -93,63 +97,14 @@ class Scheduling(Job):
         self.scheduler_factory = scheduler_factory
         self.kwargs = kwargs
 
-    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def init(self, info: Info):
         if not hasattr(info, "optimizer"):
             raise ValueError("Optimizer must be initialized before scheduler")
 
         self.scheduler = self.scheduler_factory(info.optimizer, **self.kwargs)
 
-    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def run(self, info: Info):  # noqa: ARG002
         self.scheduler.step()
-
-    def end(self, info: Info, metrics: Metrics):
-        pass
-
-
-class AdamL1Proximal(Job):
-    """Job to do proximal gradient decent and variable selection."""
-
-    group: str
-    lmda: SupportsFloat
-    param_groups: list[dict[str, Any]]
-
-    @beartype
-    def __init__(self, lmda: SupportsFloat, group: str = "betas"):
-        self.group = group
-        self.lmda = lmda
-        if group not in ("alphas", "betas"):
-            raise ValueError(
-                f"Group must be either 'alphas' or 'betas', got {self.group}"
-            )
-
-    def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
-        if not hasattr(info, "optimizer"):
-            raise ValueError("Optimizer must be initialized before AdamL1Proximal")
-        if not isinstance(info.optimizer, (torch.optim.Adam, torch.optim.NAdam)):
-            raise ValueError(
-                "Optimizer must be set to Adam or Adam-like for AdamL1Proximal"
-            )
-        if getattr(info.model.params_, self.group) is None:
-            raise ValueError(f"{self.group} is None")
-
-        self.param_groups = [
-            g for g in info.optimizer.param_groups if g.get("group") == self.group
-        ]
-        if self.param_groups == []:
-            raise ValueError(f"Optimizer does not optimize group {self.group}")
-
-    def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
-        for g in self.param_groups:
-            for p in g["params"]:
-                if p.grad is None:
-                    continue
-
-                state = info.optimizer.state[p]
-                if len(state) == 0:
-                    continue
-
-                eff_lr = g["lr"] / torch.sqrt(state["exp_avg_sq"] + g["eps"])
-                p.data = p.sign() * torch.clamp(p.abs() - self.lmda * eff_lr, min=0.0)
 
     def end(self, info: Info, metrics: Metrics):
         pass

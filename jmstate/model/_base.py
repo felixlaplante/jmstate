@@ -164,12 +164,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         new_data: ModelData | None = None,
         *,
         jobs: Job | list[Job],
-        n_iterations: int,
+        max_iterations: int,
         n_chains: int = 10,
         init_step_size: SupportsFloat = 0.1,
         adapt_rate: SupportsFloat = 0.1,
         accept_target: SupportsFloat = 0.234,
-        init_warmup: int = 200,
+        init_warmup: int = 250,
         cont_warmup: int = 5,
         verbose: bool = True,
     ) -> Metrics | Any | None:
@@ -178,7 +178,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
-            n_iterations (int): Number of iterations.
+            max_iterations (int): Maximum number of iterations.
             n_chains (int, optional): Batch size used. Defaults to 10.
             init_step_size (SupportsFloat, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (SupportsFloat, optional): Adaptation rate for the step_size. Defaults to 0.01.
@@ -188,7 +188,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
-            ValueError: If n_iterations is not greater than 0.
+            ValueError: If max_iterations is not greater than 0.
             ValueError: If n_chains is not greater than 0.
             TypeError: If some callback is not callable.
 
@@ -196,8 +196,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             dict[str, Any] | Any | None: The metrics dict, its single element, pr None.
         """
         # Verify n_chains
-        if n_iterations < 1:
-            raise ValueError(f"n_iterations must be greater than 0, got {n_iterations}")
+        if max_iterations < 1:
+            raise ValueError(
+                f"max_iterations must be greater than 0, got {max_iterations}"
+            )
         if n_chains < 1:
             raise ValueError(f"n_chains must be greater than 0, got {n_chains}")
         # Load and complete data
@@ -227,23 +229,26 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             data=data,
             logpdfs_fn=_logpdfs_fn,
             iteration=-1,
-            n_iterations=n_iterations,
             model=self,
             sampler=sampler,
         )
         do_jobs("init", jobs, info, metrics)
 
-        def _do(iteration: int):
+        def _do():
             nonlocal info
 
             info.b, (info.logliks, info.psi) = sampler.step()
-            info.iteration = iteration
+            info.iteration += 1
 
-            do_jobs("run", jobs, info, metrics)
+            return do_jobs("run", jobs, info, metrics)
 
         # Main loop
         sampler.loop(
-            n_iterations, cont_warmup, _do, desc="Running joint model", verbose=verbose
+            max_iterations,
+            cont_warmup,
+            _do,
+            desc="Running joint model",
+            verbose=verbose,
         )
 
         info.iteration += 1
@@ -309,6 +314,4 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Returns:
             ModelParams: The standard error in the same format as the parameters.
         """
-        return params_like_from_flat(
-            self.params_, torch.sqrt(self.fim.inverse().diagonal())
-        )
+        return params_like_from_flat(self.params_, self.fim.inverse().diagonal().sqrt())
