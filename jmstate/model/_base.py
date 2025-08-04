@@ -164,12 +164,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         new_data: ModelData | None = None,
         *,
         jobs: Job | list[Job],
-        n_iterations: int = 200,
+        n_iterations: int,
         n_chains: int = 10,
         init_step_size: SupportsFloat = 0.1,
         adapt_rate: SupportsFloat = 0.1,
         accept_target: SupportsFloat = 0.234,
-        init_warmup: int = 500,
+        init_warmup: int = 200,
         cont_warmup: int = 5,
         verbose: bool = True,
     ) -> Metrics | Any | None:
@@ -178,12 +178,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
-            n_iterations (int, optional): Number of iterations for optimization. Defaults to 200.
+            n_iterations (int): Number of iterations.
             n_chains (int, optional): Batch size used. Defaults to 10.
             init_step_size (SupportsFloat, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (SupportsFloat, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (SupportsFloat, optional): Mean acceptation target. Defaults to 0.234.
-            init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 500.
+            init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 250.
             cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
