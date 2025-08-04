@@ -113,7 +113,7 @@ class ModelData:
 @dataclass
 class CompleteModelData(ModelData):
     valid_mask: Tensor3D = field(init=False)
-    n_valid: Tensor2D = field(init=False)
+    n_valid: Tensor1D = field(init=False)
     valid_t: Tensor1D | Tensor2D = field(init=False)
     valid_y: Tensor2D | Tensor3D = field(init=False)
     buckets: dict[tuple[int, int], VecRep] = field(init=False)

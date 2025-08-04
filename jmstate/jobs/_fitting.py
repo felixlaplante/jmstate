@@ -5,7 +5,7 @@ from typing import Any, SupportsFloat
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import DEFAULT_OPT_KWARGS, Info, Job, Metrics
+from ..typedefs._defs import DEFAULT_OPT_FACTORY, DEFAULT_OPT_KWARGS, Info, Job, Metrics
 
 
 class Fit(Job):
@@ -18,7 +18,7 @@ class Fit(Job):
     @beartype
     def __init__(
         self,
-        optimizer_factory: type[torch.optim.Optimizer] = torch.optim.Adam,
+        optimizer_factory: type[torch.optim.Optimizer] = DEFAULT_OPT_FACTORY,
         retain_graph: bool = False,
         **kwargs: Any,
     ):
@@ -125,8 +125,10 @@ class AdamL1Proximal(Job):
     def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not hasattr(info, "optimizer"):
             raise ValueError("Optimizer must be initialized before AdamL1Proximal")
-        if not isinstance(info.optimizer, torch.optim.Adam):
-            raise ValueError("Optimizer must be set as Adam for AdamL1Proximal")
+        if not isinstance(info.optimizer, (torch.optim.Adam, torch.optim.NAdam)):
+            raise ValueError(
+                "Optimizer must be set to Adam or Adam like for AdamL1Proximal"
+            )
         if getattr(info.model.params_, self.group) is None:
             raise ValueError(f"{self.group} is None")
 
