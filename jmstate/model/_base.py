@@ -310,5 +310,5 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             ModelParams: The standard error in the same format as the parameters.
         """
         return params_like_from_flat(
-            self.params_, torch.sqrt(self.fim.inverse().diag())
+            self.params_, torch.sqrt(self.fim.inverse().diagonal())
         )

@@ -159,14 +159,14 @@ def flat_from_cov(V: Tensor2D, method: str = "full") -> Tensor1D:
 def get_cholesky_and_log_eigvals(
     params: ModelParams, matrix: str
 ) -> tuple[Tensor2D, Tensor1D]:
-    """Get Cholesky factor as well as log eigvals.
+    """Gets Cholesky factor as well as log eigvals.
 
     Args:
         params (ModelParams): The model parameters.
         matrix (str): Either "Q" or "R".
 
     Returns:
-        tuple[Tensor2D, Tensor1D]: Precision matrix and mean log eigvals.
+        tuple[Tensor2D, Tensor1D]: Precision matrix and log eigvals.
     """
     # Get flat then log cholesky
     flat, method = getattr(params, matrix + "_repr")
