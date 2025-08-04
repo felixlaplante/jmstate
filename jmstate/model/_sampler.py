@@ -9,20 +9,21 @@ from ..typedefs._defs import Tensor0D, Tensor1D, Tensor2D, Tensor3D
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
-    pdf_fn: Callable[[Tensor3D], Tensor2D]
+    logpdf_aux: Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]]
     init_state: Tensor3D
     n_chains: int
     adapt_rate: float
     target_accept_rate: float
     current_state: Tensor3D
-    current_pdf: Tensor2D
+    current_logpdf: Tensor2D
+    current_aux: tuple[torch.Tensor, ...]
     step_sizes: Tensor1D
     n_samples: Tensor0D
     n_accepted: Tensor1D
 
     def __init__(
         self,
-        pdf_fn: Callable[[Tensor3D], Tensor2D],
+        logpdf_aux_fn: Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]],
         init_state: Tensor3D,
         n_chains: int,
         init_step_size: SupportsFloat,
@@ -32,7 +33,7 @@ class MetropolisHastingsSampler:
         """Initialize the Metropolis-Hastings sampler kernel.
 
         Args:
-            pdf_fn (Callable[[Tensor3D], Tensor2D]): pdf function.
+            logpdf_aux_fn (Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]]): logpdf function.
             init_state (Tensor3D): Starting state for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (SupportsFloat): Kernel step in Metropolis Hastings.
@@ -42,7 +43,7 @@ class MetropolisHastingsSampler:
         Raises:
             RuntimeError: If the initial log prob fails to be computed.
         """
-        self.pdf_fn = pdf_fn
+        self.logpdf_aux_fn = logpdf_aux_fn
         self.n_chains = n_chains
         self.adapt_rate = float(adapt_rate)
         self.target_accept_rate = float(target_accept_rate)
@@ -50,8 +51,8 @@ class MetropolisHastingsSampler:
         # Initialize state
         self.current_state = init_state
 
-        # Compute initial log pdf
-        self.current_pdf = self.pdf_fn(self.current_state)
+        # Compute initial log logpdf
+        self.current_logpdf, self.current_aux = self.logpdf_aux_fn(self.current_state)
 
         # Steps initialization
         self.step_sizes = torch.full(
@@ -87,31 +88,28 @@ class MetropolisHastingsSampler:
             )
 
     @torch.no_grad()  # type: ignore
-    def step(self) -> Tensor2D:
+    def step(self) -> tuple[Tensor2D, tuple[torch.Tensor, ...]]:
         """Performs a single kernel step.
 
         Returns:
-            Tensor2D: current state.
+            tuple[Tensor2D, tuple[torch.Tensor, ...]]: Current state and aux.
         """
         # Generate proposal noise
         noise = torch.randn_like(self.current_state, dtype=torch.float32)
 
         # Get the proposal
         proposed_state = self.current_state + noise * self.step_sizes.view(1, -1, 1)
-        proposed_pdf = self.pdf_fn(proposed_state)
-        pdf_diff = proposed_pdf - self.current_pdf
+        proposed_logpdf, proposed_aux = self.logpdf_aux_fn(proposed_state)
+        logpdf_diff = proposed_logpdf - self.current_logpdf
 
         # Vectorized acceptance decision
-        log_uniform = torch.log(torch.rand_like(pdf_diff))
-        accept_mask = log_uniform < pdf_diff
+        log_uniform = torch.log(torch.rand_like(logpdf_diff))
+        accept_mask = log_uniform < logpdf_diff
 
-        torch.where(
-            accept_mask.unsqueeze(-1),
-            proposed_state,
-            self.current_state,
-            out=self.current_state,
-        )
-        torch.where(accept_mask, proposed_pdf, self.current_pdf, out=self.current_pdf)
+        self.current_state[accept_mask] = proposed_state[accept_mask]
+        self.current_logpdf[accept_mask] = proposed_logpdf[accept_mask]
+        for i, _ in enumerate(self.current_aux):
+            self.current_aux[i][accept_mask] = proposed_aux[i][accept_mask]
 
         # Update statistics
         self.n_samples += 1
@@ -119,7 +117,7 @@ class MetropolisHastingsSampler:
 
         self._adapt_step_sizes(accept_mask)
 
-        return self.current_state
+        return self.current_state, self.current_aux
 
     def _adapt_step_sizes(self, accept_mask: Tensor1D):
         adaptation = (

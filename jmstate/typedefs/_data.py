@@ -103,15 +103,13 @@ class CompleteModelData(ModelData):
     valid_t: Tensor1D | Tensor2D = field(init=False)
     valid_y: Tensor2D | Tensor3D = field(init=False)
     buckets: dict[tuple[int, int], VecRep] = field(init=False)
-    n_chains: int = field(init=False)
 
-    def init(self, model_design: ModelDesign, n_chains: int):
+    def init(self, model_design: ModelDesign):
         self.valid_mask = (~torch.isnan(self.y)).to(torch.float32)
         self.n_valid = self.valid_mask.sum(dim=1)
         self.valid_t = torch.nan_to_num(self.t)
         self.valid_y = torch.nan_to_num(self.y)
         self.buckets = build_vec_rep(self.trajectories, self.c, model_design.surv)
-        self.n_chains = n_chains
 
 
 @beartype

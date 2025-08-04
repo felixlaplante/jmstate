@@ -90,12 +90,13 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         self.fit_ = False
 
     def _logliks_and_aux(
-        self, b: Tensor2D, data: CompleteModelData
-    ) -> tuple[Tensor2D, Tensor2D, Tensor3D]:
+        self, params: ModelParams, b: Tensor3D, data: CompleteModelData
+    ) -> tuple[Tensor2D, tuple[Tensor2D, Tensor3D]]:
         """Computes the total log likelihood up to a constant.
 
         Args:
-            b (Tensor2D): The individual random effects.
+            params (ModelParams): The model parameters.
+            b (Tensor3D): The individual random effects.
             data (CompleteModelData): Dataset on which the likeihood is computed.
 
         Returns:
@@ -103,27 +104,25 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         """
 
         def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
-            Q_inv_cholesky, Q_log_eigvals = get_cholesky_and_log_eigvals(
-                self.params_, "Q"
-            )
+            Q_inv_cholesky, Q_log_eigvals = get_cholesky_and_log_eigvals(params, "Q")
             Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
             Q_log_det = (Q_log_eigvals - LOGTWOPI).sum()
 
             return 0.5 * (Q_log_det - Q_quad_form)
 
         # Transform random effects to individual-specific parameters
-        psi = self.model_design.individual_effects_fn(self.params_.gamma, data.x, b)
+        psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
 
         # Compute individual likelihood components
-        long_logliks = super()._long_logliks(psi, data)
-        hazard_logliks = super()._hazard_logliks(psi, data)
+        long_logliks = super()._long_logliks(params, psi, data)
+        hazard_logliks = super()._hazard_logliks(params, psi, data)
         prior_logliks = _prior_logliks(b)
 
         # Sum all likelihood components
         logliks = long_logliks + hazard_logliks
         logpdfs = logliks + prior_logliks
 
-        return logpdfs, logliks, psi
+        return logpdfs, (logliks, psi)
 
     def _setup_mcmc(
         self,
@@ -147,11 +146,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         """
         # Initialize random effects
         init_b = torch.zeros(
-            (data.n_chains, data.size, self.params_.Q_dim_), dtype=torch.float32
+            (n_chains, data.size, self.params_.Q_dim_), dtype=torch.float32
         )
 
         return MetropolisHastingsSampler(
-            lambda b: self._logliks_and_aux(b, data)[0],
+            lambda b: self._logliks_and_aux(self.params_, b, data),
             init_b,
             n_chains,
             init_step_size,
@@ -210,7 +209,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         complete_data = CompleteModelData(
             data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
-        complete_data.init(self.model_design, n_chains)
+        complete_data.init(self.model_design)
 
         # Set up MCMC
         sampler = self._setup_mcmc(
@@ -221,8 +220,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Initialize metrics
         metrics = Metrics()
 
+        def _logpdfs_fn(params: ModelParams, b: Tensor3D):
+            return self._logliks_and_aux(params, b, complete_data)[0]
+
         info = Info(
             data=data,
+            logpdfs_fn=_logpdfs_fn,
             iteration=-1,
             n_iterations=n_iterations,
             model=self,
@@ -233,10 +236,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         def _do(iteration: int):
             nonlocal info
 
-            info.b = sampler.step()
-            info.logpdfs, info.logliks, info.psi = self._logliks_and_aux(
-                info.b, complete_data
-            )
+            info.b, (info.logliks, info.psi) = sampler.step()
             info.iteration = iteration
 
             do_jobs("run", jobs, info, metrics)

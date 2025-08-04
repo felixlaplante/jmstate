@@ -87,20 +87,21 @@ class HazardMixin:
         t0, t1, x, psi, alpha, beta, base_hazard_fn, link_fn = hazard_info
 
         # Compute baseline hazard
-        key = (
-            id(hazard_info.base_hazard_fn),
-            hash(t0.numpy().tobytes()),  # type: ignore
-            hash(t1.numpy().tobytes()),  # type: ignore
-        )
-
         def _base_create():
             return base_hazard_fn(t0, t1)
 
-        base = (
-            self._cache.get_cache("base", key, _base_create)
-            if enable_cache
-            else _base_create()
-        )
+        if enable_cache:
+            try:
+                key = (
+                    id(hazard_info.base_hazard_fn),
+                    hash(t0.detach().numpy().tobytes()),  # type: ignore
+                    hash(t1.detach().numpy().tobytes()),  # type: ignore
+                )
+                base = self._cache.get_cache("base", key, _base_create)
+            except RuntimeError:
+                base = _base_create()
+        else:
+            base = _base_create()
 
         # Compute time-varying effects
         mod = link_fn(t1, psi) @ alpha
@@ -132,25 +133,27 @@ class HazardMixin:
         c = t0 if c is None else c
 
         # Transform to quadrature interval
-        key = (hash(c.numpy().tobytes()), hash(t1.numpy().tobytes()))  # type: ignore
-
         def _half_create():
             return 0.5 * (t1 - c)
-
-        half = (
-            self._cache.get_cache("half", key, _half_create)
-            if enable_cache
-            else _half_create()
-        )
 
         def _quad_c_create():
             return 0.5 * (c + t1) + half * self._std_nodes
 
-        quad_c = (
-            self._cache.get_cache("quad_c", key, _quad_c_create)
-            if enable_cache
-            else _quad_c_create()
-        )
+        if enable_cache:
+            try:
+                key = (
+                    hash(c.detach().numpy().tobytes()),  # type: ignore
+                    hash(t1.detach().numpy().tobytes()),  # type: ignore
+                )
+
+                half = self._cache.get_cache("half", key, _half_create)
+                quad_c = self._cache.get_cache("quad_c", key, _quad_c_create)
+            except RuntimeError:
+                half = _half_create()
+                quad_c = _quad_c_create()
+        else:
+            half = _half_create()
+            quad_c = _quad_c_create()
 
         # Compute hazard at quadrature points
         vals = self._log_hazard(hazard_info._replace(t1=quad_c), enable_cache)
@@ -179,25 +182,27 @@ class HazardMixin:
         t0, t1, *_ = hazard_info
 
         # Transform to quadrature interval
-        key = (hash(t0.numpy().tobytes()), hash(t1.numpy().tobytes()))  # type: ignore
-
         def _half_create():
             return 0.5 * (t1 - t0)
-
-        half = (
-            self._cache.get_cache("half", key, _half_create)
-            if enable_cache
-            else _half_create()
-        )
 
         def _quad_lc_create():
             return torch.cat([t1, 0.5 * (t0 + t1) + half * self._std_nodes], dim=-1)
 
-        quad_lc = (
-            self._cache.get_cache("quad_lc", key, _quad_lc_create)
-            if enable_cache
-            else _quad_lc_create()
-        )
+        if enable_cache:
+            try:
+                key = (
+                    hash(t0.detach().numpy().tobytes()),  # type: ignore
+                    hash(t1.detach().numpy().tobytes()),  # type: ignore
+                )
+
+                half = self._cache.get_cache("half", key, _half_create)
+                quad_lc = self._cache.get_cache("quad_c", key, _quad_lc_create)
+            except RuntimeError:
+                half = _half_create()
+                quad_lc = _quad_lc_create()
+        else:
+            half = _half_create()
+            quad_lc = _quad_lc_create()
 
         # Compute log hazard at all points
         all_vals = self._log_hazard(hazard_info._replace(t1=quad_lc), enable_cache)
@@ -392,7 +397,7 @@ class HazardMixin:
 
         # Compute the log probabilities summing over transitions
         for key, bucket in buckets.items():
-            for k in range(u.shape[1]):
+            for k in range(u.size(1)):
                 idx, t0, _, _ = bucket
 
                 # Create info
@@ -417,10 +422,13 @@ class HazardMixin:
 
         return -nlogps.clamp(min=0.0)
 
-    def _hazard_logliks(self, psi: Tensor3D, data: CompleteModelData) -> Tensor1D:
+    def _hazard_logliks(
+        self, params: ModelParams, psi: Tensor3D, data: CompleteModelData
+    ) -> Tensor1D:
         """Computes the hazard log likelihood.
 
         Args:
+            params (ModelParams): The model parameters.
             psi (Tensor3D): A matrix of individual parameters.
             data (CompleteModelData): Dataset on which likelihood is computed.
             enable_cache (bool): Enable caching
@@ -428,7 +436,7 @@ class HazardMixin:
         Returns:
             Tensor1D: The computed log likelihood.
         """
-        logliks = torch.zeros((data.n_chains, data.size), dtype=torch.float32)
+        logliks = torch.zeros((psi.shape[:-1]), dtype=torch.float32)
 
         for key, bucket in data.buckets.items():
             idx, t0, t1, obs = bucket
@@ -439,8 +447,8 @@ class HazardMixin:
                 t1,
                 None if data.x is None else data.x.index_select(0, idx),
                 psi.index_select(-2, idx),
-                self.params_.alphas[key],
-                None if self.params_.betas is None else self.params_.betas[key],
+                params.alphas[key],
+                None if params.betas is None else params.betas[key],
                 *self.model_design.surv[key],
             )
 

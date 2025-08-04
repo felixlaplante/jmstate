@@ -53,10 +53,12 @@ class Fit(Job):
         )
 
     def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
+        logpdfs = info.logpdfs_fn(info.model.params_, info.b)
+
         loss = (
-            -info.logpdfs.mean() + info.model.pen(info.model.params_)
+            -logpdfs.mean() + info.model.pen(info.model.params_)
             if info.model.pen is not None
-            else -info.logpdfs.mean()
+            else -logpdfs.mean()
         )
 
         info.optimizer.zero_grad(set_to_none=True)  # type: ignore

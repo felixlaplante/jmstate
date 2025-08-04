@@ -9,7 +9,6 @@ from ..utils._linalg import get_cholesky_and_log_eigvals
 class LongitudinalMixin:
     """Mixin class for longitudinal model computations."""
 
-    params_: ModelParams
     model_design: ModelDesign
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -21,10 +20,13 @@ class LongitudinalMixin:
         """
         super().__init__(*args, **kwargs)
 
-    def _long_logliks(self, psi: Tensor3D, data: CompleteModelData) -> Tensor1D:
+    def _long_logliks(
+        self, params: ModelParams, psi: Tensor3D, data: CompleteModelData
+    ) -> Tensor1D:
         """Computes the longitudinal log likelihood.
 
         Args:
+            params (ModelParams): The model parameters.
             psi (Tensor3D): A 3D tensor of individual parameters.
             data (ModelData): Dataset on which likelihood is computed.
 
@@ -34,7 +36,7 @@ class LongitudinalMixin:
         predicted = self.model_design.regression_fn(data.valid_t, psi)
         diffs = data.valid_y - predicted * data.valid_mask
 
-        R_inv_cholesky, R_log_eigvals = get_cholesky_and_log_eigvals(self.params_, "R")
+        R_inv_cholesky, R_log_eigvals = get_cholesky_and_log_eigvals(params, "R")
         R_quad_forms = (diffs @ R_inv_cholesky).pow(2).sum(dim=(-2, -1))
         R_log_dets = data.n_valid @ (R_log_eigvals - LOGTWOPI)
 

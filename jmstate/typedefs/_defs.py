@@ -6,6 +6,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    Callable,
     Final,
     NamedTuple,
     Protocol,
@@ -97,13 +98,13 @@ class HazardInfo(NamedTuple):
 # SimpleNamespaces
 class Info(SimpleNamespace):
     data: ModelData
+    logpdfs_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
     iteration: int
     n_iterations: int
     model: MultiStateJointModel
     sampler: MetropolisHastingsSampler
     optimizer: torch.optim.Optimizer
     b: Tensor3D
-    logpdfs: Tensor2D
     logliks: Tensor2D
     psi: Tensor3D
 

@@ -1,20 +1,19 @@
 import warnings
+from typing import Callable
 
 import torch
 
-from ..typedefs._defs import Info, Job, Metrics, Tensor1D, Tensor2D
+from ..typedefs._defs import Info, Job, Metrics, Tensor1D, Tensor2D, Tensor3D
+from ..utils._misc import params_like_from_flat
 
 
 class ComputeFIM(Job):
     """Job to compute the Fisher Information Matrix."""
 
-    retain_graph: bool
     grad_m1: Tensor1D
     grad_m2: Tensor2D
     scale: float
-
-    def __init__(self, retain_graph: bool = False):
-        self.retain_graph = retain_graph
+    jac_fn: Callable[[Tensor1D, Tensor3D], Tensor2D]
 
     def init(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not info.model.fit_:
@@ -23,31 +22,26 @@ class ComputeFIM(Job):
                 stacklevel=2,
             )
 
-        info.model.params_.requires_grad_(True)
-
         d = info.model.params_.numel
         self.grad_m1 = torch.zeros(d, dtype=torch.float32)
         self.grad_m2 = torch.zeros((d, d), dtype=torch.float32)
 
         self.scale = 1.0 / (info.n_iterations * info.sampler.n_chains)
 
+        def _jac_fn(params_flat_tensor: Tensor1D, b: Tensor3D):
+            params = params_like_from_flat(info.model.params_, params_flat_tensor)
+            return info.logpdfs_fn(params, b).sum(dim=1)
+
+        self.jac_fn = torch.func.jacrev(_jac_fn)  # type: ignore
+
     def run(self, info: Info, metrics: Metrics):  # noqa: ARG002
-        for i in range(info.sampler.n_chains):
-            retain_graph = i < info.sampler.n_chains - 1 or self.retain_graph
+        jac = self.jac_fn(info.model.params_.as_flat_tensor, info.b)
 
-            grads = torch.autograd.grad(
-                outputs=info.logpdfs[i].sum(),
-                inputs=info.model.params_.as_list,
-                retain_graph=retain_graph,
-            )
+        self.grad_m1.add_(jac.mean(dim=0), alpha=self.scale)
+        self.grad_m2.add_(jac.T @ jac, alpha=self.scale)
 
-            grads = torch.cat([p.view(-1) for p in grads])
-            self.grad_m1.add_(grads, alpha=self.scale)
-            self.grad_m2.add_(torch.outer(grads, grads), alpha=self.scale)
-
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         metrics.fim = self.grad_m2 - torch.outer(self.grad_m1, self.grad_m1)
-        info.model.params_.requires_grad_(False)
 
 
 class ComputeCriteria(Job):
