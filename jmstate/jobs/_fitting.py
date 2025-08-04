@@ -127,7 +127,7 @@ class AdamL1Proximal(Job):
             raise ValueError("Optimizer must be initialized before AdamL1Proximal")
         if not isinstance(info.optimizer, (torch.optim.Adam, torch.optim.NAdam)):
             raise ValueError(
-                "Optimizer must be set to Adam or Adam like for AdamL1Proximal"
+                "Optimizer must be set to Adam or Adam-like for AdamL1Proximal"
             )
         if getattr(info.model.params_, self.group) is None:
             raise ValueError(f"{self.group} is None")
