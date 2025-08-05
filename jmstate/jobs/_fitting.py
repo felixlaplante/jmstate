@@ -35,7 +35,7 @@ class _BaseFit(Job, ABC):
     ):
         self.optimizer_factory = optimizer_factory or self.default_opt_factory
 
-        if self.optimizer_factory == self.default_opt_factory:
+        if optimizer_factory is None:
             self.kwargs = {
                 **self.default_kwargs,
                 **kwargs,
