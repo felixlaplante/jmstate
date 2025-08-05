@@ -1,5 +1,4 @@
 import copy
-from operator import itemgetter
 from typing import Any, Callable, SupportsFloat, cast
 
 import torch
@@ -189,10 +188,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         new_data: ModelData | None = None,
         *,
         jobs: Job | list[Job],
-        max_iterations: int = 100,
-        n_chains: int = 10,
-        warmup: int = 100,
-        n_steps: int = 5,
+        max_iterations: int | None = None,
+        n_chains: int | None = None,
+        warmup: int | None = None,
+        n_steps: int | None = None,
         init_step_size: SupportsFloat = 0.1,
         adapt_rate: SupportsFloat = 0.1,
         accept_target: SupportsFloat = 0.234,
@@ -203,30 +202,22 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
-            max_iterations (int, optional): Maximum number of iterations. Defaults to 100.
-            n_chains (int, optional): Batch size used. Defaults to 10.
-            warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 100.
-            n_steps (int, optional): The steps to do at each iteration. Defaults to 5.
+            max_iterations (int | None, optional): Maximum number of iterations. Defaults to None.
+            n_chains (int | None, optional): Batch size used. Defaults to None.
+            warmup (int | None, optional): The number of iteration steps used in the warmup. Defaults to None.
+            n_steps (int | None, optional): The steps to do at each iteration. Defaults to None.
             init_step_size (SupportsFloat, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (SupportsFloat, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (SupportsFloat, optional): Mean acceptation target. Defaults to 0.234.
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
-            ValueError: If max_iterations is not greater than 0.
-            ValueError: If n_chains is not greater than 0.
-            TypeError: If some callback is not callable.
+            ValueError: If both new_data and self.data are None.
+            TypeError: If some attribute is left unset.
 
         Returns:
-            dict[str, Any] | Any | None: The metrics dict, its single element, pr None.
+            Metrics | Any | None: The metrics, a single element, or None.
         """
-        # Verify n_chains
-        if max_iterations < 1:
-            raise ValueError(
-                f"max_iterations must be greater than 0, got {max_iterations}"
-            )
-        if n_chains < 1:
-            raise ValueError(f"n_chains must be greater than 0, got {n_chains}")
         if new_data is None and self.data is None:
             raise ValueError("data must not be None if self.data is also None; use fit")
 
@@ -240,15 +231,29 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Set up jobs and hyperparameters.
         jobs, hyperparameters = self._setup_jobs(jobs)
         if hyperparameters is not None:
-            max_iterations, n_chains, warmup, n_steps = itemgetter(
-                "max_iterations", "n_chains", "warmup", "n_steps"
-            )(hyperparameters)
+            max_iterations = (
+                hyperparameters["max_iterations"]
+                if max_iterations is None
+                else max_iterations
+            )
+            n_chains = hyperparameters["n_chains"] if n_chains is None else n_chains
+            warmup = hyperparameters["warmup"] if warmup is None else warmup
+            n_steps = hyperparameters["n_steps"] if n_steps is None else n_steps
+
+        # Check everything is there
+        for field in ("max_iterations", "n_chains", "warmup", "n_steps"):
+            if locals()[field] is None:
+                raise TypeError(f"Missing required argument: '{field}'")
 
         # Set up MCMC
         sampler = self._setup_mcmc(
-            complete_data, n_chains, init_step_size, adapt_rate, accept_target
+            complete_data,
+            cast(int, n_chains),
+            init_step_size,
+            adapt_rate,
+            accept_target,
         )
-        sampler.run(warmup)
+        sampler.run(cast(int, warmup))
 
         def _logpdfs_fn(params: ModelParams, b: Tensor3D) -> Tensor2D:
             logpdfs, _ = self._logpdfs_and_aux_fn(params, b, complete_data)
@@ -286,8 +291,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         # Main loop
         sampler.loop(
-            max_iterations,
-            n_steps,
+            cast(int, max_iterations),
+            cast(int, n_steps),
             _do,
             desc="Running joint model",
             verbose=verbose,

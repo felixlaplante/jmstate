@@ -156,10 +156,6 @@ class MetropolisHastingsSampler:
             job (Callable[[], bool | None]): The function to execute.
             desc (str): The description during the loop.
             verbose (bool): Wheter or not to show progress.
-
-        Raises:
-            ValueError: If n_iter is not greater or equal to one.
-            RuntimeError: If an iteration fails.
         """
         for _ in trange(max_iterations, desc=desc, disable=not verbose):
             state, aux = self.run(n_steps)
