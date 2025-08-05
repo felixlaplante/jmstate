@@ -9,6 +9,7 @@ from ..typedefs._defs import Info, Job, Metrics
 # Constants
 DEFAULT_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
 DEFAULT_OPT_KWARGS: Final[dict[str, Any]] = {"lr": 0.1, "fused": True}
+NO_GROUPS_OPT: Final[tuple[type[torch.optim.Optimizer], ...]] = (torch.optim.LBFGS,)
 
 
 class Fit(Job):
@@ -16,19 +17,15 @@ class Fit(Job):
 
     optimizer_factory: type[torch.optim.Optimizer]
     optimizer: torch.optim.Optimizer
-    retain_graph: bool
     kwargs: Any
 
     @beartype
     def __init__(
         self,
         optimizer_factory: type[torch.optim.Optimizer] = DEFAULT_OPT_FACTORY,
-        *,
-        retain_graph: bool = False,
         **kwargs: Any,
     ):
         self.optimizer_factory = optimizer_factory
-        self.retain_graph = retain_graph
 
         if self.optimizer_factory == DEFAULT_OPT_FACTORY:
             self.kwargs = {
@@ -42,32 +39,37 @@ class Fit(Job):
         info.model.data = info.data
         info.model.params_.requires_grad_(True)
 
-        param_groups = [
-            {
-                "params": val,
-                "group": key,
-            }
-            for key, val in info.model.params_.as_groups.items()
-        ]
+        parameters = (
+            [
+                {
+                    "params": val,
+                    "group": key,
+                }
+                for key, val in info.model.params_.as_groups.items()
+            ]
+            if self.optimizer_factory not in NO_GROUPS_OPT
+            else info.model.params_.as_list
+        )
 
         self.optimizer = self.optimizer_factory(
-            param_groups,
+            parameters,
             **self.kwargs,
         )
         info.optimizer = self.optimizer
 
     def run(self, info: Info):
-        logpdfs = info.logpdfs_fn(info.model.params_, info.b)
+        def closure():
+            self.optimizer.zero_grad(set_to_none=True)  # type: ignore
+            logpdfs = info.logpdfs_fn(info.model.params_, info.b)
+            loss = (
+                -logpdfs.mean() + info.model.pen(info.model.params_)
+                if info.model.pen is not None
+                else -logpdfs.mean()
+            )
+            loss.backward()  # type: ignore
+            return loss
 
-        loss = (
-            -logpdfs.mean() + info.model.pen(info.model.params_)
-            if info.model.pen is not None
-            else -logpdfs.mean()
-        )
-
-        self.optimizer.zero_grad(set_to_none=True)  # type: ignore
-        loss.backward(retain_graph=self.retain_graph)  # type: ignore
-        self.optimizer.step()  # type: ignore
+        self.optimizer.step(closure)  # type: ignore
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         params_flat_tensor = info.model.params_.as_flat_tensor

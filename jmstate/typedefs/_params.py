@@ -31,7 +31,7 @@ class ModelParams:
         """Validate and put to float32 all tensors."""
         for val in self.as_groups.values():
             for i, t in enumerate(val):
-                val[i] = t.to(torch.float32)
+                val[i].data = t.to(torch.float32)
 
         if self.skip_validation:
             return

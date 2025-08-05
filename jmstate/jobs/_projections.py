@@ -1,10 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import Any, SupportsFloat
+from typing import Any, Final, SupportsFloat
 
 import torch
 from beartype import beartype
 
 from ..typedefs._defs import Info, Job, Metrics
+
+ADAM_LIKE: Final[tuple[type[torch.optim.Optimizer], ...]] = (
+    torch.optim.Adam,
+    torch.optim.AdamW,
+    torch.optim.NAdam,
+)
 
 
 class BaseL1Proximal(Job, ABC):
@@ -63,8 +69,8 @@ class BaseL1Proximal(Job, ABC):
 class AdamL1Proximal(BaseL1Proximal):
     @staticmethod
     def check_optimizer(optimizer: torch.optim.Optimizer):
-        if not isinstance(optimizer, (torch.optim.Adam, torch.optim.NAdam)):
-            raise ValueError("Optimizer must be Adam or NAdam")
+        if not isinstance(optimizer, ADAM_LIKE):
+            raise ValueError("Optimizer must be Adam or Adam-like")
 
     @staticmethod
     def get_effective_lr(g: dict[str, Any], state: dict[str, Any]):
