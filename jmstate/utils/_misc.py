@@ -98,14 +98,14 @@ def do_jobs(
     Returns:
         bool: Set to true to stop the iterations.
     """
-    stop = False
+    stop = True
     match method:
         case "init":
             for job in jobs:
                 job.init(info)
         case "run":
             for job in jobs:
-                stop = job.run(info) or stop
+                stop = job.run(info) is not False and stop
         case "end":
             for job in jobs:
                 job.end(info, metrics)
