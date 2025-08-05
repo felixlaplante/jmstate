@@ -29,12 +29,12 @@ class ModelParams:
 
     def __post_init__(self):
         """Validate and put to float32 all tensors."""
+        if self.skip_validation:
+            return
+
         for val in self.as_groups.values():
             for i, t in enumerate(val):
                 val[i].data = t.to(torch.float32)
-
-        if self.skip_validation:
-            return
 
         check_matrix_dim(self.Q_repr)
         check_matrix_dim(self.R_repr)
@@ -85,7 +85,7 @@ class ModelParams:
         return sum(p.numel() for p in self.as_list)
 
     def requires_grad_(self, req: bool):
-        """Enable gradient computation on all parameters.
+        """Enable or disable gradient computation on all parameters.
 
         Args:
             req (bool): Wether to require or not.

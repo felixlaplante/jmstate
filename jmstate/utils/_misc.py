@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Info, Job, Metrics, Tensor1D, TensorRow
+from ..typedefs._defs import Info, Job, Tensor1D, TensorRow
 from ..typedefs._params import ModelParams
 
 
@@ -74,47 +74,28 @@ def params_like_from_flat(ref_params: ModelParams, flat: Tensor1D) -> ModelParam
     return ModelParams(
         gamma,
         ref_params.Q_repr._replace(flat=Q_flat),
-        ref_params.Q_repr._replace(flat=R_flat),
+        ref_params.R_repr._replace(flat=R_flat),
         alphas,
         betas,
         skip_validation=True,
     )
 
 
-def do_jobs(
-    method: str,
-    jobs: list[Job],
-    info: Info,
-    metrics: Metrics,
-) -> bool:
+def run_jobs(jobs: list[Job], info: Info) -> bool:
     """Call jobs.
 
     Args:
-        method (str): Either 'init', 'run' or 'end'.
         jobs (list[Job]): The jobs to execute.
         info (Info): The information container.
-        metrics (Metrics): The computed metrics dict output.
 
     Returns:
         bool: Set to true to stop the iterations.
     """
     stop = None
-    match method:
-        case "init":
-            for job in jobs:
-                job.init(info)
-        case "run":
-            for job in jobs:
-                result = job.run(info)
-                stop = (
-                    stop
-                    if result is None
-                    else (result if stop is None else (stop and result))
-                )
-        case "end":
-            for job in jobs:
-                job.end(info, metrics)
-        case _:
-            pass
+    for job in jobs:
+        result = job.run(info)
+        stop = (
+            stop if result is None else (result if stop is None else (stop and result))
+        )
 
     return False if stop is None else stop

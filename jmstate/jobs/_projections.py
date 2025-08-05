@@ -13,7 +13,7 @@ ADAM_LIKE: Final[tuple[type[torch.optim.Optimizer], ...]] = (
 )
 
 
-class BaseL1Proximal(Job, ABC):
+class _BaseL1Proximal(Job, ABC):
     group: str
     lmda: float
     param_groups: list[dict[str, Any]]
@@ -66,7 +66,7 @@ class BaseL1Proximal(Job, ABC):
     def get_effective_lr(g: dict[str, Any], state: dict[str, Any]) -> float: ...
 
 
-class AdamL1Proximal(BaseL1Proximal):
+class AdamL1Proximal(_BaseL1Proximal):
     @staticmethod
     def check_optimizer(optimizer: torch.optim.Optimizer):
         if not isinstance(optimizer, ADAM_LIKE):

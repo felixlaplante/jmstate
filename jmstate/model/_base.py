@@ -1,4 +1,5 @@
 import copy
+from operator import itemgetter
 from typing import Any, Callable, SupportsFloat, cast
 
 import torch
@@ -14,9 +15,10 @@ from ..typedefs._defs import (
     Tensor2D,
     Tensor3D,
 )
+from ..typedefs._jobs_defaults import DEFAULT_HYPERPARAMETERS
 from ..typedefs._params import ModelParams
 from ..utils._linalg import get_cholesky_and_log_eigvals
-from ..utils._misc import do_jobs, params_like_from_flat
+from ..utils._misc import params_like_from_flat, run_jobs
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._sampler import MetropolisHastingsSampler
@@ -85,11 +87,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
 
         # Initialize attributes that will be set later
-        self.data: ModelData | None = None
-        self.metrics_: Metrics | None = None
+        self.data = None
+        self.metrics_ = None
         self.fit_ = False
 
-    def _logliks_and_aux(
+    def _logpdfs_and_aux_fn(
         self, params: ModelParams, b: Tensor3D, data: CompleteModelData
     ) -> tuple[Tensor2D, tuple[Tensor2D, Tensor3D]]:
         """Computes the total log likelihood up to a constant.
@@ -150,7 +152,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
 
         return MetropolisHastingsSampler(
-            lambda b: self._logliks_and_aux(self.params_, b, data),
+            lambda b: self._logpdfs_and_aux_fn(self.params_, b, data),
             init_b,
             n_chains,
             init_step_size,
@@ -158,19 +160,42 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             target_accept_rate,
         )
 
+    def _setup_jobs(
+        self, jobs: Job | list[Job]
+    ) -> tuple[list[Job], dict[str, Any] | None]:
+        """Sets up jobs, and gets default hyperparameters.
+
+        Args:
+            jobs (Job | list[Job]): The job(s).
+
+        Returns:
+            tuple[list[Job], dict[str, Any] | None]: The jobs and default hyperparameters.
+        """
+        # Initialize jobs
+        if isinstance(jobs, Job):
+            jobs = [jobs]
+
+        hyperparameters: dict[str, Any] | None = None
+        for job in jobs:
+            val = DEFAULT_HYPERPARAMETERS.get(type(job))
+            if val is not None:
+                hyperparameters = val
+
+        return jobs, hyperparameters
+
     @beartype
     def do(
         self,
         new_data: ModelData | None = None,
         *,
         jobs: Job | list[Job],
-        max_iterations: int,
+        max_iterations: int = 100,
         n_chains: int = 10,
+        warmup: int = 100,
+        n_steps: int = 5,
         init_step_size: SupportsFloat = 0.1,
         adapt_rate: SupportsFloat = 0.1,
         accept_target: SupportsFloat = 0.234,
-        init_warmup: int = 250,
-        cont_warmup: int = 5,
         verbose: bool = True,
     ) -> Metrics | Any | None:
         """Runs the MultiStateJointModel loop and some jobs.
@@ -178,13 +203,13 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
-            max_iterations (int): Maximum number of iterations.
+            max_iterations (int, optional): Maximum number of iterations. Defaults to 100.
             n_chains (int, optional): Batch size used. Defaults to 10.
+            warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 100.
+            n_steps (int, optional): The steps to do at each iteration. Defaults to 5.
             init_step_size (SupportsFloat, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
             adapt_rate (SupportsFloat, optional): Adaptation rate for the step_size. Defaults to 0.01.
             accept_target (SupportsFloat, optional): Mean acceptation target. Defaults to 0.234.
-            init_warmup (int, optional): The number of iteration steps used in the warmup. Defaults to 250.
-            cont_warmup (int, optional): The warmup step in-between each parameter changes. Defaults to 5.
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
@@ -202,64 +227,84 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             )
         if n_chains < 1:
             raise ValueError(f"n_chains must be greater than 0, got {n_chains}")
-        # Load and complete data
         if new_data is None and self.data is None:
-            raise ValueError("data must not be None if self.data is None")
+            raise ValueError("data must not be None if self.data is also None; use fit")
 
-        # Repeat data to do minibatch in a vectorized fashion
+        # Load and complete data
         data = cast(ModelData, new_data if new_data is not None else self.data)
         complete_data = CompleteModelData(
             data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
         complete_data.init(self.model_design, self.params_)
 
+        # Set up jobs and hyperparameters.
+        jobs, hyperparameters = self._setup_jobs(jobs)
+        if hyperparameters is not None:
+            max_iterations, n_chains, warmup, n_steps = itemgetter(
+                "max_iterations", "n_chains", "warmup", "n_steps"
+            )(hyperparameters)
+
         # Set up MCMC
         sampler = self._setup_mcmc(
             complete_data, n_chains, init_step_size, adapt_rate, accept_target
         )
-        sampler.warmup(init_warmup)
+        sampler.run(warmup)
 
-        # Initialize jobs and metrics
-        if isinstance(jobs, Job):
-            jobs = [jobs]
-        metrics = Metrics()
+        def _logpdfs_fn(params: ModelParams, b: Tensor3D) -> Tensor2D:
+            logpdfs, _ = self._logpdfs_and_aux_fn(params, b, complete_data)
+            return logpdfs
 
-        def _logpdfs_fn(params: ModelParams, b: Tensor3D):
-            return self._logliks_and_aux(params, b, complete_data)[0]
+        def _logliks_fn(params: ModelParams, b: Tensor3D) -> Tensor2D:
+            psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
+            long_logliks = super(type(self), self)._long_logliks(
+                params, psi, complete_data
+            )
+            hazard_logliks = super(type(self), self)._hazard_logliks(
+                params, psi, complete_data
+            )
+            return long_logliks + hazard_logliks
 
         info = Info(
             data=data,
             logpdfs_fn=_logpdfs_fn,
+            logliks_fn=_logliks_fn,
             iteration=-1,
             model=self,
             sampler=sampler,
         )
-        do_jobs("init", jobs, info, metrics)
 
-        def _do():
+        for job in jobs:
+            job.init(info)
+
+        def _do(state: Tensor3D, aux: tuple[torch.Tensor, ...]):
             nonlocal info
 
-            info.b, (info.logliks, info.psi) = sampler.step()
+            info.b, (info.logliks, info.psi) = state, aux
             info.iteration += 1
 
-            return do_jobs("run", jobs, info, metrics)
+            return run_jobs(jobs, info)
 
         # Main loop
         sampler.loop(
             max_iterations,
-            cont_warmup,
+            n_steps,
             _do,
             desc="Running joint model",
             verbose=verbose,
         )
 
+        # End things
+        is_known = new_data in (self.data, None)
+        metrics = self.metrics_ if is_known and self.metrics_ is not None else Metrics()
+
         info.iteration += 1
-        do_jobs("end", jobs, info, metrics)
+        for job in jobs:
+            job.end(info, metrics)
+
+        if is_known:
+            self.metrics_ = metrics
 
         self._cache.clear_cache()
-
-        if new_data is None:
-            self.metrics_ = metrics
 
         match len(vars(metrics)):
             case 0:

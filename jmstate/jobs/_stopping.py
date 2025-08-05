@@ -65,7 +65,6 @@ class GradStop(Job):
         grads_list: list[torch.Tensor] = []
         for p in info.model.params_.as_list:
             if p.grad is None:
-                warnings.warn(f"Tensor {p} does not have gradient", stacklevel=2)
                 grads_list.append(torch.zeros_like(p, dtype=torch.float32))
             else:
                 grads_list.append(p.grad)

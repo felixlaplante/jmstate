@@ -105,6 +105,7 @@ class HazardInfo(NamedTuple):
 class Info(SimpleNamespace):
     data: ModelData
     logpdfs_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
+    logliks_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
     iteration: int
     max_iterations: int
     model: MultiStateJointModel

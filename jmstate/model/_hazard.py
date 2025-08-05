@@ -426,7 +426,7 @@ class HazardMixin:
 
     def _hazard_logliks(
         self, params: ModelParams, psi: Tensor3D, data: CompleteModelData
-    ) -> Tensor1D:
+    ) -> Tensor2D:
         """Computes the hazard log likelihood.
 
         Args:
@@ -436,7 +436,7 @@ class HazardMixin:
             enable_cache (bool): Enable caching
 
         Returns:
-            Tensor1D: The computed log likelihood.
+            Tensor2D: The computed log likelihood.
         """
         logliks = torch.zeros((psi.shape[:-1]), dtype=torch.float32)
 

@@ -24,7 +24,10 @@ class LogParamsHistory(Job):
         )
 
     def end(self, info: Info, metrics: Metrics):
-        metrics.params_history = self.params_history
+        if not hasattr(metrics, "params_history"):
+            metrics.params_history = self.params_history
+        else:
+            metrics.params_history += self.params_history
 
 
 class MCMCDiagnostics(Job):
@@ -42,4 +45,7 @@ class MCMCDiagnostics(Job):
         self.mcmc_diagnostics.append(info.sampler.diagnostics)
 
     def end(self, info: Info, metrics: Metrics):
-        metrics.mcmc_diagnostics = self.mcmc_diagnostics
+        if not hasattr(metrics, "mcmc_diagnostics"):
+            metrics.mcmc_diagnostics = self.mcmc_diagnostics
+        else:
+            metrics.mcmc_diagnostics += self.mcmc_diagnostics

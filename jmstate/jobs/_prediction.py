@@ -112,14 +112,14 @@ class PredictTrajectories(Job):
 class SwitchParams(Job):
     """Job to simulate different parameter values."""
 
-    params_list: list[ModelParams]
+    param_list: list[ModelParams]
     n_iterations_per_param: int
     n_params: int
     init_params: ModelParams
 
     @beartype
-    def __init__(self, params_list: list[ModelParams], n_iterations_per_param: int):
-        self.params_list = params_list
+    def __init__(self, param_list: list[ModelParams], n_iterations_per_param: int):
+        self.param_list = param_list
         self.n_iterations_per_param = n_iterations_per_param
 
         if self.n_iterations_per_param < 1:
@@ -127,14 +127,14 @@ class SwitchParams(Job):
                 f"n_iterations_per_param must be greater than 0, got {n_iterations_per_param}"
             )
 
-        self.n_params = len(params_list)
+        self.n_params = len(param_list)
 
     def init(self, info: Info):
         self.init_params = copy.deepcopy(info.model.params_)
 
     def run(self, info: Info):
         if info.iteration % self.n_iterations_per_param == 0:
-            info.model.params_ = self.params_list[
+            info.model.params_ = self.param_list[
                 (info.iteration // self.n_iterations_per_param) % self.n_params
             ]
 

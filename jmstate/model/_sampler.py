@@ -14,9 +14,9 @@ class MetropolisHastingsSampler:
     n_chains: int
     adapt_rate: float
     target_accept_rate: float
-    current_state: Tensor3D
-    current_logpdf: Tensor2D
-    current_aux: tuple[torch.Tensor, ...]
+    state: Tensor3D
+    logpdf: Tensor2D
+    aux: tuple[torch.Tensor, ...]
     step_sizes: Tensor1D
     n_samples: Tensor0D
     n_accepted: Tensor1D
@@ -49,10 +49,11 @@ class MetropolisHastingsSampler:
         self.target_accept_rate = float(target_accept_rate)
 
         # Initialize state
-        self.current_state = init_state
+        self.init_state = init_state.clone()
+        self.state = init_state
 
         # Compute initial log logpdf
-        self.current_logpdf, self.current_aux = self.logpdf_aux_fn(self.current_state)
+        self.logpdf, self.aux = self.logpdf_aux_fn(self.state)
 
         # Steps initialization
         self.step_sizes = torch.full(
@@ -95,21 +96,21 @@ class MetropolisHastingsSampler:
             tuple[Tensor2D, tuple[torch.Tensor, ...]]: Current state and aux.
         """
         # Generate proposal noise
-        noise = torch.randn_like(self.current_state, dtype=torch.float32)
+        noise = torch.randn_like(self.state, dtype=torch.float32)
 
         # Get the proposal
-        proposed_state = self.current_state + noise * self.step_sizes.view(1, -1, 1)
+        proposed_state = self.state + noise * self.step_sizes.view(1, -1, 1)
         proposed_logpdf, proposed_aux = self.logpdf_aux_fn(proposed_state)
-        logpdf_diff = proposed_logpdf - self.current_logpdf
+        logpdf_diff = proposed_logpdf - self.logpdf
 
         # Vectorized acceptance decision
         log_uniform = torch.log(torch.rand_like(logpdf_diff))
         accept_mask = log_uniform < logpdf_diff
 
-        self.current_state[accept_mask] = proposed_state[accept_mask]
-        self.current_logpdf[accept_mask] = proposed_logpdf[accept_mask]
-        for i, _ in enumerate(self.current_aux):
-            self.current_aux[i][accept_mask] = proposed_aux[i][accept_mask]
+        self.state[accept_mask] = proposed_state[accept_mask]
+        self.logpdf[accept_mask] = proposed_logpdf[accept_mask]
+        for i, _ in enumerate(self.aux):
+            self.aux[i][accept_mask] = proposed_aux[i][accept_mask]
 
         # Update statistics
         self.n_samples += 1
@@ -117,7 +118,7 @@ class MetropolisHastingsSampler:
 
         self._adapt_step_sizes(accept_mask)
 
-        return self.current_state, self.current_aux
+        return self.state, self.aux
 
     def _adapt_step_sizes(self, accept_mask: Tensor1D):
         adaptation = (
@@ -125,34 +126,33 @@ class MetropolisHastingsSampler:
         ) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 
-    def warmup(self, warmup: int):
-        """Warmups the MCMC.
+    def run(self, n_steps: int) -> tuple[Tensor3D, tuple[torch.Tensor, ...]]:
+        """Runs the MCMC for n_iterations.
 
         Args:
-            warmup (int): The number of warmup steps.
-
-        Raises:
-            ValueError: If the warmup steps is not positive.
+            n_steps (int): The number of steps.
         """
-        if warmup < 0:
-            raise ValueError("Warmup must be a non-negative integer")
+        state = self.init_state
+        aux = tuple(torch.zeros_like(tensor, device="meta") for tensor in self.aux)
 
-        for _ in range(warmup):
-            self.step()
+        for _ in range(n_steps):
+            state, aux = self.step()
+
+        return state, aux
 
     def loop(
         self,
-        n_iterations: int,
-        cont_warmup: int,
-        job: Callable[[], bool | None],
+        max_iterations: int,
+        n_steps: int,
+        job: Callable[[Tensor3D, tuple[torch.Tensor, ...]], bool],
         desc: str,
         verbose: bool,
     ) -> None:
         """Loops while subsampling.
 
         Args:
-            n_iterations (int): The number of iterations to do.
-            cont_warmup (int): The sublamping MCMC number.
+            max_iterations (int): The number of iterations to do.
+            n_steps (int): The sublamping MCMC number.
             job (Callable[[], bool | None]): The function to execute.
             desc (str): The description during the loop.
             verbose (bool): Wheter or not to show progress.
@@ -161,9 +161,9 @@ class MetropolisHastingsSampler:
             ValueError: If n_iter is not greater or equal to one.
             RuntimeError: If an iteration fails.
         """
-        for _ in trange(n_iterations, desc=desc, disable=not verbose):
-            self.warmup(cont_warmup)
-            if job():
+        for _ in trange(max_iterations, desc=desc, disable=not verbose):
+            state, aux = self.run(n_steps)
+            if job(state, aux):
                 break
 
     @property

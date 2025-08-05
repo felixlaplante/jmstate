@@ -17,7 +17,7 @@ class ComputeFIM(Job):
     def init(self, info: Info):
         if not info.model.fit_:
             warnings.warn(
-                "Model should be fit before computing Fisher Information Matrix",
+                "Model should be (random) fitted before computing Fisher Information Matrix",
                 stacklevel=2,
             )
 
@@ -85,9 +85,7 @@ class ComputeEBEs(Job):
     ebes: Tensor2D
 
     def init(self, info: Info):
-        self.ebes = torch.zeros(
-            info.sampler.current_state.shape[1:], dtype=torch.float32
-        )
+        self.ebes = torch.zeros(info.sampler.state.shape[1:], dtype=torch.float32)
 
     def run(self, info: Info):
         self.ebes += info.b.detach().mean(dim=0)
