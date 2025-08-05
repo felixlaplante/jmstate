@@ -129,8 +129,7 @@ class CompleteModelData(ModelData):
 
         if params.R_repr.dim != self.y.size(-1):
             raise ValueError(
-                f"Shape mismatch : R dimension ({params.R_repr.dim}) and y must be\
-                    compatible ({self.y.size(-1)})"
+                f"Shape mismatch : R dimension ({params.R_repr.dim}) and y must be compatible ({self.y.size(-1)})"
             )
         if (
             params.R_repr.method == "full"
