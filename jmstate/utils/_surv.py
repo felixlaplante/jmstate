@@ -9,7 +9,7 @@ from ..typedefs._defs import (
     BucketData,
     LinkFn,
     Trajectory,
-    VecRep,
+    VecRepr,
 )
 
 
@@ -52,7 +52,7 @@ def build_vec_rep(
     trajectories: list[Trajectory],
     c: torch.Tensor,
     surv: dict[tuple[int, int], tuple[BaseHazardFn, LinkFn]],
-) -> dict[tuple[int, int], VecRep]:
+) -> dict[tuple[int, int], VecRepr]:
     """Build vectorizable bucket representation.
 
     Args:
@@ -64,7 +64,7 @@ def build_vec_rep(
         ValueError: If some keys are not in surv.
 
     Returns:
-        dict[tuple[int, int], VecRep]: The vectorizable buckets representation.
+        dict[tuple[int, int], VecRepr]: The vectorizable buckets representation.
     """
     # Get survival transitions defined in the model
     trans = set(surv.keys())
@@ -101,7 +101,7 @@ def build_vec_rep(
                 buckets[key][3].append(alt_state == s1)
 
     return {
-        key: VecRep(
+        key: VecRepr(
             torch.tensor(vals[0], dtype=torch.int64),
             torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
             torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),

@@ -103,10 +103,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             tuple[Tensor2D, Tensor2D, Tensor3D]: The computed quantities.
         """
 
-        def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
-            Q_inv_cholesky, Q_log_eigvals = get_cholesky_and_log_eigvals(params, "Q")
+        def _prior_logliks(b: Tensor3D) -> Tensor2D:
+            Q_inv_cholesky, Q_nlog_eigvals = get_cholesky_and_log_eigvals(params, "Q")
             Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
-            Q_norm_factor = (Q_log_eigvals - LOGTWOPI).sum()
+            Q_norm_factor = (Q_nlog_eigvals - LOGTWOPI).sum()
 
             return 0.5 * (Q_norm_factor - Q_quad_form)
 
@@ -146,7 +146,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         """
         # Initialize random effects
         init_b = torch.zeros(
-            (n_chains, data.size, self.params_.Q_dim_), dtype=torch.float32
+            (n_chains, data.size, self.params_.Q_repr.dim), dtype=torch.float32
         )
 
         return MetropolisHastingsSampler(
@@ -211,7 +211,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         complete_data = CompleteModelData(
             data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
-        complete_data.init(self.model_design)
+        complete_data.init(self.model_design, self.params_)
 
         # Set up MCMC
         sampler = self._setup_mcmc(
@@ -219,7 +219,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
         sampler.warmup(init_warmup)
 
-        # Initialize metrics
+        # Initialize jobs and metrics
+        if isinstance(jobs, Job):
+            jobs = [jobs]
         metrics = Metrics()
 
         def _logpdfs_fn(params: ModelParams, b: Tensor3D):
@@ -275,7 +277,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             sample_size (int): The desired sample size.
 
         Raises:
-            ValueError: If the model has not been fitted, or Fisher Information Matrix not computed.
+            ValueError: If the model has not been fitted, or FIM not computed.
 
         Returns:
             list[ModelParams]: A list of model parameters.

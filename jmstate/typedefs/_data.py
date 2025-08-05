@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass, field
 
 import torch
@@ -20,8 +21,9 @@ from ._defs import (
     Tensor3D,
     TensorCol,
     Trajectory,
-    VecRep,
+    VecRepr,
 )
+from ._params import ModelParams
 
 
 # Dataclasses
@@ -63,7 +65,6 @@ class ModelData:
 
         Raises:
             ValueError: If the shape of t is not broadcastable with y.
-            ValueError: If the last component of y has mixed NaNs.
             ValueError: If t contains torch.nan where y is not.
         """
         if self.skip_validation:
@@ -75,12 +76,7 @@ class ModelData:
         self.c = self.c.to(torch.float32)
 
         # Check NaNs
-        nan_mask = self.y.isnan()
-        any_nan_mask = nan_mask.any(dim=-1)
-        any_not_nan_mask = (~nan_mask).any(dim=-1)
-        if (any_nan_mask & any_not_nan_mask).any():
-            raise ValueError("Last component of y must be all NaNs or all valid.")
-        if (any_not_nan_mask & self.t.isnan()).any():
+        if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
             raise ValueError("NaN time values on non NaN y values")
 
         check_inf((self.x, self.t, self.y, self.c))
@@ -113,14 +109,40 @@ class ModelData:
 @dataclass
 class CompleteModelData(ModelData):
     valid_mask: Tensor3D = field(init=False)
-    n_valid: Tensor1D = field(init=False)
+    n_valid: Tensor2D = field(init=False)
     valid_t: Tensor1D | Tensor2D = field(init=False)
     valid_y: Tensor2D | Tensor3D = field(init=False)
-    buckets: dict[tuple[int, int], VecRep] = field(init=False)
+    buckets: dict[tuple[int, int], VecRepr] = field(init=False)
 
-    def init(self, model_design: ModelDesign):
-        self.valid_mask = ~torch.isnan(self.y)
-        self.n_valid = self.valid_mask.sum(dim=(-2, -1))
+    def init(self, model_design: ModelDesign, params: ModelParams):
+        """Sets the missing representation.
+
+        Raises:
+            ValueError: If y and R are not compatible in shape.
+
+        Args:
+            model_design (ModelDesign): The design of the model.
+            params (ModelParams): The model parameters.
+        """
+        nan_mask = torch.isnan(self.y)
+        valid_mask = ~nan_mask
+
+        if params.R_repr.dim != self.y.size(-1):
+            raise ValueError(
+                f"Shape mismatch : R dimension ({params.R_repr.dim}) and y must be\
+                    compatible ({self.y.size(-1)})"
+            )
+        if (
+            params.R_repr.method == "full"
+            and (valid_mask.any(dim=-1) & nan_mask.any(dim=-1)).any()
+        ):
+            warnings.warn(
+                "R method should not be full when having mixed NaNs as incorrect likelihood will be computed",
+                stacklevel=2,
+            )
+
+        self.valid_mask = valid_mask.to(torch.float32)
+        self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = torch.nan_to_num(self.t)
         self.valid_y = torch.nan_to_num(self.y)
         self.buckets = build_vec_rep(self.trajectories, self.c, model_design.surv)

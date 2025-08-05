@@ -58,26 +58,23 @@ def params_like_from_flat(ref_params: ModelParams, flat: Tensor1D) -> ModelParam
         i += n
         return result.view(ref.shape)
 
-    gamma = _next(ref_params.gamma) if ref_params.gamma is not None else None
+    gamma = None if ref_params.gamma is None else _next(ref_params.gamma)
 
-    Q_flat = _next(ref_params.Q_repr[0])
-    Q_method = ref_params.Q_repr[1]
-
-    R_flat = _next(ref_params.R_repr[0])
-    R_method = ref_params.R_repr[1]
+    Q_flat = _next(ref_params.Q_repr.flat)
+    R_flat = _next(ref_params.R_repr.flat)
 
     alphas = {key: _next(val) for key, val in ref_params.alphas.items()}
 
     betas = (
-        {key: _next(val) for key, val in ref_params.betas.items()}
-        if ref_params.betas is not None
-        else None
+        None
+        if ref_params.betas is None
+        else {key: _next(val) for key, val in ref_params.betas.items()}
     )
 
     return ModelParams(
         gamma,
-        (Q_flat, Q_method),
-        (R_flat, R_method),
+        ref_params.Q_repr._replace(flat=Q_flat),
+        ref_params.Q_repr._replace(flat=R_flat),
         alphas,
         betas,
         skip_validation=True,
@@ -86,7 +83,7 @@ def params_like_from_flat(ref_params: ModelParams, flat: Tensor1D) -> ModelParam
 
 def do_jobs(
     method: str,
-    jobs: Job | list[Job],
+    jobs: list[Job],
     info: Info,
     metrics: Metrics,
 ) -> bool:
@@ -94,16 +91,13 @@ def do_jobs(
 
     Args:
         method (str): Either 'init', 'run' or 'end'.
-        jobs (Job | list[Job]): The jobs to execute.
+        jobs (list[Job]): The jobs to execute.
         info (Info): The information container.
         metrics (Metrics): The computed metrics dict output.
 
     Returns:
         bool: Set to true to stop the iterations.
     """
-    if isinstance(jobs, Job):
-        jobs = [jobs]
-
     stop = False
     match method:
         case "init":

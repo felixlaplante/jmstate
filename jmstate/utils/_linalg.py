@@ -5,24 +5,24 @@ from typing import TYPE_CHECKING, cast
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Tensor1D, Tensor2D
+from ..typedefs._defs import MatRepr, Tensor1D, Tensor2D
 
 if TYPE_CHECKING:
     from ..typedefs._params import ModelParams
 
 
-def _tril_from_flat(flat: Tensor1D, n: int) -> Tensor2D:
+def _tril_from_flat(flat: Tensor1D, dim: int) -> Tensor2D:
     """Generate the lower triangular matrix associated with flat tensor.
 
     Args:
         flat (Tensor1D): Flat tehsnro
-        n (int): Dimension of the matrix.
+        dim (int): Dimension of the matrix.
 
     Returns:
         Tensor2D: The lower triangular matrix.
     """
-    return torch.zeros(n, n, dtype=flat.dtype).index_put_(
-        tuple(torch.tril_indices(n, n)), flat
+    return torch.zeros(dim, dim, dtype=flat.dtype).index_put_(
+        tuple(torch.tril_indices(dim, dim)), flat
     )
 
 
@@ -32,7 +32,7 @@ def _flat_from_tril(L: Tensor2D) -> Tensor1D:
     Into a 1D tensor, in row-wise order.
 
     Args:
-        L (Tensor2D): Square lower-triangular matrix of shape (n, n).
+        L (Tensor2D): Square lower-triangular matrix of shape (dim, dim).
 
     Raises:
         RuntimeError: If the flattening fails.
@@ -40,18 +40,18 @@ def _flat_from_tril(L: Tensor2D) -> Tensor1D:
     Returns:
         Tensor1D: Flattened 1D tensor containing the lower triangular entries.
     """
-    n = L.shape[0]
-    i, j = torch.tril_indices(n, n)
+    dim = L.size(0)
+    i, j = torch.tril_indices(dim, dim)
 
     return L[i, j]
 
 
-def _log_cholesky_from_flat(flat: Tensor1D, n: int, method: str = "full") -> Tensor2D:
+def _log_cholesky_from_flat(flat: Tensor1D, dim: int, method: str = "full") -> Tensor2D:
     """Computes log cholesky from flat tensor according to choice of method.
 
     Args:
         flat (Tensor1D): The flat tensor parameter.
-        n (int): The dimension of the matrix.
+        dim (int): The dimension of the matrix.
         method (str, optional): The method, full, diagonal or ball. Defaults to "full".
 
     Raises:
@@ -62,13 +62,11 @@ def _log_cholesky_from_flat(flat: Tensor1D, n: int, method: str = "full") -> Ten
     """
     match method:
         case "full":
-            return _tril_from_flat(flat, n)
+            return _tril_from_flat(flat, dim)
         case "diag":
             return torch.diag(flat)
         case "ball":
-            if flat.numel() != 1:
-                f"flat has {flat.numel()} elements, expected 1"
-            return flat * torch.eye(n)
+            return flat * torch.eye(dim)
         case _:
             raise ValueError(f"Got method {method} unknown")
 
@@ -90,7 +88,7 @@ def _flat_from_log_cholesky(L: Tensor2D, method: str = "full") -> Tensor1D:
         case "full":
             return _flat_from_tril(L)
         case "diag":
-            return L.diagonal()
+            return L.diag()
         case "ball":
             return L[0, 0].view(1)
         case _:
@@ -98,41 +96,41 @@ def _flat_from_log_cholesky(L: Tensor2D, method: str = "full") -> Tensor1D:
 
 
 @beartype
-def cov_from_flat(flat: Tensor1D, n: int, method: str = "full") -> Tensor2D:
-    """Computes covariance matrix from flat representation according to choice of method.
+def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
+    """Computes covariance matrix from representation.
 
     Args:
-        flat (Tensor1D): The flat tensor parameter.
-        n (int): The dimension of the matrix.
-        method (str, optional): The method, full, diagonal or ball. Defaults to "full".
+        mat_repr (MatRepr): The matrix representation.
 
     Raises:
-        ValueError: If method 'full' and number of elements are inconsistent with n.
-        ValueError: If method 'diag' and number of elements are inconsistent with n.
+        ValueError: If method 'full' and number of elements are inconsistent with dim.
+        ValueError: If method 'diag' and number of elements are inconsistent with dim.
         ValueError: If method 'ball' and number of elements is not one.
 
     Returns:
-        Tensor2D: The flat representation.
+        Tensor2D: The covariance matrix.
     """
-    if method == "full" and flat.numel() != (n * (n + 1)) // 2:
+    flat, dim, method = mat_repr
+
+    if method == "full" and flat.numel() != (dim * (dim + 1)) // 2:
         raise ValueError(
-            f"Inconsistent n:{n} with method 'full', flat with {flat.numel()} elements"
+            f"Inconsistent dim:{dim} with method 'full', flat with {flat.numel()} elements"
         )
-    if method == "diag" and flat.numel() != n:
+    if method == "diag" and flat.numel() != dim:
         raise ValueError(
-            f"Inconsistent n:{n} with method 'diag', flat with {flat.numel()} elements"
+            f"Inconsistent dim:{dim} with method 'diag', flat with {flat.numel()} elements"
         )
     if method == "ball" and flat.numel() != 1:
         raise ValueError("Inconsistent with method 'ball', flat must have one element")
 
-    L = _log_cholesky_from_flat(flat, n, method)
+    L = _log_cholesky_from_flat(flat, dim, method)
     L.diagonal().exp_()
 
     L_inv = cast(
         Tensor2D,
         torch.linalg.solve_triangular(  # type: ignore
             L,
-            torch.eye(n, dtype=L.dtype),
+            torch.eye(dim, dtype=L.dtype),
             upper=False,
         ),
     )
@@ -141,19 +139,19 @@ def cov_from_flat(flat: Tensor1D, n: int, method: str = "full") -> Tensor2D:
 
 
 @beartype
-def flat_from_cov(V: Tensor2D, method: str = "full") -> Tensor1D:
-    """Computes flat tensor from covariance matrix according to choice of method.
+def repr_from_cov(V: Tensor2D, method: str = "full") -> MatRepr:
+    """Computes representation from covariance matrix according to choice of method.
 
     Args:
         V (Tensor2D): The square covariance matrix parameter.
         method (str, optional): The method, full, diagonal or ball. Defaults to "full".
 
     Returns:
-        Tensor1D: The flat representation.
+        MatRepr: The flat representation.
     """
     L = cast(Tensor2D, torch.linalg.cholesky(V.inverse()))  # type: ignore
     L.diagonal().log_()
-    return _flat_from_log_cholesky(L, method)
+    return MatRepr(_flat_from_log_cholesky(L, method), L.size(0), method)
 
 
 def get_cholesky_and_log_eigvals(
@@ -169,10 +167,9 @@ def get_cholesky_and_log_eigvals(
         tuple[Tensor2D, Tensor1D]: Precision matrix and log eigvals.
     """
     # Get flat then log cholesky
-    flat, method = getattr(params, matrix + "_repr")
-    n = getattr(params, matrix + "_dim_")
+    flat, dim, method = getattr(params, matrix + "_repr")
 
-    L = _log_cholesky_from_flat(flat, n, method)
+    L = _log_cholesky_from_flat(flat, dim, method)
     log_eigvals = 2 * L.diagonal()
     L.diagonal().exp_()
 

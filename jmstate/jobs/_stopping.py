@@ -8,9 +8,8 @@ from ..typedefs._defs import Info, Job, Metrics, Tensor1D
 
 # Constants
 DEFAULT_NOT_CONVERGED_WARNING = (
-    "The parameters are not converged. "
-    "Try increasing the maximum number of iterations, "
-    "decreasing the learning rate, or increasing n_chains"
+    "The parameters are not converged, try increasing the maximum number "
+    "of iterations, decreasing the learning rate, or increasing n_chains"
 )
 
 

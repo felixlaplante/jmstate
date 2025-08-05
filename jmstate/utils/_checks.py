@@ -2,7 +2,7 @@ import itertools
 
 import torch
 
-from ..typedefs._defs import Tensor2D, Tensor3D, TensorCol, Trajectory
+from ..typedefs._defs import MatRepr, Tensor2D, Tensor3D, TensorCol, Trajectory
 
 
 def check_inf(tensors: tuple[torch.Tensor | None, ...]):
@@ -68,3 +68,39 @@ def check_trajectory_c(trajectories: list[Trajectory], c: TensorCol | None):
         trajectory[-1][0] > c for trajectory, c in zip(trajectories, c)
     ):
         raise ValueError("Last trajectory time must not be greater than c")
+
+
+def check_matrix_dim(mat_repr: MatRepr):
+    """Sets dimensions for matrix.
+
+    Args:
+        mat_repr (MatRepr): The matrix representation.
+
+    Raises:
+        ValueError: If flat is not flat.
+        ValueError: If the number of elements is incompatible with method "full".
+        ValueError: If the number of elements is icompatible with method "diag".
+        ValueError: If the number of elements is not one and the method is "ball".
+        ValueError: If the method is unknown.
+    """
+    flat, dim, method = mat_repr
+
+    if flat.ndim != 1:
+        raise ValueError(f"flat must be flat tensor, got shpe {flat.shape}")
+
+    match method:
+        case "full":
+            if flat.numel() != (dim * (dim + 1)) // 2:
+                raise ValueError(
+                    f"{flat.numel()} is incompatible with full matrix of dimension {dim}"
+                )
+        case "diag":
+            if flat.numel() != dim:
+                raise ValueError(
+                    f"{flat.numel()} is incompatible with diag matrix of dimension {dim}"
+                )
+        case "ball":
+            if flat.numel() != 1:
+                f"Excepected 1 element for flat, got {flat.numel()}"
+        case _:
+            raise ValueError(f"Got method {method} unknown")

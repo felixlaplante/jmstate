@@ -1,13 +1,12 @@
 import itertools
 from dataclasses import dataclass, field
-from math import isqrt
 
 import torch
 from beartype import beartype
 
-from ..utils._checks import check_inf
-from ..utils._linalg import cov_from_flat
-from ._defs import Tensor1D, Tensor2D
+from ..utils._checks import check_inf, check_matrix_dim
+from ..utils._linalg import cov_from_repr
+from ._defs import MatRepr, Tensor1D, Tensor2D
 
 
 @beartype
@@ -22,12 +21,10 @@ class ModelParams:
     """
 
     gamma: torch.Tensor | None
-    Q_repr: tuple[Tensor1D, str]
-    R_repr: tuple[Tensor1D, str]
+    Q_repr: MatRepr
+    R_repr: MatRepr
     alphas: dict[tuple[int, int], Tensor1D]
     betas: dict[tuple[int, int], Tensor1D] | None
-    Q_dim_: int = field(init=False, repr=False)
-    R_dim_: int = field(init=False, repr=False)
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
@@ -36,45 +33,13 @@ class ModelParams:
             for i, t in enumerate(val):
                 val[i] = t.to(torch.float32)
 
-        self._set_dims("Q")
-        self._set_dims("R")
-
         if self.skip_validation:
             return
 
+        check_matrix_dim(self.Q_repr)
+        check_matrix_dim(self.R_repr)
         for val in self.as_groups.values():
             check_inf(tuple(val))
-
-    def _set_dims(self, matrix: str):
-        """Sets dimensions for matrix.
-
-        Args:
-            matrix (str): Either "Q" or "R".
-
-        Raises:
-            ValueError: If the number of elements is not triangular with method "full".
-            ValueError: If the number of elements is not one and the method is "ball".
-            ValueError: If the method is unknown.
-        """
-        flat, method = getattr(self, matrix + "_repr")
-
-        match method:
-            case "full":
-                n = (isqrt(1 + 8 * flat.numel()) - 1) // 2
-                if (n * (n + 1)) // 2 != flat.numel():
-                    raise ValueError(
-                        f"{flat.numel()} is not a triangular number for matrix {matrix}"
-                    )
-                setattr(self, matrix + "_dim_", n)
-            case "diag":
-                n = flat.numel()
-                setattr(self, matrix + "_dim_", n)
-            case "ball":
-                if flat.numel() != 1:
-                    f"Excepected 1 element for flat, got {flat.numel()}"
-                setattr(self, matrix + "_dim_", 1)
-            case _:
-                raise ValueError(f"Got method {method} unknown for matrix {matrix}")
 
     @property
     def as_groups(self) -> dict[str, list[torch.Tensor]]:
@@ -85,8 +50,8 @@ class ModelParams:
         """
         groups = {
             "gamma": None if self.gamma is None else [self.gamma],
-            "Q": [self.Q_repr[0]],
-            "R": [self.R_repr[0]],
+            "Q": [self.Q_repr.flat],
+            "R": [self.R_repr.flat],
             "alphas": list(self.alphas.values()),
             "betas": None if self.betas is None else list(self.betas.values()),
         }
@@ -138,13 +103,10 @@ class ModelParams:
             ValueError: If the matrix is not in ("Q", "R")
 
         Returns:
-            torch.Tensor: The covariance matrix.
+            Tensor2D: The covariance matrix.
         """
         if matrix not in ("Q", "R"):
             raise ValueError(f"matrix must be either Q or R, got {matrix}")
 
         # Get flat then covariance
-        flat, method = getattr(self, matrix + "_repr")
-        n = getattr(self, matrix + "_dim_")
-
-        return cov_from_flat(flat, n, method)
+        return cov_from_repr(getattr(self, matrix + "_repr"))

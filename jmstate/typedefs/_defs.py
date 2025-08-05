@@ -71,13 +71,19 @@ class ClockMethod(Protocol):
 
 
 # Named tuples
+class MatRepr(NamedTuple):
+    flat: Tensor1D
+    dim: int
+    method: str
+
+
 class BucketData(NamedTuple):
     idxs: Tensor1D
     t0: TensorCol
     t1: TensorCol
 
 
-class VecRep(NamedTuple):
+class VecRepr(NamedTuple):
     idxs: Tensor1D
     t0: TensorCol
     t1: TensorCol
