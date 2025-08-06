@@ -62,7 +62,7 @@ class MetropolisHastingsSampler:
         )
 
         # Statistics tracking
-        self.n_samples = torch.tensor(0, dtype=torch.int32)
+        self.n_samples = torch.tensor(0, dtype=torch.int64)
         self.n_accepted = torch.zeros((init_state.shape[-2],), dtype=torch.float32)
 
         check_sampler(

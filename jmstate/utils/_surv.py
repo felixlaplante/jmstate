@@ -39,7 +39,7 @@ def build_buckets(
 
     return {
         key: BucketData(
-            torch.tensor(vals[0], dtype=torch.int32),
+            torch.tensor(vals[0], dtype=torch.int64),
             torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
             torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),
         )
@@ -102,7 +102,7 @@ def build_vec_rep(
 
     return {
         key: VecRepr(
-            torch.tensor(vals[0], dtype=torch.int32),
+            torch.tensor(vals[0], dtype=torch.int64),
             torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
             torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),
             torch.tensor(vals[3], dtype=torch.bool),
