@@ -27,8 +27,8 @@ def legendre_quad(n_quad: int) -> tuple[TensorRow, Tensor1D]:
         np.polynomial.legendre.leggauss(n_quad),  # type: ignore
     )
 
-    std_nodes = torch.tensor(nodes, dtype=torch.float64).unsqueeze(0)
-    std_weights = torch.tensor(weights, dtype=torch.float64)
+    std_nodes = torch.tensor(nodes, dtype=torch.float32).unsqueeze(0)
+    std_weights = torch.tensor(weights, dtype=torch.float32)
 
     return std_nodes, std_weights
 

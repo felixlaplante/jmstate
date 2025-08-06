@@ -146,4 +146,4 @@ class Job(ABC):
 
 
 # Constants
-LOGTWOPI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float64))
+LOGTWOPI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float32))

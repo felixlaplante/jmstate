@@ -147,7 +147,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         """
         # Initialize random effects
         init_b = torch.zeros(
-            (n_chains, data.size, self.params_.Q_repr.dim), dtype=torch.float64
+            (n_chains, data.size, self.params_.Q_repr.dim), dtype=torch.float32
         )
 
         return MetropolisHastingsSampler(

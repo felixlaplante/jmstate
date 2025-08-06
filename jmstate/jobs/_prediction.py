@@ -25,7 +25,7 @@ class PredictY(Job):
 
     @beartype
     def __init__(self, u: torch.Tensor):
-        self.u = u.to(torch.float64)
+        self.u = u.float()
         self.pred_y = []
 
     def init(self, info: Info):
@@ -47,7 +47,7 @@ class PredictSurvLogps(Job):
 
     @beartype
     def __init__(self, u: Tensor2D):
-        self.u = u.to(torch.float64)
+        self.u = u.float()
         self.pred_surv_logps = []
 
     def init(self, info: Info):
@@ -82,7 +82,7 @@ class PredictTrajectories(Job):
         c_max: TensorCol,
         max_length: int = 10,
     ):
-        self.c_max = c_max.to(torch.float64)
+        self.c_max = c_max.float()
         self.max_length = max_length
         self.pred_trajectories = []
 

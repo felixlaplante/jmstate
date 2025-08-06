@@ -44,7 +44,7 @@ def exponential(lmda: SupportsFloat) -> BaseHazardFn:
     Returns:
         BaseHazardFn: The expoential base hazard function.
     """
-    lmda = torch.as_tensor(lmda, dtype=torch.float64)
+    lmda = torch.as_tensor(lmda, dtype=torch.float32)
 
     # Checks
     if lmda <= 0:
@@ -78,8 +78,8 @@ def weibull(
     Returns:
         BaseHazardFn: The weibull base hazard function.
     """
-    k = torch.as_tensor(k, dtype=torch.float64)
-    lmda = torch.as_tensor(lmda, dtype=torch.float64)
+    k = torch.as_tensor(k, dtype=torch.float32)
+    lmda = torch.as_tensor(lmda, dtype=torch.float32)
 
     # Checks
     if k <= 0:
@@ -118,13 +118,13 @@ def gompertz(
         BaseHazardFn: The gompertz base hazard function.
     """
     # Conversion en tenseur
-    a = torch.as_tensor(a, dtype=torch.float64)
+    a = torch.as_tensor(a, dtype=torch.float32)
 
     # Checks
     if a <= 0:
         raise ValueError(f"a must be strictly positive, got {a}")
 
-    b = torch.as_tensor(b, dtype=torch.float64)
+    b = torch.as_tensor(b, dtype=torch.float32)
     log_a = torch.log(a)
 
     def _gompertz(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
@@ -154,15 +154,15 @@ def log_normal(
     Returns:
         BaseHazardFn: Returns the log normal base hazard function.
     """
-    mu = torch.as_tensor(mu, dtype=torch.float64)
-    scale = torch.as_tensor(scale, dtype=torch.float64)
+    mu = torch.as_tensor(mu, dtype=torch.float32)
+    scale = torch.as_tensor(scale, dtype=torch.float32)
 
     # Checks
     if scale <= 0:
         raise ValueError(f"sigma must be strictly positive, got {scale}")
 
     log_scale = torch.log(scale)
-    log_2pi = torch.log(torch.tensor(2 * torch.pi, dtype=torch.float64))
+    log_2pi = torch.log(torch.tensor(2 * torch.pi, dtype=torch.float32))
 
     def _log_normal(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         t = clock_method(t0, t1)

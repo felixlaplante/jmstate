@@ -22,8 +22,8 @@ class ComputeFIM(Job):
             )
 
         d = info.model.params_.numel
-        self.grad_m1 = torch.zeros(d, dtype=torch.float64)
-        self.grad_m2 = torch.zeros((d, d), dtype=torch.float64)
+        self.grad_m1 = torch.zeros(d, dtype=torch.float32)
+        self.grad_m2 = torch.zeros((d, d), dtype=torch.float32)
 
         def _jac_fn(params_flat_tensor: Tensor1D, b: Tensor3D):
             params = params_like_from_flat(info.model.params_, params_flat_tensor)
@@ -71,7 +71,7 @@ class ComputeCriteria(Job):
         bic_pen = (
             d
             * torch.log(
-                torch.tensor(info.data.effective_size, dtype=torch.float64)
+                torch.tensor(info.data.effective_size, dtype=torch.float32)
             ).item()
         )
 
@@ -85,7 +85,7 @@ class ComputeEBEs(Job):
     ebes: Tensor2D
 
     def init(self, info: Info):
-        self.ebes = torch.zeros(info.sampler.state.shape[1:], dtype=torch.float64)
+        self.ebes = torch.zeros(info.sampler.state.shape[1:], dtype=torch.float32)
 
     def run(self, info: Info):
         self.ebes += info.b.detach().mean(dim=0)
