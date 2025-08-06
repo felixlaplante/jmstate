@@ -4,6 +4,7 @@ import torch
 from tqdm import trange
 
 from ..typedefs._defs import Tensor0D, Tensor1D, Tensor2D, Tensor3D
+from ..utils._checks import check_sampler
 
 
 class MetropolisHastingsSampler:
@@ -39,9 +40,6 @@ class MetropolisHastingsSampler:
             init_step_size (SupportsFloat): Kernel step in Metropolis Hastings.
             adapt_rate (SupportsFloat): Adaptation rate for the step_size.
             target_accept_rate (SupportsFloat): Mean acceptance target.
-
-        Raises:
-            RuntimeError: If the initial log prob fails to be computed.
         """
         self.logpdf_aux_fn = logpdf_aux_fn
         self.n_chains = n_chains
@@ -55,38 +53,24 @@ class MetropolisHastingsSampler:
         # Compute initial log logpdf
         self.logpdf, self.aux = self.logpdf_aux_fn(self.state)
 
+        # Proposal noise initialization
+        self._noise = torch.empty_like(self.state)
+
         # Steps initialization
         self.step_sizes = torch.full(
             (init_state.size(-2),), float(init_step_size), dtype=torch.float32
         )
 
         # Statistics tracking
-        self.n_samples = torch.tensor(0, dtype=torch.int32)
+        self.n_samples = torch.tensor(0, dtype=torch.int64)
         self.n_accepted = torch.zeros((init_state.shape[-2],), dtype=torch.float32)
 
-        self._check()
-
-    def _check(self):
-        """Check if every input is valid.
-
-        Raises:
-            TypeError: If n_chains is not strictly positive.
-            ValueError: If init_step_size is not strictly positive.
-            ValueError: If adapt_rate is not positive.
-            ValueError: If target_accept_rate is not in (0, 1).
-        """
-        if self.n_chains <= 0:
-            raise ValueError(f"n_chains must be strictly positive, got {self.n_chains}")
-        if self.step_sizes[0] <= 0:
-            raise ValueError(
-                f"init_step_size must be strictly positive, got {self.step_sizes[0]}"
-            )
-        if self.adapt_rate < 0:
-            raise ValueError(f"adapt_rate must be positive, got {self.adapt_rate}")
-        if not 0 < self.target_accept_rate < 1:
-            raise ValueError(
-                f"target_accept_rate must be in (0, 1), got {self.target_accept_rate}"
-            )
+        check_sampler(
+            self.n_chains,
+            self.step_sizes[0].item(),
+            self.adapt_rate,
+            self.target_accept_rate,
+        )
 
     @torch.no_grad()  # type: ignore
     def step(self) -> tuple[Tensor2D, tuple[torch.Tensor, ...]]:
@@ -96,10 +80,10 @@ class MetropolisHastingsSampler:
             tuple[Tensor2D, tuple[torch.Tensor, ...]]: Current state and aux.
         """
         # Generate proposal noise
-        noise = torch.randn_like(self.state)
+        self._noise.uniform_(-1.0, 1.0)
 
         # Get the proposal
-        proposed_state = self.state + noise * self.step_sizes.view(1, -1, 1)
+        proposed_state = self.state + self._noise * self.step_sizes.view(1, -1, 1)
         proposed_logpdf, proposed_aux = self.logpdf_aux_fn(proposed_state)
         logpdf_diff = proposed_logpdf - self.logpdf
 
