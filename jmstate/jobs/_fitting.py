@@ -13,7 +13,7 @@ NO_GROUPS_OPT: Final[tuple[type[torch.optim.Optimizer], ...]] = (torch.optim.LBF
 DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
 DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
 DEFAULT_DETERMINISTIC_KWARGS: Final[dict[str, Any]] = {"lr": 0.1, "fused": True}
-DEFAULT_RANDOM_KWARGS: Final[dict[str, Any]] = {"lr": 0.1, "fused": True}
+DEFAULT_RANDOM_KWARGS: Final[dict[str, Any]] = {"lr": 0.01, "fused": True}
 
 
 class _BaseFit(Job, ABC):
