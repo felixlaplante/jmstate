@@ -101,7 +101,7 @@ def check_matrix_dim(mat_repr: MatRepr):
                 )
         case "ball":
             if flat.numel() != 1:
-                f"Excepected 1 element for flat, got {flat.numel()}"
+                raise ValueError(f"Expected 1 element for flat, got {flat.numel()}")
         case _:
             raise ValueError(f"Got method {method} unknown")
 
