@@ -1,4 +1,5 @@
 from ._data import ModelData, ModelDesign, SampleData  # noqa: D104
+from ._defaults import DEFAULT_HYPERPARAMETERS
 from ._defs import (
     BaseHazardFn,
     BucketData,
@@ -12,7 +13,6 @@ from ._defs import (
     RegressionFn,
     Trajectory,
 )
-from ._jobs_defaults import DEFAULT_HYPERPARAMETERS
 from ._params import ModelParams
 
 __all__ = [

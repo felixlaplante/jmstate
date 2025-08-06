@@ -57,12 +57,12 @@ class MetropolisHastingsSampler:
 
         # Steps initialization
         self.step_sizes = torch.full(
-            (init_state.size(-2),), float(init_step_size), dtype=torch.float32
+            (init_state.size(-2),), float(init_step_size), dtype=torch.float64
         )
 
         # Statistics tracking
         self.n_samples = torch.tensor(0, dtype=torch.int64)
-        self.n_accepted = torch.zeros((init_state.shape[-2],), dtype=torch.float32)
+        self.n_accepted = torch.zeros((init_state.shape[-2],), dtype=torch.float64)
 
         self._check()
 
@@ -96,7 +96,7 @@ class MetropolisHastingsSampler:
             tuple[Tensor2D, tuple[torch.Tensor, ...]]: Current state and aux.
         """
         # Generate proposal noise
-        noise = torch.randn_like(self.state, dtype=torch.float32)
+        noise = torch.randn_like(self.state)
 
         # Get the proposal
         proposed_state = self.state + noise * self.step_sizes.view(1, -1, 1)
@@ -114,7 +114,7 @@ class MetropolisHastingsSampler:
 
         # Update statistics
         self.n_samples += 1
-        self.n_accepted += accept_mask.to(torch.float32).mean(dim=0)
+        self.n_accepted += accept_mask.to(torch.float64).mean(dim=0)
 
         self._adapt_step_sizes(accept_mask)
 
@@ -122,7 +122,7 @@ class MetropolisHastingsSampler:
 
     def _adapt_step_sizes(self, accept_mask: Tensor1D):
         adaptation = (
-            accept_mask.to(torch.float32).mean(dim=0) - self.target_accept_rate
+            accept_mask.to(torch.float64).mean(dim=0) - self.target_accept_rate
         ) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 

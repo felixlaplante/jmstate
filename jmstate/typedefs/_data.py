@@ -70,10 +70,10 @@ class ModelData:
         if self.skip_validation:
             return
 
-        self.x = None if self.x is None else self.x.to(torch.float32)
-        self.t = self.t.to(torch.float32)
-        self.y = self.y.to(torch.float32)
-        self.c = self.c.to(torch.float32)
+        self.x = None if self.x is None else self.x.to(torch.float64)
+        self.t = self.t.to(torch.float64)
+        self.y = self.y.to(torch.float64)
+        self.c = self.c.to(torch.float64)
 
         # Check NaNs
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
@@ -140,7 +140,7 @@ class CompleteModelData(ModelData):
                 stacklevel=2,
             )
 
-        self.valid_mask = valid_mask.to(torch.float32)
+        self.valid_mask = valid_mask.to(torch.float64)
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = torch.nan_to_num(self.t)
         self.valid_y = torch.nan_to_num(self.y)
@@ -163,9 +163,9 @@ class SampleData:
         if self.skip_validation:
             return
 
-        self.x = None if self.x is None else self.x.to(torch.float32)
-        self.c = None if self.c is None else self.c.to(torch.float32)
-        self.psi = self.psi.to(torch.float32)
+        self.x = None if self.x is None else self.x.to(torch.float64)
+        self.c = None if self.c is None else self.c.to(torch.float64)
+        self.psi = self.psi.to(torch.float64)
 
         check_inf((self.c, self.x, self.psi))
         check_consistent_size((self.x, self.psi, self.c), (0, -2, 0), self.size)

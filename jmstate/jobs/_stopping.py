@@ -58,14 +58,14 @@ class GradStop(Job):
             raise ValueError("Optimizer must be set for GradStop")
 
         d = info.model.params_.numel
-        self.m = torch.zeros(d, dtype=torch.float32)
-        self.v = torch.zeros(d, dtype=torch.float32)
+        self.m = torch.zeros(d, dtype=torch.float64)
+        self.v = torch.zeros(d, dtype=torch.float64)
 
     def run(self, info: Info) -> bool | None:
         grads_list: list[torch.Tensor] = []
         for p in info.model.params_.as_list:
             if p.grad is None:
-                grads_list.append(torch.zeros_like(p, dtype=torch.float32))
+                grads_list.append(torch.zeros_like(p))
             else:
                 grads_list.append(p.grad)
 
@@ -133,7 +133,7 @@ class ValueStop(Job):
         self.stopped = False
 
     def init(self, info: Info):
-        self.p = torch.zeros(info.model.params_.numel, dtype=torch.float32)
+        self.p = torch.zeros(info.model.params_.numel, dtype=torch.float64)
 
     def run(self, info: Info) -> bool | None:
         params = info.model.params_.as_flat_tensor

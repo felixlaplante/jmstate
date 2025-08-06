@@ -5,6 +5,7 @@ import torch
 from beartype import beartype
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
+from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS
 from ..typedefs._defs import (
     LOGTWOPI,
     Info,
@@ -14,7 +15,6 @@ from ..typedefs._defs import (
     Tensor2D,
     Tensor3D,
 )
-from ..typedefs._jobs_defaults import DEFAULT_HYPERPARAMETERS
 from ..typedefs._params import ModelParams
 from ..utils._linalg import get_cholesky_and_log_eigvals
 from ..utils._misc import params_like_from_flat, run_jobs
@@ -147,7 +147,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         """
         # Initialize random effects
         init_b = torch.zeros(
-            (n_chains, data.size, self.params_.Q_repr.dim), dtype=torch.float32
+            (n_chains, data.size, self.params_.Q_repr.dim), dtype=torch.float64
         )
 
         return MetropolisHastingsSampler(

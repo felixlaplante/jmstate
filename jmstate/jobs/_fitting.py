@@ -10,10 +10,10 @@ from ..typedefs._defs import Info, Job, Metrics, Tensor0D
 
 # Constants
 NO_GROUPS_OPT: Final[tuple[type[torch.optim.Optimizer], ...]] = (torch.optim.LBFGS,)
-DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
-DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
-DEFAULT_DETERMINISTIC_KWARGS: Final[dict[str, Any]] = {"lr": 0.1, "fused": True}
-DEFAULT_RANDOM_KWARGS: Final[dict[str, Any]] = {"lr": 0.01, "fused": True}
+DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = (
+    torch.optim.LBFGS
+)
+DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.LBFGS
 
 
 class _BaseFit(Job, ABC):
@@ -24,7 +24,6 @@ class _BaseFit(Job, ABC):
     kwargs: Any
 
     default_opt_factory: type[torch.optim.Optimizer]
-    default_kwargs: Any
     is_fitting: bool
 
     @beartype
@@ -34,14 +33,7 @@ class _BaseFit(Job, ABC):
         **kwargs: Any,
     ):
         self.optimizer_factory = optimizer_factory or self.default_opt_factory
-
-        if optimizer_factory is None:
-            self.kwargs = {
-                **self.default_kwargs,
-                **kwargs,
-            }
-        else:
-            self.kwargs = kwargs
+        self.kwargs = kwargs
 
     def init(self, info: Info):
         info.model.data = info.data
@@ -90,7 +82,6 @@ class DeterministicFit(_BaseFit):
     """Job to fit the model without random effects."""
 
     default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_DETERMINISTIC_OPT_FACTORY
-    default_kwargs: Any = DEFAULT_DETERMINISTIC_KWARGS
     is_fitting: bool = False
 
     def closure(self, info: Info) -> Tensor0D:
@@ -109,7 +100,6 @@ class RandomFit(_BaseFit):
     """Job to fit the model with random effects."""
 
     default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_RANDOM_OPT_FACTORY
-    default_kwargs: Any = DEFAULT_RANDOM_KWARGS
     is_fitting: bool = True
 
     def closure(self, info: Info) -> Tensor0D:

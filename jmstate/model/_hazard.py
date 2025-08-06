@@ -280,12 +280,12 @@ class HazardMixin:
         # Initialize candidate transition times
         n_transitions = len(current_buckets)
         t_candidates = torch.full(
-            (sample_data.size, n_transitions), torch.inf, dtype=torch.float32
+            (sample_data.size, n_transitions), torch.inf, dtype=torch.float64
         )
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
             idx, t0, t1, _ = bucket
-            t1 = torch.nextafter(t1, torch.tensor(torch.inf, dtype=torch.float32))
+            t1 = torch.nextafter(t1, torch.tensor(torch.inf, dtype=torch.float64))
 
             # Create info
             hazard_info = HazardInfo(
@@ -338,7 +338,7 @@ class HazardMixin:
             list[Trajectory]: The sampled trajectories.
         """
         # Convert and check if c_max matches the right shape
-        c_max = c_max.to(torch.float32)
+        c_max = c_max.to(torch.float64)
         check_consistent_size((c_max,), (0,), sample_data.size)
 
         # Initialize with copies of current trajectories
@@ -384,8 +384,8 @@ class HazardMixin:
         psi = sample_data.psi
         c = sample_data.c
 
-        # Convert to float32
-        u = u.to(torch.float32)
+        # Convert to float64
+        u = u.to(torch.float64)
         check_consistent_size((u,), (0,), sample_data.size)
 
         last_states = [trajectory[-1:] for trajectory in trajectories]
@@ -438,7 +438,7 @@ class HazardMixin:
         Returns:
             Tensor2D: The computed log likelihood.
         """
-        logliks = torch.zeros((psi.shape[:-1]), dtype=torch.float32)
+        logliks = torch.zeros((psi.shape[:-1]), dtype=torch.float64)
 
         for key, bucket in data.buckets.items():
             idx, t0, t1, obs = bucket

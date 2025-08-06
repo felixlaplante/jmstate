@@ -28,13 +28,13 @@ class ModelParams:
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
-        """Validate and put to float32 all tensors."""
+        """Validate and put to float64 all tensors."""
         if self.skip_validation:
             return
 
         for val in self.as_groups.values():
             for i, t in enumerate(val):
-                val[i].data = t.to(torch.float32)
+                val[i].data = t.to(torch.float64)
 
         check_matrix_dim(self.Q_repr)
         check_matrix_dim(self.R_repr)
