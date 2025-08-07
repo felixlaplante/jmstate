@@ -6,15 +6,15 @@ import numpy as np
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Info, Job, Tensor1D, TensorRow
+from ..typedefs._defs import Info, IntStrictlyPositive, Job, Tensor1D, TensorRow
 from ..typedefs._params import ModelParams
 
 
-def legendre_quad(n_quad: int) -> tuple[TensorRow, Tensor1D]:
+def legendre_quad(n_quad: IntStrictlyPositive) -> tuple[TensorRow, Tensor1D]:
     """Get the Legendre quadrature nodes and weights.
 
     Args:
-        n_quad (int, optional): The number of quadrature points.
+        n_quad (IntStrictlyPositive): The number of quadrature points.
 
     Returns:
         tuple[TensorRow, Tensor1D]: The nodes and weights.
@@ -27,8 +27,8 @@ def legendre_quad(n_quad: int) -> tuple[TensorRow, Tensor1D]:
         np.polynomial.legendre.leggauss(n_quad),  # type: ignore
     )
 
-    std_nodes = torch.tensor(nodes, dtype=torch.float32).unsqueeze(0)
-    std_weights = torch.tensor(weights, dtype=torch.float32)
+    std_nodes = torch.tensor(nodes, dtype=torch.get_default_dtype()).unsqueeze(0)
+    std_weights = torch.tensor(weights, dtype=torch.get_default_dtype())
 
     return std_nodes, std_weights
 

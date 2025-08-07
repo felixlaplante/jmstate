@@ -5,25 +5,23 @@ from typing import TYPE_CHECKING, cast
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import MatRepr, Tensor1D, Tensor2D
+from ..typedefs._defs import IntStrictlyPositive, MatRepr, Tensor1D, Tensor2D
 
 if TYPE_CHECKING:
     from ..typedefs._params import ModelParams
 
 
-def _tril_from_flat(flat: Tensor1D, dim: int) -> Tensor2D:
+def _tril_from_flat(flat: Tensor1D, dim: IntStrictlyPositive) -> Tensor2D:
     """Generate the lower triangular matrix associated with flat tensor.
 
     Args:
         flat (Tensor1D): Flat tehsnro
-        dim (int): Dimension of the matrix.
+        dim (IntStrictlyPositive): Dimension of the matrix.
 
     Returns:
         Tensor2D: The lower triangular matrix.
     """
-    return torch.zeros(dim, dim, dtype=flat.dtype).index_put_(
-        tuple(torch.tril_indices(dim, dim)), flat
-    )
+    return torch.zeros(dim, dim).index_put_(tuple(torch.tril_indices(dim, dim)), flat)
 
 
 def _flat_from_tril(L: Tensor2D) -> Tensor1D:
@@ -46,12 +44,14 @@ def _flat_from_tril(L: Tensor2D) -> Tensor1D:
     return L[i, j]
 
 
-def _log_cholesky_from_flat(flat: Tensor1D, dim: int, method: str = "full") -> Tensor2D:
+def _log_cholesky_from_flat(
+    flat: Tensor1D, dim: IntStrictlyPositive, method: str = "full"
+) -> Tensor2D:
     """Computes log cholesky from flat tensor according to choice of method.
 
     Args:
         flat (Tensor1D): The flat tensor parameter.
-        dim (int): The dimension of the matrix.
+        dim (IntStrictlyPositive): The dimension of the matrix.
         method (str, optional): The method, full, diagonal or ball. Defaults to "full".
 
     Raises:
@@ -130,7 +130,7 @@ def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
         Tensor2D,
         torch.linalg.solve_triangular(  # type: ignore
             L,
-            torch.eye(dim, dtype=L.dtype),
+            torch.eye(dim),
             upper=False,
         ),
     )

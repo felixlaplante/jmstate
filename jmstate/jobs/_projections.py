@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Final, SupportsFloat
+from typing import Any, Final
 
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Info, Job, Metrics
+from ..typedefs._defs import Info, Job, Metrics, NumPositive
 
 ADAM_LIKE: Final[tuple[type[torch.optim.Optimizer], ...]] = (
     torch.optim.Adam,
@@ -15,13 +15,13 @@ ADAM_LIKE: Final[tuple[type[torch.optim.Optimizer], ...]] = (
 
 class _BaseL1Proximal(Job, ABC):
     group: str
-    lmda: float
+    lmda: NumPositive
     param_groups: list[dict[str, Any]]
 
     @beartype
-    def __init__(self, lmda: SupportsFloat, group: str = "betas"):
+    def __init__(self, lmda: NumPositive, group: str = "betas"):
         self.group = group
-        self.lmda = float(lmda)
+        self.lmda = lmda
         if group not in ("alphas", "betas"):
             raise ValueError(
                 f"Group must be either 'alphas' or 'betas', got {self.group}"

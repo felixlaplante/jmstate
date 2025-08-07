@@ -2,7 +2,14 @@ import itertools
 
 import torch
 
-from ..typedefs._defs import MatRepr, Tensor2D, Tensor3D, TensorCol, Trajectory
+from ..typedefs._defs import (
+    IntPositive,
+    MatRepr,
+    Tensor2D,
+    Tensor3D,
+    TensorCol,
+    Trajectory,
+)
 
 
 def check_inf(tensors: tuple[torch.Tensor | None, ...]):
@@ -19,14 +26,16 @@ def check_inf(tensors: tuple[torch.Tensor | None, ...]):
 
 
 def check_consistent_size(
-    tensors: tuple[Tensor2D | Tensor3D | None, ...], dims: tuple[int, ...], n: int
+    tensors: tuple[Tensor2D | Tensor3D | None, ...],
+    dims: tuple[int, ...],
+    n: IntPositive,
 ):
     """Checks it the number of individuals is consistent.
 
     Args:
         tensors (tuple[Tensor2D | Tensor3D | None, ...]): The tensors to check.
         dims (tuple[int, ...]): The dimensions to check.
-        n (int): The expected size.
+        n (IntPositive): The expected size.
 
     Raises:
         ValueError: If the number of inconsistent.
@@ -104,34 +113,3 @@ def check_matrix_dim(mat_repr: MatRepr):
                 raise ValueError(f"Expected 1 element for flat, got {flat.numel()}")
         case _:
             raise ValueError(f"Got method {method} unknown")
-
-
-def check_sampler(
-    n_chains: int, init_step_size: float, adapt_rate: float, target_accept_rate: float
-):
-    """Check if every input is valid.
-
-    Args:
-        n_chains (int): Number of parallel MCMC chains.
-        init_step_size (float): Kernel step size.
-        adapt_rate (float): Adaptation rate of the step size.
-        target_accept_rate (float): Target acceptance rate.
-
-    Raises:
-        TypeError: If n_chains is not strictly positive.
-        ValueError: If init_step_size is not strictly positive.
-        ValueError: If adapt_rate is not positive.
-        ValueError: If target_accept_rate is not in (0, 1).
-    """
-    if n_chains <= 0:
-        raise ValueError(f"n_chains must be strictly positive, got {n_chains}")
-    if init_step_size <= 0:
-        raise ValueError(
-            f"init_step_size must be strictly positive, got {init_step_size}"
-        )
-    if adapt_rate < 0:
-        raise ValueError(f"adapt_rate must be positive, got {adapt_rate}")
-    if not 0 < target_accept_rate < 1:
-        raise ValueError(
-            f"target_accept_rate must be in (0, 1), got {target_accept_rate}"
-        )

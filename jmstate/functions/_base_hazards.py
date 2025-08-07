@@ -1,9 +1,17 @@
-from typing import SupportsFloat, cast
+from typing import cast
 
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import BaseHazardFn, ClockMethod, Tensor2D, TensorCol
+from ..typedefs._defs import (
+    LOGTWOPI,
+    BaseHazardFn,
+    ClockMethod,
+    Num,
+    NumStrictlyPositive,
+    Tensor2D,
+    TensorCol,
+)
 
 
 def clock_forward(t0: TensorCol, t1: Tensor2D) -> Tensor2D:
@@ -32,11 +40,11 @@ def clock_reset(t0: TensorCol, t1: Tensor2D) -> Tensor2D:
     return t1 - t0
 
 
-def exponential(lmda: SupportsFloat) -> BaseHazardFn:
+def exponential(lmda: NumStrictlyPositive) -> BaseHazardFn:
     """Returns the exponential base hazard function.
 
     Args:
-        lmda (SupportsFloat): The scale parameter.
+        lmda (NumStrictlyPositive): The scale parameter.
 
     Raises:
         ValueError: If lmda is not strictly positive.
@@ -44,15 +52,15 @@ def exponential(lmda: SupportsFloat) -> BaseHazardFn:
     Returns:
         BaseHazardFn: The expoential base hazard function.
     """
-    lmda = torch.as_tensor(lmda, dtype=torch.float32)
+    lmda_t = torch.tensor(lmda, dtype=torch.get_default_dtype())
 
     # Checks
-    if lmda <= 0:
-        raise ValueError(f"lmda must be strictly positive, got {lmda}")
+    if lmda_t <= 0:
+        raise ValueError(f"lmda must be strictly positive, got {lmda_t}")
 
-    log_lmda = torch.log(lmda)
+    log_lmda = torch.log(lmda_t)
 
-    def _exponential(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def _exponential(t0: TensorCol, t1: Tensor2D) -> torch.Tensor:
         return log_lmda
 
     return _exponential
@@ -60,15 +68,15 @@ def exponential(lmda: SupportsFloat) -> BaseHazardFn:
 
 @beartype
 def weibull(
-    k: SupportsFloat,
-    lmda: SupportsFloat,
+    k: NumStrictlyPositive,
+    lmda: NumStrictlyPositive,
     clock_method: ClockMethod = clock_reset,
 ) -> BaseHazardFn:
     """Returns the weibull base hazard function.
 
     Args:
-        k (SupportsFloat): The shape parameter.
-        lmda (SupportsFloat): The scale parameter.
+        k (NumStrictlyPositive): The shape parameter.
+        lmda (NumStrictlyPositive): The scale parameter.
         clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
 
     Raises:
@@ -78,37 +86,37 @@ def weibull(
     Returns:
         BaseHazardFn: The weibull base hazard function.
     """
-    k = torch.as_tensor(k, dtype=torch.float32)
-    lmda = torch.as_tensor(lmda, dtype=torch.float32)
+    k_t = torch.tensor(k, dtype=torch.get_default_dtype())
+    lmda_t = torch.tensor(lmda, dtype=torch.get_default_dtype())
 
     # Checks
-    if k <= 0:
-        raise ValueError(f"k must be strictly positive, got {k}")
-    if lmda <= 0:
-        raise ValueError(f"lmda must be strictly positive, got {lmda}")
+    if k_t <= 0:
+        raise ValueError(f"k must be strictly positive, got {k_t}")
+    if lmda_t <= 0:
+        raise ValueError(f"lmda must be strictly positive, got {lmda_t}")
 
-    log_k = torch.log(k)
-    log_lmda = torch.log(lmda)
+    log_k = torch.log(k_t)
+    log_lmda = torch.log(lmda_t)
 
-    def _weibull(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def _weibull(t0: TensorCol, t1: Tensor2D) -> torch.Tensor:
         t = clock_method(t0, t1)
         log_t = torch.log(t)
-        return log_k - log_lmda + (k - 1) * (log_t - log_lmda)
+        return log_k - log_lmda + (k_t - 1) * (log_t - log_lmda)
 
     return _weibull
 
 
 @beartype
 def gompertz(
-    a: SupportsFloat,
-    b: SupportsFloat,
+    a: NumStrictlyPositive,
+    b: Num,
     clock_method: ClockMethod = clock_reset,
 ) -> BaseHazardFn:
     """Returns the gompertz base hazard function.
 
     Args:
-        a (SupportsFloat): The baseline hazard.
-        b (SupportsFloat): The shape parameter.
+        a (NumStrictlyPositive): The baseline hazard.
+        b (Num): The shape parameter.
         clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
 
     Raises:
@@ -118,18 +126,16 @@ def gompertz(
         BaseHazardFn: The gompertz base hazard function.
     """
     # Conversion en tenseur
-    a = torch.as_tensor(a, dtype=torch.float32)
+    a_t = torch.tensor(a, dtype=torch.get_default_dtype())
 
     # Checks
-    if a <= 0:
-        raise ValueError(f"a must be strictly positive, got {a}")
+    if a_t <= 0:
+        raise ValueError(f"a must be strictly positive, got {a_t}")
 
-    b = torch.as_tensor(b, dtype=torch.float32)
-    log_a = torch.log(a)
+    log_a = torch.log(a_t)
 
-    def _gompertz(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def _gompertz(t0: TensorCol, t1: Tensor2D) -> torch.Tensor:
         t = clock_method(t0, t1)
-        # log h(t) = log a + b * t
         return log_a + b * t
 
     return _gompertz
@@ -137,15 +143,15 @@ def gompertz(
 
 @beartype
 def log_normal(
-    mu: SupportsFloat,
-    scale: SupportsFloat,
+    mu: Num,
+    scale: NumStrictlyPositive,
     clock_method: ClockMethod = clock_reset,
 ) -> BaseHazardFn:
     """Returns the log normal base hazard function.
 
     Args:
-        mu (SupportsFloat):  log time mean.
-        scale (SupportsFloat): The log time scale.
+        mu (Num):  log time mean.
+        scale (NumStrictlyPositive): The log time scale.
         clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
 
     Raises:
@@ -154,21 +160,19 @@ def log_normal(
     Returns:
         BaseHazardFn: Returns the log normal base hazard function.
     """
-    mu = torch.as_tensor(mu, dtype=torch.float32)
-    scale = torch.as_tensor(scale, dtype=torch.float32)
+    scale_t = torch.tensor(scale, dtype=torch.get_default_dtype())
 
     # Checks
-    if scale <= 0:
-        raise ValueError(f"sigma must be strictly positive, got {scale}")
+    if scale_t <= 0:
+        raise ValueError(f"scale must be strictly positive, got {scale_t}")
 
-    log_scale = torch.log(scale)
-    log_2pi = torch.log(torch.tensor(2 * torch.pi, dtype=torch.float32))
+    log_scale = torch.log(scale_t)
 
-    def _log_normal(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def _log_normal(t0: TensorCol, t1: Tensor2D) -> torch.Tensor:
         t = clock_method(t0, t1)
         log_t = torch.log(t)
         z = (log_t - mu) / scale
-        log_pdf = -log_t - log_scale - 0.5 * log_2pi - 0.5 * z**2
+        log_pdf = -log_t - log_scale - 0.5 * LOGTWOPI - 0.5 * z**2
         log_sf = cast(torch.Tensor, torch.special.log_ndtr(-z))  # type: ignore
         return log_pdf - log_sf
 

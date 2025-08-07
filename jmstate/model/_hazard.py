@@ -7,6 +7,8 @@ from beartype import beartype
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import (
     HazardInfo,
+    IntPositive,
+    IntStrictlyPositive,
     Tensor1D,
     Tensor2D,
     Tensor3D,
@@ -29,43 +31,33 @@ class HazardMixin:
 
     params_: ModelParams
     model_design: ModelDesign
-    n_quad: int
-    n_bissect: int
-    cache_limit: int | None
+    n_quad: IntStrictlyPositive
+    n_bissect: IntStrictlyPositive
+    cache_limit: IntPositive | None
     _std_nodes: TensorRow
     _std_weights: Tensor1D
     _cache: Cache
 
     def __init__(
         self,
-        n_quad: int,
-        n_bissect: int,
-        cache_limit: int | None,
+        n_quad: IntStrictlyPositive,
+        n_bissect: IntStrictlyPositive,
+        cache_limit: IntPositive | None,
         *args: Any,
         **kwargs: Any,
     ):
         """Initializes the class.
 
         Args:
-            n_quad (int): Number of quadrature nodes.
-            n_bissect (int): The number of bissection steps.
-            cache_limit (int | None): Max length of cache.
+            n_quad (IntStrictlyPositive): Number of quadrature nodes.
+            n_bissect (IntStrictlyPositive): The number of bissection steps.
+            cache_limit (IntPositive | None): Max length of cache.
             args (Any): Additional args.
             kwargs (Any): Additional kwargs.
-
-        Raises:
-            ValueError: If n_quad is not greater than 0.
-            ValueError: If n_bissect is not greater than 0.
         """
         self.n_quad = n_quad
         self.n_bissect = n_bissect
         self.cache_limit = cache_limit
-
-        if self.n_quad <= 0:
-            raise ValueError(f"n_quad must be greater than 0, got {self.n_quad}")
-        if self.n_bissect <= 0:
-            raise ValueError(f"n_bissect must be greater than 0, got {self.n_bissect}")
-
         self._std_nodes, self._std_weights = legendre_quad(n_quad)
         self._cache = Cache(cache_limit, HAZARD_CACHE_KEYS)
 
@@ -279,13 +271,11 @@ class HazardMixin:
 
         # Initialize candidate transition times
         n_transitions = len(current_buckets)
-        t_candidates = torch.full(
-            (sample_data.size, n_transitions), torch.inf, dtype=torch.float32
-        )
+        t_candidates = torch.full((sample_data.size, n_transitions), torch.inf)
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
             idx, t0, t1, _ = bucket
-            t1 = torch.nextafter(t1, torch.tensor(torch.inf, dtype=torch.float32))
+            t1 = torch.nextafter(t1, torch.tensor(torch.inf))
 
             # Create info
             hazard_info = HazardInfo(
@@ -322,23 +312,23 @@ class HazardMixin:
         sample_data: SampleData,
         c_max: TensorCol,
         *,
-        max_length: int = 10,
+        max_length: IntStrictlyPositive = 10,
     ) -> list[Trajectory]:
         """Sample future trajectories from the fitted joint model.
 
         Args:
             sample_data (SampleData): Prediction data.
             c_max (TensorCol): The maximum trajectory censoring times.
-            max_length (int, optional): Maximum iterations or sampling. Defaults to 10.
+            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling. Defaults to 10.
 
         Raises:
-            ValueError: If psi has incorrect shape.
+            ValueError: If c_max has incorrect shape.
 
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
         # Convert and check if c_max matches the right shape
-        c_max = c_max.float()
+        c_max = c_max.to(torch.get_default_dtype())
         check_consistent_size((c_max,), (0,), sample_data.size)
 
         # Initialize with copies of current trajectories
@@ -379,13 +369,12 @@ class HazardMixin:
             Tensor2D | Tensor3D: The computed survival log probabilities.
         """
         # Unpack data
+        u = u.to(torch.get_default_dtype())
         x = sample_data.x
         trajectories = sample_data.trajectories
         psi = sample_data.psi
         c = sample_data.c
 
-        # Convert to float32
-        u = u.float()
         check_consistent_size((u,), (0,), sample_data.size)
 
         last_states = [trajectory[-1:] for trajectory in trajectories]
@@ -395,7 +384,7 @@ class HazardMixin:
             self.model_design.surv,
         )
 
-        nlogps = torch.zeros((*sample_data.psi.shape[:-1], u.size(1)))
+        nlogps = torch.zeros(*sample_data.psi.shape[:-1], u.size(1))
 
         # Compute the log probabilities summing over transitions
         for key, bucket in buckets.items():
@@ -438,7 +427,7 @@ class HazardMixin:
         Returns:
             Tensor2D: The computed log likelihood.
         """
-        logliks = torch.zeros((psi.shape[:-1]), dtype=torch.float32)
+        logliks = torch.zeros(psi.shape[:-1])
 
         for key, bucket in data.buckets.items():
             idx, t0, t1, obs = bucket

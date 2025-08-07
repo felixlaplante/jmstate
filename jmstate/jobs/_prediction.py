@@ -6,6 +6,7 @@ from beartype import beartype
 from ..typedefs._data import SampleData
 from ..typedefs._defs import (
     Info,
+    IntStrictlyPositive,
     Job,
     Metrics,
     Tensor2D,
@@ -25,7 +26,7 @@ class PredictY(Job):
 
     @beartype
     def __init__(self, u: torch.Tensor):
-        self.u = u.float()
+        self.u = u.to(torch.get_default_dtype())
         self.pred_y = []
 
     def init(self, info: Info):
@@ -47,7 +48,7 @@ class PredictSurvLogps(Job):
 
     @beartype
     def __init__(self, u: Tensor2D):
-        self.u = u.float()
+        self.u = u.to(torch.get_default_dtype())
         self.pred_surv_logps = []
 
     def init(self, info: Info):
@@ -73,7 +74,7 @@ class PredictTrajectories(Job):
     """Job to predict trajectories."""
 
     c_max: torch.Tensor
-    max_length: int
+    max_length: IntStrictlyPositive
     pred_trajectories: list[Trajectory]
 
     @beartype
@@ -82,7 +83,7 @@ class PredictTrajectories(Job):
         c_max: TensorCol,
         max_length: int = 10,
     ):
-        self.c_max = c_max.float()
+        self.c_max = c_max.to(torch.get_default_dtype())
         self.max_length = max_length
         self.pred_trajectories = []
 
@@ -113,20 +114,14 @@ class SwitchParams(Job):
     """Job to simulate different parameter values."""
 
     param_list: list[ModelParams]
-    n_iterations_per_param: int
-    n_params: int
+    n_iterations_per_param: IntStrictlyPositive
+    n_params: IntStrictlyPositive
     init_params: ModelParams
 
     @beartype
     def __init__(self, param_list: list[ModelParams], n_iterations_per_param: int):
         self.param_list = param_list
         self.n_iterations_per_param = n_iterations_per_param
-
-        if self.n_iterations_per_param < 1:
-            raise ValueError(
-                f"n_iterations_per_param must be greater than 0, got {n_iterations_per_param}"
-            )
-
         self.n_params = len(param_list)
 
     def init(self, info: Info):

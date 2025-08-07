@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Callable, SupportsFloat, cast
+from typing import Any, Callable, cast
 
 import torch
 from beartype import beartype
@@ -9,8 +9,12 @@ from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS
 from ..typedefs._defs import (
     LOGTWOPI,
     Info,
+    IntPositive,
+    IntStrictlyPositive,
     Job,
     Metrics,
+    NumPositive,
+    NumProbability,
     Tensor0D,
     Tensor2D,
     Tensor3D,
@@ -38,9 +42,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     model_design: ModelDesign
     params_: ModelParams
     pen: Callable[[ModelParams], Tensor0D] | None
-    n_quad: int
-    n_bissect: int
-    cache_limit: int | None
+    n_quad: IntStrictlyPositive
+    n_bissect: IntStrictlyPositive
+    cache_limit: IntPositive | None
     data: ModelData | None
     metrics_: Metrics | None
     fit_: bool
@@ -52,9 +56,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         init_params: ModelParams,
         *,
         pen: Callable[[ModelParams], Tensor0D] | None = None,
-        n_quad: int = 32,
-        n_bissect: int = 32,
-        cache_limit: int | None = 256,
+        n_quad: IntStrictlyPositive = 32,
+        n_bissect: IntStrictlyPositive = 32,
+        cache_limit: IntPositive | None = 256,
     ):
         """Initializes the joint model based on the user defined design.
 
@@ -62,12 +66,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             model_design (ModelDesign): Model design containing modeling information.
             init_params (ModelParams): Initial values for the parameters.
             pen (Callable[[ModelParams], Tensor0D] | None, optional): The penalization function. Defaults to None.
-            n_quad (int, optional): The used numnber of points for Gauss-Legendre quadrature. Defaults to 32.
-            n_bissect (int, optional): The number of bissection steps used in transition sampling. Defaults to 32.
-            cache_limit (int | None, optional): The max length of cache. Defaults to 256.
-
-        Raises:
-            TypeError: If pen is not None and is not callable.
+            n_quad (IntStrictlyPositive, optional): The used numnber of points for Gauss-Legendre quadrature. Defaults to 32.
+            n_bissect (IntStrictlyPositive, optional): The number of bissection steps used in transition sampling. Defaults to 32.
+            cache_limit (IntPositive | None, optional): The max length of cache. Defaults to 256.
         """
         # Store model components
         self.model_design = model_design
@@ -75,8 +76,6 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         # Store penalization
         self.pen = pen
-        if self.pen is not None and not callable(self.pen):
-            raise TypeError("pen must be callable or None")
 
         # Info of the Mixin Classes
         super().__init__(
@@ -128,27 +127,25 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     def _setup_mcmc(
         self,
         data: CompleteModelData,
-        n_chains: int,
-        init_step_size: SupportsFloat,
-        adapt_rate: SupportsFloat,
-        target_accept_rate: SupportsFloat,
+        n_chains: IntStrictlyPositive,
+        init_step_size: NumPositive,
+        adapt_rate: NumPositive,
+        target_accept_rate: NumProbability,
     ) -> MetropolisHastingsSampler:
         """Setup the MCMC kernel and hyperparameters.
 
         Args:
             data (CompleteModelData): The complete dataset.
-            n_chains (int): The number of parallel MCMC chains.
-            init_step_size (SupportsFloat): Kernel standard error in Metropolis.
-            adapt_rate (SupportsFloat): Adaptation rate for the step_size.
-            target_accept_rate (SupportsFloat): Mean acceptance target.
+            n_chains (IntStrictlyPositive): The number of parallel MCMC chains.
+            init_step_size (NumPositive): Kernel standard error in Metropolis.
+            adapt_rate (NumPositive): Adaptation rate for the step_size.
+            target_accept_rate (NumProbability): Mean acceptance target.
 
         Returns:
             MetropolisHastingsSampler: The intialized Markov kernel.
         """
         # Initialize random effects
-        init_b = torch.zeros(
-            (n_chains, data.size, self.params_.Q_repr.dim), dtype=torch.float32
-        )
+        init_b = torch.zeros(n_chains, data.size, self.params_.Q_repr.dim)
 
         return MetropolisHastingsSampler(
             lambda b: self._logpdfs_and_aux_fn(self.params_, b, data),
@@ -189,12 +186,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         *,
         jobs: Job | list[Job],
         max_iterations: int | None = None,
-        n_chains: int | None = None,
-        warmup: int | None = None,
-        n_steps: int | None = None,
-        init_step_size: SupportsFloat = 0.1,
-        adapt_rate: SupportsFloat = 0.1,
-        accept_target: SupportsFloat = 0.234,
+        n_chains: IntStrictlyPositive | None = None,
+        warmup: IntPositive | None = None,
+        n_steps: IntPositive | None = None,
+        init_step_size: NumPositive = 0.1,
+        adapt_rate: NumPositive = 0.1,
+        accept_target: NumProbability = 0.234,
         verbose: bool = True,
     ) -> Metrics | Any | None:
         """Runs the MultiStateJointModel loop and some jobs.
@@ -203,12 +200,12 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
             max_iterations (int | None, optional): Maximum number of iterations. Defaults to None.
-            n_chains (int | None, optional): Batch size used. Defaults to None.
-            warmup (int | None, optional): The number of iteration steps used in the warmup. Defaults to None.
-            n_steps (int | None, optional): The steps to do at each iteration. Defaults to None.
-            init_step_size (SupportsFloat, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
-            adapt_rate (SupportsFloat, optional): Adaptation rate for the step_size. Defaults to 0.01.
-            accept_target (SupportsFloat, optional): Mean acceptation target. Defaults to 0.234.
+            n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults to None.
+            warmup (IntPositive | None, optional): The number of iteration steps used in the warmup. Defaults to None.
+            n_steps (IntPositive | None, optional): The steps to do at each iteration. Defaults to None.
+            init_step_size (NumPositive, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
+            adapt_rate (NumPositive, optional): Adaptation rate for the step_size. Defaults to 0.01.
+            accept_target (NumProbability, optional): Mean acceptation target. Defaults to 0.234.
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
@@ -320,11 +317,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 return metrics
 
     @beartype
-    def sample_params(self, sample_size: int) -> list[ModelParams]:
+    def sample_params(self, sample_size: IntPositive) -> list[ModelParams]:
         """Sample parameters based on asymptotic behavior of the MLE.
 
         Args:
-            sample_size (int): The desired sample size.
+            sample_size (IntPositive): The desired sample size.
 
         Raises:
             ValueError: If the model has not been fitted, or FIM not computed.

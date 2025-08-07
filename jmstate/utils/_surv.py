@@ -15,7 +15,7 @@ from ..typedefs._defs import (
 
 def build_buckets(
     trajectories: list[Trajectory],
-) -> dict[tuple[int, int], BucketData]:
+) -> dict[tuple[Any, Any], BucketData]:
     """Builds buckets from trajectories for user convenience.
 
     Args:
@@ -23,10 +23,10 @@ def build_buckets(
 
 
     Returns:
-        dict[tuple[int, int], BucketData]: Transition keys with values (idxs, t0, t1).
+        dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).
     """
     # Process each individual trajectory
-    buckets: defaultdict[tuple[int, int], list[list[Any]]] = defaultdict(
+    buckets: defaultdict[tuple[Any, Any], list[list[Any]]] = defaultdict(
         lambda: [[], [], []]
     )
 
@@ -40,31 +40,31 @@ def build_buckets(
     return {
         key: BucketData(
             torch.tensor(vals[0], dtype=torch.int64),
-            torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
-            torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),
+            torch.tensor(vals[1]).view(-1, 1),
+            torch.tensor(vals[2]).view(-1, 1),
         )
         for key, vals in buckets.items()
-        if vals[0]  # skip empty
+        if vals != []
     }
 
 
 def build_vec_rep(
     trajectories: list[Trajectory],
     c: torch.Tensor,
-    surv: dict[tuple[int, int], tuple[BaseHazardFn, LinkFn]],
-) -> dict[tuple[int, int], VecRepr]:
+    surv: dict[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]],
+) -> dict[tuple[Any, Any], VecRepr]:
     """Build vectorizable bucket representation.
 
     Args:
         trajectories (list[Trajectory]): The trajectories.
         c (torch.Tensor): Censoring times.
-        surv (dict[tuple[int, int], tuple[BaseHazardFn, LinkFn]]) : The survival dict.
+        surv (dict[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]) : The survival dict.
 
     Raises:
         ValueError: If some keys are not in surv.
 
     Returns:
-        dict[tuple[int, int], VecRepr]: The vectorizable buckets representation.
+        dict[tuple[Any, Any], VecRepr]: The vectorizable buckets representation.
     """
     # Get survival transitions defined in the model
     trans = set(surv.keys())
@@ -75,7 +75,7 @@ def build_vec_rep(
         alt_map[from_state].append(to_state)
 
     # Initialize buckets
-    buckets: dict[tuple[int, int], list[list[Any]]] = defaultdict(
+    buckets: dict[tuple[Any, Any], list[list[Any]]] = defaultdict(
         lambda: [[], [], [], []]
     )
 
@@ -103,10 +103,10 @@ def build_vec_rep(
     return {
         key: VecRepr(
             torch.tensor(vals[0], dtype=torch.int64),
-            torch.tensor(vals[1], dtype=torch.float32).view(-1, 1),
-            torch.tensor(vals[2], dtype=torch.float32).view(-1, 1),
+            torch.tensor(vals[1]).view(-1, 1),
+            torch.tensor(vals[2]).view(-1, 1),
             torch.tensor(vals[3], dtype=torch.bool),
         )
         for key, vals in buckets.items()
-        if vals[0]
+        if vals != []
     }

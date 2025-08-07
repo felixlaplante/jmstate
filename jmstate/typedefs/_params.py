@@ -1,12 +1,13 @@
 import itertools
 from dataclasses import dataclass, field
+from typing import Any
 
 import torch
 from beartype import beartype
 
 from ..utils._checks import check_inf, check_matrix_dim
 from ..utils._linalg import cov_from_repr
-from ._defs import MatRepr, Tensor1D, Tensor2D
+from ._defs import IntPositive, MatRepr, Tensor1D, Tensor2D
 
 
 @beartype
@@ -23,8 +24,8 @@ class ModelParams:
     gamma: torch.Tensor | None
     Q_repr: MatRepr
     R_repr: MatRepr
-    alphas: dict[tuple[int, int], Tensor1D]
-    betas: dict[tuple[int, int], Tensor1D] | None
+    alphas: dict[tuple[Any, Any], Tensor1D]
+    betas: dict[tuple[Any, Any], Tensor1D] | None
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
@@ -32,9 +33,8 @@ class ModelParams:
         if self.skip_validation:
             return
 
-        for val in self.as_groups.values():
-            for i, t in enumerate(val):
-                val[i].data = t.float()
+        for tensor in self.as_list:
+            tensor.data = tensor.to(torch.get_default_dtype())
 
         check_matrix_dim(self.Q_repr)
         check_matrix_dim(self.R_repr)
@@ -76,11 +76,11 @@ class ModelParams:
         return torch.cat([p.detach().view(-1) for p in self.as_list])
 
     @property
-    def numel(self) -> int:
+    def numel(self) -> IntPositive:
         """Return the number of parameters.
 
         Returns:
-            int: The number of the parameters.
+            IntPositive: The number of the parameters.
         """
         return sum(p.numel() for p in self.as_list)
 

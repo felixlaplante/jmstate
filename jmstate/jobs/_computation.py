@@ -3,7 +3,15 @@ from typing import Callable
 
 import torch
 
-from ..typedefs._defs import Info, Job, Metrics, Tensor1D, Tensor2D, Tensor3D
+from ..typedefs._defs import (
+    Info,
+    IntPositive,
+    Job,
+    Metrics,
+    Tensor1D,
+    Tensor2D,
+    Tensor3D,
+)
 from ..utils._misc import params_like_from_flat
 
 
@@ -22,8 +30,8 @@ class ComputeFIM(Job):
             )
 
         d = info.model.params_.numel
-        self.grad_m1 = torch.zeros(d, dtype=torch.float32)
-        self.grad_m2 = torch.zeros((d, d), dtype=torch.float32)
+        self.grad_m1 = torch.zeros(d)
+        self.grad_m2 = torch.zeros(d, d)
 
         def _jac_fn(params_flat_tensor: Tensor1D, b: Tensor3D):
             params = params_like_from_flat(info.model.params_, params_flat_tensor)
@@ -46,7 +54,7 @@ class ComputeFIM(Job):
 class ComputeCriteria(Job):
     """Job to compute AIC, BIC and Log Likelihood."""
 
-    n: int
+    n: IntPositive
     loglik: float
 
     def __init__(self):
@@ -68,12 +76,7 @@ class ComputeCriteria(Job):
 
         d = info.model.params_.numel
         aic_pen = 2 * d
-        bic_pen = (
-            d
-            * torch.log(
-                torch.tensor(info.data.effective_size, dtype=torch.float32)
-            ).item()
-        )
+        bic_pen = d * torch.log(torch.tensor(info.data.effective_size)).item()
 
         metrics.aic = 2 * metrics.nloglik_pen + aic_pen
         metrics.bic = 2 * metrics.nloglik_pen + bic_pen
@@ -85,7 +88,7 @@ class ComputeEBEs(Job):
     ebes: Tensor2D
 
     def init(self, info: Info):
-        self.ebes = torch.zeros(info.sampler.state.shape[1:], dtype=torch.float32)
+        self.ebes = torch.zeros(info.sampler.state.shape[1:])
 
     def run(self, info: Info):
         self.ebes += info.b.detach().mean(dim=0)

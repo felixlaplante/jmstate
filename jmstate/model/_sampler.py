@@ -1,10 +1,17 @@
-from typing import Any, Callable, SupportsFloat
+from typing import Any, Callable
 
 import torch
 from tqdm import trange
 
-from ..typedefs._defs import Tensor0D, Tensor1D, Tensor2D, Tensor3D
-from ..utils._checks import check_sampler
+from ..typedefs._defs import (
+    IntPositive,
+    NumPositive,
+    NumProbability,
+    Tensor0D,
+    Tensor1D,
+    Tensor2D,
+    Tensor3D,
+)
 
 
 class MetropolisHastingsSampler:
@@ -12,9 +19,9 @@ class MetropolisHastingsSampler:
 
     logpdf_aux: Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]]
     init_state: Tensor3D
-    n_chains: int
-    adapt_rate: float
-    target_accept_rate: float
+    n_chains: IntPositive
+    adapt_rate: NumPositive
+    target_accept_rate: NumProbability
     state: Tensor3D
     logpdf: Tensor2D
     aux: tuple[torch.Tensor, ...]
@@ -26,25 +33,25 @@ class MetropolisHastingsSampler:
         self,
         logpdf_aux_fn: Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]],
         init_state: Tensor3D,
-        n_chains: int,
-        init_step_size: SupportsFloat,
-        adapt_rate: SupportsFloat,
-        target_accept_rate: SupportsFloat,
+        n_chains: IntPositive,
+        init_step_size: NumPositive,
+        adapt_rate: NumPositive,
+        target_accept_rate: NumProbability,
     ):
         """Initialize the Metropolis-Hastings sampler kernel.
 
         Args:
             logpdf_aux_fn (Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]]): logpdf function.
             init_state (Tensor3D): Starting state for the chain.
-            n_chains (int): The number of parallel chains to spawn.
-            init_step_size (SupportsFloat): Kernel step in Metropolis Hastings.
-            adapt_rate (SupportsFloat): Adaptation rate for the step_size.
-            target_accept_rate (SupportsFloat): Mean acceptance target.
+            n_chains (IntPositive): The number of parallel chains to spawn.
+            init_step_size (NumPositive): Kernel step in Metropolis Hastings.
+            adapt_rate (NumPositive): Adaptation rate for the step_size.
+            target_accept_rate (NumProbability): Mean acceptance target.
         """
         self.logpdf_aux_fn = logpdf_aux_fn
         self.n_chains = n_chains
-        self.adapt_rate = float(adapt_rate)
-        self.target_accept_rate = float(target_accept_rate)
+        self.adapt_rate = adapt_rate
+        self.target_accept_rate = target_accept_rate
 
         # Initialize state
         self.init_state = init_state.clone()
@@ -57,20 +64,11 @@ class MetropolisHastingsSampler:
         self._noise = torch.empty_like(self.state)
 
         # Steps initialization
-        self.step_sizes = torch.full(
-            (init_state.size(-2),), float(init_step_size), dtype=torch.float32
-        )
+        self.step_sizes = torch.full((init_state.size(-2),), init_step_size)
 
         # Statistics tracking
         self.n_samples = torch.tensor(0, dtype=torch.int64)
-        self.n_accepted = torch.zeros((init_state.shape[-2],), dtype=torch.float32)
-
-        check_sampler(
-            self.n_chains,
-            self.step_sizes[0].item(),
-            self.adapt_rate,
-            self.target_accept_rate,
-        )
+        self.n_accepted = torch.zeros(init_state.shape[-2])
 
     @torch.no_grad()  # type: ignore
     def step(self) -> tuple[Tensor2D, tuple[torch.Tensor, ...]]:
@@ -98,7 +96,7 @@ class MetropolisHastingsSampler:
 
         # Update statistics
         self.n_samples += 1
-        self.n_accepted += accept_mask.float().mean(dim=0)
+        self.n_accepted += accept_mask.to(torch.get_default_dtype()).mean(dim=0)
 
         self._adapt_step_sizes(accept_mask)
 
@@ -106,7 +104,8 @@ class MetropolisHastingsSampler:
 
     def _adapt_step_sizes(self, accept_mask: Tensor1D):
         adaptation = (
-            accept_mask.float().mean(dim=0) - self.target_accept_rate
+            accept_mask.to(torch.get_default_dtype()).mean(dim=0)
+            - self.target_accept_rate
         ) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 

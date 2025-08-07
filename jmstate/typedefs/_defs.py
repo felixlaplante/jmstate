@@ -24,6 +24,11 @@ if TYPE_CHECKING:
     from ._params import ModelParams
 
 
+# Type Aliases
+Trajectory: TypeAlias = list[tuple[float, Any]]
+Num = int | float
+
+
 # Beartype checks
 Tensor0D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 0]]  # type: ignore
 Tensor1D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 1]]  # type: ignore
@@ -32,10 +37,11 @@ Tensor3D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 3]]  # type: ignore
 Tensor4D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 4]]  # type: ignore
 TensorRow = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(0) == 1]]  # type: ignore
 TensorCol = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(1) == 1]]  # type: ignore
-
-
-# Type Aliases
-Trajectory: TypeAlias = list[tuple[float, Any]]
+IntPositive = Annotated[int, Is[lambda i: i >= 0]]  # type: ignore
+IntStrictlyPositive = Annotated[int, Is[lambda i: i > 0]]  # type: ignore
+NumPositive = Annotated[Num, Is[lambda i: i >= 0]]  # type: ignore
+NumStrictlyPositive = Annotated[Num, Is[lambda i: i > 0]]  # type: ignore
+NumProbability = Annotated[Num, Is[lambda i: 0 <= i <= 1]]  # type: ignore
 
 
 # Protocols
@@ -62,18 +68,18 @@ class IndividualEffectsFn(Protocol):
 
 @runtime_checkable
 class BaseHazardFn(Protocol):
-    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
+    def __call__(self, t0: TensorCol, t1: Tensor2D) -> torch.Tensor: ...
 
 
 @runtime_checkable
 class ClockMethod(Protocol):
-    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
+    def __call__(self, t0: TensorCol, t1: Tensor2D) -> torch.Tensor: ...
 
 
 # Named tuples
 class MatRepr(NamedTuple):
     flat: Tensor1D
-    dim: int
+    dim: IntStrictlyPositive
     method: str
 
 
@@ -146,4 +152,4 @@ class Job(ABC):
 
 
 # Constants
-LOGTWOPI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi, dtype=torch.float32))
+LOGTWOPI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi))

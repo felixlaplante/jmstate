@@ -1,10 +1,18 @@
 import warnings
-from typing import SupportsFloat
 
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Info, Job, Metrics, Tensor1D
+from ..typedefs._defs import (
+    Info,
+    IntPositive,
+    IntStrictlyPositive,
+    Job,
+    Metrics,
+    NumPositive,
+    NumProbability,
+    Tensor1D,
+)
 
 # Constants
 DEFAULT_NOT_CONVERGED_WARNING = (
@@ -16,39 +24,32 @@ DEFAULT_NOT_CONVERGED_WARNING = (
 class GradStop(Job):
     """Job to test the convergence."""
 
-    atol: float | Tensor1D
-    rtol: float | Tensor1D
-    min_consecutive: int
-    betas: tuple[float, float]
+    atol: NumPositive | Tensor1D
+    rtol: NumPositive | Tensor1D
+    min_consecutive: IntStrictlyPositive
+    betas: tuple[NumProbability, NumProbability]
     m: Tensor1D
     v: Tensor1D
-    n_consecutive: int
+    n_consecutive: IntPositive
     stopped: bool
 
     @beartype
     def __init__(
         self,
-        atol: SupportsFloat | Tensor1D = 0.01,
-        rtol: SupportsFloat | Tensor1D = 0.01,
-        min_consecutive: int = 20,
-        betas: tuple[SupportsFloat, SupportsFloat] = (0.9, 0.999),
+        atol: NumPositive | Tensor1D = 0.01,
+        rtol: NumPositive | Tensor1D = 0.01,
+        min_consecutive: IntStrictlyPositive = 20,
+        betas: tuple[NumProbability, NumProbability] = (0.9, 0.999),
     ):
-        self.atol = atol if isinstance(atol, torch.Tensor) else float(atol)
-        self.rtol = rtol if isinstance(rtol, torch.Tensor) else float(rtol)
+        self.atol = atol
+        self.rtol = rtol
         self.min_consecutive = min_consecutive
-        self.betas = (float(betas[0]), float(betas[1]))
+        self.betas = betas
 
-        if (isinstance(atol, torch.Tensor) and (self.atol < 0).any()) or self.atol < 0:  # type: ignore
+        if isinstance(atol, torch.Tensor) and (self.atol < 0).any():  # type: ignore
             raise ValueError(f"atol must be all positive, got {self.atol}")
-        if (isinstance(rtol, torch.Tensor) and (self.rtol < 0).any()) or self.rtol < 0:  # type: ignore
+        if isinstance(rtol, torch.Tensor) and (self.rtol < 0).any():  # type: ignore
             raise ValueError(f"rtol must be all positive, got {self.rtol}")
-        if self.min_consecutive < 1:
-            raise ValueError(
-                f"min_consecutive must be greater or equal to one, got {self.min_consecutive}"
-            )
-        for beta in self.betas:
-            if not 0 <= beta < 1:
-                raise ValueError(f"betas must be in [0, 1), got {self.betas}")
 
         self.n_consecutive = 0
         self.stopped = False
@@ -58,8 +59,8 @@ class GradStop(Job):
             raise ValueError("Optimizer must be set for GradStop")
 
         d = info.model.params_.numel
-        self.m = torch.zeros(d, dtype=torch.float32)
-        self.v = torch.zeros(d, dtype=torch.float32)
+        self.m = torch.zeros(d)
+        self.v = torch.zeros(d)
 
     def run(self, info: Info) -> bool | None:
         grads_list: list[torch.Tensor] = []
@@ -97,43 +98,37 @@ class GradStop(Job):
 class ValueStop(Job):
     """Job to test the convergence."""
 
-    atol: float | Tensor1D
-    rtol: float | Tensor1D
-    min_consecutive: int
-    beta: float
+    atol: NumPositive | Tensor1D
+    rtol: NumPositive | Tensor1D
+    min_consecutive: IntStrictlyPositive
+    beta: NumProbability
     p: Tensor1D
-    n_consecutive: int
+    n_consecutive: IntPositive
     stopped: bool
 
     @beartype
     def __init__(
         self,
-        atol: SupportsFloat | Tensor1D = 0.01,
-        rtol: SupportsFloat | Tensor1D = 0.01,
-        min_consecutive: int = 20,
-        beta: SupportsFloat = 0.9,
+        atol: NumPositive | Tensor1D = 0.01,
+        rtol: NumPositive | Tensor1D = 0.01,
+        min_consecutive: IntStrictlyPositive = 20,
+        beta: NumProbability = 0.9,
     ):
-        self.atol = atol if isinstance(atol, torch.Tensor) else float(atol)
-        self.rtol = rtol if isinstance(rtol, torch.Tensor) else float(rtol)
+        self.atol = atol
+        self.rtol = rtol
         self.min_consecutive = min_consecutive
-        self.beta = float(beta)
+        self.beta = beta
 
-        if (isinstance(atol, torch.Tensor) and (self.atol < 0).any()) or self.atol < 0:  # type: ignore
+        if isinstance(atol, torch.Tensor) and (self.atol < 0).any():  # type: ignore
             raise ValueError(f"atol must be all positive, got {self.atol}")
-        if (isinstance(rtol, torch.Tensor) and (self.rtol < 0).any()) or self.rtol < 0:  # type: ignore
+        if isinstance(rtol, torch.Tensor) and (self.rtol < 0).any():  # type: ignore
             raise ValueError(f"rtol must be all positive, got {self.rtol}")
-        if self.min_consecutive < 1:
-            raise ValueError(
-                f"min_consecutive must be greater or equal to one, got {self.min_consecutive}"
-            )
-        if not 0 <= self.beta < 1:
-            raise ValueError(f"beta must be in [0, 1), got {self.beta}")
 
         self.n_consecutive = 0
         self.stopped = False
 
     def init(self, info: Info):
-        self.p = torch.zeros(info.model.params_.numel, dtype=torch.float32)
+        self.p = torch.zeros(info.model.params_.numel)
 
     def run(self, info: Info) -> bool | None:
         params = info.model.params_.as_flat_tensor
