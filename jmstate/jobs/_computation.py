@@ -11,7 +11,7 @@ from ..typedefs._defs import (
     Tensor2D,
     Tensor3D,
 )
-from ..utils._misc import params_like_from_flat
+from ..typedefs._params import params_like_from_flat
 
 
 class ComputeFIM(Job):

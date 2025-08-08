@@ -19,8 +19,9 @@ DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Ada
 class _BaseFit(Job, ABC):
     """Base job to fit the model."""
 
-    optimizer_factory: type[torch.optim.Optimizer]
-    optimizer: torch.optim.Optimizer
+    opt_factory: type[torch.optim.Optimizer]
+    fit_extra: bool
+    opt: torch.optim.Optimizer
     kwargs: Any
 
     default_opt_factory: type[torch.optim.Optimizer]
@@ -29,23 +30,28 @@ class _BaseFit(Job, ABC):
     @beartype
     def __init__(
         self,
-        optimizer_factory: type[torch.optim.Optimizer] | None = None,
+        opt_factory: type[torch.optim.Optimizer] | None = None,
+        fit_extra: bool = True,
         **kwargs: Any,
     ):
-        self.optimizer_factory = optimizer_factory or self.default_opt_factory
+        self.opt_factory = opt_factory or self.default_opt_factory
+        self.fit_extra = fit_extra
         self.kwargs = kwargs
 
     def init(self, info: Info):
         info.model.data = info.data
         info.model.params_.requires_grad_(True)
+        if self.fit_extra:
+            info.model.params_.extra_requires_grad_(True)
 
         param_groups = [
-            {
-                "params": val,
-                "group": key,
-            }
-            for key, val in info.model.params_.as_groups.items()
+            {"params": params, "group": name}
+            for name, params in info.model.params_.as_groups.items()
         ]
+
+        extra = info.model.params_.extra
+        if extra is not None and self.fit_extra:
+            param_groups.append({"params": extra, "group": "extra"})
 
         param_list = list(
             itertools.chain.from_iterable(
@@ -53,14 +59,14 @@ class _BaseFit(Job, ABC):
             )
         )
 
-        self.optimizer = self.optimizer_factory(
-            param_list if self.optimizer_factory in NO_GROUPS_OPT else param_groups,
+        self.opt = self.opt_factory(
+            param_list if self.opt_factory in NO_GROUPS_OPT else param_groups,
             **self.kwargs,
         )
-        info.optimizer = self.optimizer
+        info.opt = self.opt
 
     def run(self, info: Info):
-        self.optimizer.step(lambda: self.closure(info))  # type: ignore
+        self.opt.step(lambda: self.closure(info))  # type: ignore
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         params_flat_tensor = info.model.params_.as_flat_tensor
@@ -71,6 +77,9 @@ class _BaseFit(Job, ABC):
             warnings.warn("Error infering model parameters", stacklevel=2)
 
         info.model.params_.requires_grad_(False)
+        if self.fit_extra:
+            info.model.params_.extra_requires_grad_(False)
+
         info.model.fit_ = info.model.fit_ or self.is_fitting
 
     @abstractmethod
@@ -85,7 +94,7 @@ class DeterministicFit(_BaseFit):
     is_fitting: bool = False
 
     def closure(self, info: Info) -> Tensor0D:
-        self.optimizer.zero_grad()  # type: ignore
+        self.opt.zero_grad()  # type: ignore
         logliks = info.logliks_fn(info.model.params_, info.b)
         loss = (
             -logliks.mean() + info.model.pen(info.model.params_)
@@ -103,7 +112,7 @@ class RandomFit(_BaseFit):
     is_fitting: bool = True
 
     def closure(self, info: Info) -> Tensor0D:
-        self.optimizer.zero_grad()  # type: ignore
+        self.opt.zero_grad()  # type: ignore
         logpdfs = info.logpdfs_fn(info.model.params_, info.b)
         loss = (
             -logpdfs.mean() + info.model.pen(info.model.params_)
@@ -117,27 +126,27 @@ class RandomFit(_BaseFit):
 class Scheduling(Job):
     """Job to run a scheduler during the optimization."""
 
-    scheduler_factory: type[torch.optim.lr_scheduler.LRScheduler]
-    scheduler: torch.optim.lr_scheduler.LRScheduler
+    sched_factory: type[torch.optim.lr_scheduler.LRScheduler]
+    sched: torch.optim.lr_scheduler.LRScheduler
     kwargs: Any
 
     @beartype
     def __init__(
         self,
-        scheduler_factory: type[torch.optim.lr_scheduler.LRScheduler],
+        sched_factory: type[torch.optim.lr_scheduler.LRScheduler],
         **kwargs: Any,
     ):
-        self.scheduler_factory = scheduler_factory
+        self.sched_factory = sched_factory
         self.kwargs = kwargs
 
     def init(self, info: Info):
-        if not hasattr(info, "optimizer"):
+        if not hasattr(info, "opt"):
             raise ValueError("Optimizer must be initialized before scheduler")
 
-        self.scheduler = self.scheduler_factory(info.optimizer, **self.kwargs)
+        self.sched = self.sched_factory(info.opt, **self.kwargs)
 
     def run(self, info: Info):  # noqa: ARG002
-        self.scheduler.step()
+        self.sched.step()
 
     def end(self, info: Info, metrics: Metrics):
         pass

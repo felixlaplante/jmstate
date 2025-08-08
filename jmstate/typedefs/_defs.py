@@ -116,7 +116,7 @@ class Info(SimpleNamespace):
     max_iterations: int
     model: MultiStateJointModel
     sampler: MetropolisHastingsSampler
-    optimizer: torch.optim.Optimizer
+    opt: torch.optim.Optimizer
     b: Tensor3D
     logliks: Tensor2D
     psi: Tensor3D

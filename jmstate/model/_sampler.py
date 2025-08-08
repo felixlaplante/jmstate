@@ -116,7 +116,7 @@ class MetropolisHastingsSampler:
             n_steps (int): The number of steps.
         """
         state = self.init_state
-        aux = tuple(torch.zeros_like(tensor, device="meta") for tensor in self.aux)
+        aux = tuple(torch.zeros_like(t, device="meta") for t in self.aux)
 
         for _ in range(n_steps):
             state, aux = self.step()

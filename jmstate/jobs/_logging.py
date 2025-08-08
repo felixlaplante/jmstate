@@ -1,8 +1,7 @@
 from typing import Any
 
 from ..typedefs._defs import Info, Job, Metrics
-from ..typedefs._params import ModelParams
-from ..utils._misc import params_like_from_flat
+from ..typedefs._params import ModelParams, params_like_from_flat
 
 
 class LogParamsHistory(Job):

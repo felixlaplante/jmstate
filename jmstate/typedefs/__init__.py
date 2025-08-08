@@ -13,7 +13,7 @@ from ._defs import (
     RegressionFn,
     Trajectory,
 )
-from ._params import ModelParams
+from ._params import ModelParams, params_like_from_flat
 
 __all__ = [
     "DEFAULT_HYPERPARAMETERS",
@@ -32,4 +32,5 @@ __all__ = [
     "RegressionFn",
     "SampleData",
     "Trajectory",
+    "params_like_from_flat",
 ]

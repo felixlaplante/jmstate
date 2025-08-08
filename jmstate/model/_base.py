@@ -19,9 +19,9 @@ from ..typedefs._defs import (
     Tensor2D,
     Tensor3D,
 )
-from ..typedefs._params import ModelParams
+from ..typedefs._params import ModelParams, params_like_from_flat
 from ..utils._linalg import get_cholesky_and_log_eigvals
-from ..utils._misc import params_like_from_flat, run_jobs
+from ..utils._misc import run_jobs
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._sampler import MetropolisHastingsSampler
@@ -72,7 +72,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         """
         # Store model components
         self.model_design = model_design
-        self.params_ = copy.deepcopy(init_params)
+        memo = (
+            None if init_params.extra is None else {id(p): p for p in init_params.extra}
+        )
+        self.params_ = copy.deepcopy(init_params, memo)
 
         # Store penalization
         self.pen = pen
