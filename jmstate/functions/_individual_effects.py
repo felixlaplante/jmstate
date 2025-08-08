@@ -5,7 +5,7 @@ from ..typedefs._defs import Tensor2D, Tensor3D
 
 def gamma_x_plus_b(
     gamma: torch.Tensor, x: Tensor2D, b: Tensor2D | Tensor3D
-) -> torch.Tensor:
+) -> Tensor2D | Tensor3D:
     """The standard linear transformation x @ gamma + b.
 
     Args:
