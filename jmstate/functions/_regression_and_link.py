@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import Callable
 
 import torch
@@ -83,6 +84,29 @@ class Perceptron:
         y = torch.einsum("...h,...mh->...m", h, W2) + b2
         return self.output_activation(y)
 
-    @property
-    def dim(self):
+    @cached_property
+    def dim(self) -> IntStrictlyPositive:
+        """Returns the dimension of the neural network.
+
+        Returns:
+            IntStrictlyPositive: The dimension.
+        """
         return self.hidden_dim * (2 + self.output_dim) + self.output_dim
+
+    def glorot_init(self) -> Tensor1D:
+        """Returns the initialization values for the weights and biases.
+
+        Returns:
+            Tensor1D: The initial values.
+        """
+        bound_W1 = torch.sqrt(torch.tensor(6.0 / (1 + self.hidden_dim))).item()
+        W1 = torch.empty(self.hidden_dim).uniform_(-bound_W1, bound_W1)
+        b1 = torch.zeros_like(W1)
+
+        bound_W2 = torch.sqrt(
+            torch.tensor(6.0 / (self.hidden_dim + self.output_dim))
+        ).item()
+        W2 = torch.empty(self.output_dim, self.hidden_dim).uniform_(-bound_W2, bound_W2)
+        b2 = torch.zeros(self.output_dim)
+
+        return torch.cat([W1.view(-1), b1.view(-1), W2.view(-1), b2.view(-1)], dim=0)
