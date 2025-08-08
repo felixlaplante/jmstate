@@ -1,5 +1,6 @@
 import warnings
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any
 
 import torch
@@ -9,9 +10,10 @@ from ..utils._checks import (
     check_consistent_size,
     check_inf,
     check_trajectory_c,
+    check_trajectory_empty,
     check_trajectory_sorting,
 )
-from ..utils._surv import build_vec_rep
+from ..utils._surv import build_traj_repr
 from ._defs import (
     BaseHazardFn,
     IndividualEffectsFn,
@@ -23,7 +25,7 @@ from ._defs import (
     Tensor3D,
     TensorCol,
     Trajectory,
-    VecRepr,
+    TrajRepr,
 )
 from ._params import ModelParams
 
@@ -81,16 +83,18 @@ class ModelData:
         self.y = self.y.to(torch.get_default_dtype())
         self.c = self.c.to(torch.get_default_dtype())
 
+        check_inf((self.x, self.t, self.y, self.c))
+        check_consistent_size(((self.x, 0), (self.y, 0), (self.c, 0)), self.size)
+        check_consistent_size(((self.t, -1), (self.y, -2)))
+        check_trajectory_empty(self.trajectories)
+        check_trajectory_sorting(self.trajectories)
+        check_trajectory_c(self.trajectories, self.c)
+
         # Check NaNs
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
             raise ValueError("NaN time values on non NaN y values")
 
-        check_inf((self.x, self.t, self.y, self.c))
-        check_consistent_size((self.x, self.y, self.c), (0, 0, 0), self.size)
-        check_trajectory_sorting(self.trajectories)
-        check_trajectory_c(self.trajectories, self.c)
-
-    @property
+    @cached_property
     def size(self) -> IntPositive:
         """Gets the number of individuals.
 
@@ -99,7 +103,7 @@ class ModelData:
         """
         return len(self.trajectories)
 
-    @property
+    @cached_property
     def effective_size(self) -> IntPositive:
         """Gets the effective size of the dataset, used for BIC.
 
@@ -118,7 +122,7 @@ class CompleteModelData(ModelData):
     n_valid: Tensor2D = field(init=False)
     valid_t: Tensor1D | Tensor2D = field(init=False)
     valid_y: Tensor2D | Tensor3D = field(init=False)
-    buckets: dict[tuple[Any, Any], VecRepr] = field(init=False)
+    buckets: dict[tuple[Any, Any], TrajRepr] = field(init=False)
 
     def init(self, model_design: ModelDesign, params: ModelParams):
         """Sets the missing representation.
@@ -150,7 +154,7 @@ class CompleteModelData(ModelData):
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = torch.nan_to_num(self.t)
         self.valid_y = torch.nan_to_num(self.y)
-        self.buckets = build_vec_rep(self.trajectories, self.c, model_design.surv)
+        self.buckets = build_traj_repr(self.trajectories, self.c, model_design.surv)
 
 
 @beartype
@@ -181,11 +185,12 @@ class SampleData:
         self.c = None if self.c is None else self.c.to(torch.get_default_dtype())
 
         check_inf((self.c, self.x, self.psi))
-        check_consistent_size((self.x, self.psi, self.c), (0, -2, 0), self.size)
+        check_consistent_size(((self.x, -2), (self.psi, -2), (self.c, -2)), self.size)
+        check_trajectory_empty(self.trajectories)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
 
-    @property
+    @cached_property
     def size(self) -> IntPositive:
         """Gets the number of individuals.
 

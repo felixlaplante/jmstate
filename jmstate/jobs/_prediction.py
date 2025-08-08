@@ -21,7 +21,7 @@ from ..utils._checks import check_consistent_size
 class PredictY(Job):
     """Job to predict longitudinal values."""
 
-    u: torch.Tensor
+    u: Tensor2D
     pred_y: list[Tensor3D]
 
     @beartype
@@ -30,7 +30,7 @@ class PredictY(Job):
         self.pred_y = []
 
     def init(self, info: Info):
-        check_consistent_size((self.u,), (0,), info.data.size)
+        check_consistent_size(((self.u, 0),), info.data.size)
 
     def run(self, info: Info):
         y = info.model.model_design.regression_fn(self.u, info.psi.detach())
@@ -43,7 +43,7 @@ class PredictY(Job):
 class PredictSurvLogps(Job):
     """Job to predict survival log probability values."""
 
-    u: torch.Tensor
+    u: Tensor2D
     pred_surv_logps: list[Tensor2D]
 
     @beartype
@@ -88,7 +88,7 @@ class PredictTrajectories(Job):
         self.pred_trajectories = []
 
     def init(self, info: Info):
-        check_consistent_size((self.c_max,), (0,), info.data.size)
+        check_consistent_size(((self.c_max, 0),), info.data.size)
 
     def run(self, info: Info):
         for i in range(info.psi.size(0)):

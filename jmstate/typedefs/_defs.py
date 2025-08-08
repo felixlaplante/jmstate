@@ -89,7 +89,7 @@ class BucketData(NamedTuple):
     t1: TensorCol
 
 
-class VecRepr(NamedTuple):
+class TrajRepr(NamedTuple):
     idxs: Tensor1D
     t0: TensorCol
     t1: TensorCol

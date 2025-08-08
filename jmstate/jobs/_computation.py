@@ -5,7 +5,6 @@ import torch
 
 from ..typedefs._defs import (
     Info,
-    IntPositive,
     Job,
     Metrics,
     Tensor1D,
@@ -54,14 +53,10 @@ class ComputeFIM(Job):
 class ComputeCriteria(Job):
     """Job to compute AIC, BIC and Log Likelihood."""
 
-    n: IntPositive
     loglik: float
 
     def __init__(self):
         self.loglik = 0.0
-
-    def init(self, info: Info):
-        self.n = info.data.size
 
     def run(self, info: Info):
         self.loglik += info.logliks.detach().sum().item() / info.sampler.n_chains
@@ -69,7 +64,7 @@ class ComputeCriteria(Job):
     def end(self, info: Info, metrics: Metrics):
         metrics.loglik = self.loglik / info.iteration
         metrics.nloglik_pen = (
-            self.n * info.model.pen(info.model.params_).item() - metrics.loglik
+            info.data.size * info.model.pen(info.model.params_).item() - metrics.loglik
             if info.model.pen is not None
             else -metrics.loglik
         )

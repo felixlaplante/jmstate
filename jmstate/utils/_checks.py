@@ -3,10 +3,7 @@ import itertools
 import torch
 
 from ..typedefs._defs import (
-    IntPositive,
     MatRepr,
-    Tensor2D,
-    Tensor3D,
     TensorCol,
     Trajectory,
 )
@@ -26,25 +23,39 @@ def check_inf(tensors: tuple[torch.Tensor | None, ...]):
 
 
 def check_consistent_size(
-    tensors: tuple[Tensor2D | Tensor3D | None, ...],
-    dims: tuple[int, ...],
-    n: IntPositive,
+    groups: tuple[tuple[torch.Tensor | None, int], ...],
+    ref: int | None = None,
 ):
-    """Checks it the number of individuals is consistent.
+    """Checks if all the tensors are consistent in size.
 
     Args:
-        tensors (tuple[Tensor2D | Tensor3D | None, ...]): The tensors to check.
-        dims (tuple[int, ...]): The dimensions to check.
-        n (IntPositive): The expected size.
+        groups (tuple[tuple[torch.Tensor  |  None, int], ...]): The tuple of tensors.
+        ref (int | None, optional): The regerence or None. Defaults to None.
 
     Raises:
-        ValueError: If the number of inconsistent.
+        ValueError: If the sizes are inconsistent.
+        ValueError: If the size does not match the reference.
     """
-    if any(
-        tensor is not None and tensor.size(dim) != n
-        for tensor, dim in zip(tensors, dims)
-    ):
-        raise ValueError("Inconsistent number of individuals")
+    sizes = {t.size(d) for t, d in groups if t is not None}
+    if len(sizes) > 1:
+        raise ValueError(f"Incoherent dimension, found sizes: {sorted(sizes)}")
+    if ref is not None and ref not in sizes:
+        raise ValueError(
+            f"Tensor sizes {sizes} don't match the reference dimension {ref}"
+        )
+
+
+def check_trajectory_empty(trajectories: list[Trajectory]):
+    """Check if the trajectories are not empty.
+
+    Args:
+        trajectories (list[Trajectory]): The trajectories.
+
+    Raises:
+        ValueError: If some trajectory is empty.
+    """
+    if any(len(trajectory) == 0 for trajectory in trajectories):
+        raise ValueError("Trajectories must not be empty")
 
 
 def check_trajectory_sorting(trajectories: list[Trajectory]):

@@ -1,5 +1,6 @@
 import itertools
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any
 
 import torch
@@ -75,7 +76,7 @@ class ModelParams:
         """
         return torch.cat([p.detach().view(-1) for p in self.as_list])
 
-    @property
+    @cached_property
     def numel(self) -> IntPositive:
         """Return the number of parameters.
 

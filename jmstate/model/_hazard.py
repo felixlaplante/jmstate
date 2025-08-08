@@ -19,7 +19,7 @@ from ..typedefs._defs import (
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_consistent_size
 from ..utils._misc import legendre_quad
-from ..utils._surv import build_vec_rep
+from ..utils._surv import build_traj_repr
 from ._cache import Cache
 
 # Constants
@@ -264,7 +264,7 @@ class HazardMixin:
 
         # Get initial buckets from last states
         last_states = [trajectory[-1:] for trajectory in trajectories]
-        current_buckets = build_vec_rep(last_states, c_max, self.model_design.surv)
+        current_buckets = build_traj_repr(last_states, c_max, self.model_design.surv)
 
         if not current_buckets:
             return False
@@ -329,7 +329,7 @@ class HazardMixin:
         """
         # Convert and check if c_max matches the right shape
         c_max = c_max.to(torch.get_default_dtype())
-        check_consistent_size((c_max,), (0,), sample_data.size)
+        check_consistent_size(((c_max, 0),), sample_data.size)
 
         # Initialize with copies of current trajectories
         trajectories_copied = [
@@ -370,15 +370,15 @@ class HazardMixin:
         """
         # Unpack data
         u = u.to(torch.get_default_dtype())
+        check_consistent_size(((u, 0),), sample_data.size)
+
         x = sample_data.x
         trajectories = sample_data.trajectories
         psi = sample_data.psi
         c = sample_data.c
 
-        check_consistent_size((u,), (0,), sample_data.size)
-
         last_states = [trajectory[-1:] for trajectory in trajectories]
-        buckets = build_vec_rep(
+        buckets = build_traj_repr(
             last_states,
             torch.full((sample_data.size,), torch.inf),
             self.model_design.surv,
