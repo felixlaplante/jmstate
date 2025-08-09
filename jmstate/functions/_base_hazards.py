@@ -87,7 +87,6 @@ class Weibull:
         self.lmda = torch.tensor(lmda, dtype=torch.get_default_dtype())
         self.clock_method = clock_method
 
-        # Checks
         if self.k <= 0:
             raise ValueError(f"k must be strictly positive, got {self.k}")
         if self.lmda <= 0:
