@@ -109,7 +109,7 @@ class Net(nn.Module):
                         create_graph=psi.requires_grad or i < max_deg - 1,
                     )
 
-            cat = torch.cat(outputs, -1)
-            return cat if psi.requires_grad else cat.detach()
+            outputs = torch.cat(outputs, dim=-1)
+            return outputs if psi.requires_grad else outputs.detach()
 
         return _derivatives
