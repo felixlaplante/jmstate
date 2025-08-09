@@ -1,7 +1,18 @@
+import warnings
+
 import torch
+from beartype import beartype
 from torch import nn
 
-from ..typedefs._defs import Tensor1D, Tensor2D, Tensor3D, Tensor4D
+from ..typedefs._defs import (
+    IntPositive,
+    LinkFn,
+    RegressionFn,
+    Tensor1D,
+    Tensor2D,
+    Tensor3D,
+    Tensor4D,
+)
 
 
 def linear(t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D) -> Tensor3D | Tensor4D:
@@ -36,6 +47,7 @@ class Net(nn.Module):
 
     net: nn.Module
 
+    @beartype
     def __init__(self, net: nn.Module):
         super().__init__()  # type: ignore
         self.net = net
@@ -57,3 +69,47 @@ class Net(nn.Module):
         t_ext = t.unsqueeze(-1).expand(*psi_ext.shape[:-1], 1)
         x = torch.cat([t_ext, psi_ext], dim=-1)
         return self.net(x)
+
+    @beartype
+    def derivatives(self, degs: tuple[IntPositive, ...]) -> RegressionFn | LinkFn:
+        """Gets a function returning multiple derivatives of the neural network.
+
+        Args:
+            degs (tuple[IntPositive, ...]): The degrees.
+
+        Returns:
+            RegressionFn | LinkFn: A regresion/link function.
+        """
+        max_deg = max(degs)
+
+        if max_deg < 1:
+            warnings.warn(
+                "Do not use derivatives if you do not need them, use __call__ instead",
+                stacklevel=2,
+            )
+
+        @torch.enable_grad()  # type: ignore
+        def _derivatives(
+            t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D
+        ) -> Tensor3D | Tensor4D:
+            psi_ext = psi.unsqueeze(-2).expand(*psi.shape[:-1], t.size(-1), -1)
+            t_ext = t.unsqueeze(-1).expand(*psi_ext.shape[:-1], 1).requires_grad_()
+            x = torch.cat([t_ext, psi_ext], dim=-1)
+            y = self.net(x)
+
+            outputs: list[Tensor3D | Tensor4D] = []
+            for i in range(max_deg + 1):
+                if i in degs:
+                    outputs.append(y)
+                if i < max_deg:
+                    y, *_ = torch.autograd.grad(
+                        y,
+                        t_ext,
+                        torch.ones_like(y),
+                        create_graph=psi.requires_grad or i < max_deg - 1,
+                    )
+
+            cat = torch.cat(outputs, -1)
+            return cat if psi.requires_grad else cat.detach()
+
+        return _derivatives

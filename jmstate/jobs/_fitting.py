@@ -10,9 +10,7 @@ from ..typedefs._defs import Info, Job, Metrics, Tensor0D
 
 # Constants
 NO_GROUPS_OPT: Final[tuple[type[torch.optim.Optimizer], ...]] = (torch.optim.LBFGS,)
-DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = (
-    torch.optim.LBFGS
-)
+DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
 DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
 
 
