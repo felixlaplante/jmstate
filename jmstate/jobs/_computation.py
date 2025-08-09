@@ -58,6 +58,9 @@ class ComputeCriteria(Job):
     def __init__(self):
         self.loglik = 0.0
 
+    def init(self, info: Info):
+        pass
+
     def run(self, info: Info):
         self.loglik += info.logliks.detach().sum().item() / info.sampler.n_chains
 
