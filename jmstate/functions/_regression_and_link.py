@@ -1,5 +1,3 @@
-import warnings
-
 import torch
 from beartype import beartype
 from torch import nn
@@ -81,12 +79,6 @@ class Net(nn.Module):
             RegressionFn | LinkFn: A regresion/link function.
         """
         max_deg = max(degs)
-
-        if max_deg < 1:
-            warnings.warn(
-                "Do not use derivatives if you do not need them, use __call__ instead",
-                stacklevel=2,
-            )
 
         @torch.enable_grad()  # type: ignore
         def _derivatives(
