@@ -92,24 +92,26 @@ class Net(nn.Module):
         def _derivatives(
             t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D
         ) -> Tensor3D | Tensor4D:
+            needs_grad = any(p.requires_grad for p in (*self.net.parameters(), t, psi))
+
             psi_ext = psi.unsqueeze(-2).expand(*psi.shape[:-1], t.size(-1), -1)
             t_ext = t.unsqueeze(-1).expand(*psi_ext.shape[:-1], 1).requires_grad_()
             x = torch.cat([t_ext, psi_ext], dim=-1)
             y = self.net(x)
 
-            outputs: list[Tensor3D | Tensor4D] = []
+            out_list: list[Tensor3D | Tensor4D] = []
             for i in range(max_deg + 1):
                 if i in degs:
-                    outputs.append(y)
+                    out_list.append(y)
                 if i < max_deg:
                     y, *_ = torch.autograd.grad(
                         y,
                         t_ext,
                         torch.ones_like(y),
-                        create_graph=psi.requires_grad or i < max_deg - 1,
+                        create_graph=needs_grad or i < max_deg - 1,
                     )
 
-            outputs = torch.cat(outputs, dim=-1)
-            return outputs if psi.requires_grad else outputs.detach()
+            out = torch.cat(out_list, dim=-1)
+            return out if needs_grad else out.detach()
 
         return _derivatives
