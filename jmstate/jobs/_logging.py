@@ -18,7 +18,7 @@ class LogParamsHistory(Job):
     def run(self, info: Info):
         self.params_history.append(
             params_like_from_flat(
-                info.model.params_, info.model.params_.as_flat_tensor.detach().clone()
+                info.model.params_, info.model.params_.as_flat_tensor
             )
         )
 
