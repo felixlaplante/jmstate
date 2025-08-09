@@ -5,38 +5,38 @@ from typing import TYPE_CHECKING, cast
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import IntStrictlyPositive, MatRepr, Tensor1D, Tensor2D
+from ..typedefs._defs import IntStrictlyPositive, MatRepr, Tensor2D
 
 if TYPE_CHECKING:
     from ..typedefs._params import ModelParams
 
 
-def _tril_from_flat(flat: Tensor1D, dim: IntStrictlyPositive) -> Tensor2D:
+def _tril_from_flat(flat: torch.Tensor, dim: IntStrictlyPositive) -> torch.Tensor:
     """Generate the lower triangular matrix associated with flat tensor.
 
     Args:
-        flat (Tensor1D): Flat tehsnro
+        flat (torch.Tensor): Flat tehsnro
         dim (IntStrictlyPositive): Dimension of the matrix.
 
     Returns:
-        Tensor2D: The lower triangular matrix.
+        torch.Tensor: The lower triangular matrix.
     """
     return torch.zeros(dim, dim).index_put_(tuple(torch.tril_indices(dim, dim)), flat)
 
 
-def _flat_from_tril(L: Tensor2D) -> Tensor1D:
+def _flat_from_tril(L: torch.Tensor) -> torch.Tensor:
     """Flatten the lower triangular part (including the diagonal) of a square matrix.
 
     Into a 1D tensor, in row-wise order.
 
     Args:
-        L (Tensor2D): Square lower-triangular matrix of shape (dim, dim).
+        L (torch.Tensor): Square lower-triangular matrix of shape (dim, dim).
 
     Raises:
         RuntimeError: If the flattening fails.
 
     Returns:
-        Tensor1D: Flattened 1D tensor containing the lower triangular entries.
+        torch.Tensor: Flattened 1D tensor containing the lower triangular entries.
     """
     dim = L.size(0)
     i, j = torch.tril_indices(dim, dim)
@@ -45,12 +45,12 @@ def _flat_from_tril(L: Tensor2D) -> Tensor1D:
 
 
 def _log_cholesky_from_flat(
-    flat: Tensor1D, dim: IntStrictlyPositive, method: str = "full"
-) -> Tensor2D:
+    flat: torch.Tensor, dim: IntStrictlyPositive, method: str = "full"
+) -> torch.Tensor:
     """Computes log cholesky from flat tensor according to choice of method.
 
     Args:
-        flat (Tensor1D): The flat tensor parameter.
+        flat (torch.Tensor): The flat tensor parameter.
         dim (IntStrictlyPositive): The dimension of the matrix.
         method (str, optional): The method, full, diagonal or ball. Defaults to "full".
 
@@ -58,7 +58,7 @@ def _log_cholesky_from_flat(
         ValueError: If the method is not in ("full", "diag", "ball").
 
     Returns:
-        Tensor2D: The log cholesky representation.
+        torch.Tensor: The log cholesky representation.
     """
     match method:
         case "full":
@@ -71,18 +71,18 @@ def _log_cholesky_from_flat(
             raise ValueError(f"Got method {method} unknown")
 
 
-def _flat_from_log_cholesky(L: Tensor2D, method: str = "full") -> Tensor1D:
+def _flat_from_log_cholesky(L: torch.Tensor, method: str = "full") -> torch.Tensor:
     """Computes flat tensor from log cholesky matrix according to choice of method.
 
     Args:
-        L (Tensor2D): The square lower triangular matrix parameter.
+        L (torch.Tensor): The square lower triangular matrix parameter.
         method (str, optional): The method, full, diagonal or ball. Defaults to "full".
 
     Raises:
         ValueError: If the method is not in ("full", "diag", "ball").
 
     Returns:
-        Tensor1D: The flat representation.
+        torch.Tensor: The flat representation.
     """
     match method:
         case "full":
@@ -108,7 +108,7 @@ def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
         ValueError: If method 'ball' and number of elements is not one.
 
     Returns:
-        Tensor2D: The covariance matrix.
+        torch.Tensor: The covariance matrix.
     """
     flat, dim, method = mat_repr
 
@@ -127,7 +127,7 @@ def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
     L.diagonal().exp_()
 
     L_inv = cast(
-        Tensor2D,
+        torch.Tensor,
         torch.linalg.solve_triangular(  # type: ignore
             L,
             torch.eye(dim),
@@ -149,14 +149,14 @@ def repr_from_cov(V: Tensor2D, method: str = "full") -> MatRepr:
     Returns:
         MatRepr: The flat representation.
     """
-    L = cast(Tensor2D, torch.linalg.cholesky(V.inverse()))  # type: ignore
+    L = cast(torch.Tensor, torch.linalg.cholesky(V.inverse()))  # type: ignore
     L.diagonal().log_()
     return MatRepr(_flat_from_log_cholesky(L, method), L.size(0), method)
 
 
 def get_cholesky_and_log_eigvals(
     params: ModelParams, matrix: str
-) -> tuple[Tensor2D, Tensor1D]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Gets Cholesky factor as well as log eigvals.
 
     Args:
@@ -164,7 +164,7 @@ def get_cholesky_and_log_eigvals(
         matrix (str): Either "Q" or "R".
 
     Returns:
-        tuple[Tensor2D, Tensor1D]: Precision matrix and log eigvals.
+        tuple[torch.Tensor, torch.Tensor]: Precision matrix and log eigvals.
     """
     # Get flat then log cholesky
     flat, dim, method = getattr(params, matrix + "_repr")

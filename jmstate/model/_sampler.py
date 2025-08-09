@@ -3,36 +3,30 @@ from typing import Any, Callable
 import torch
 from tqdm import trange
 
-from ..typedefs._defs import (
-    IntPositive,
-    NumPositive,
-    NumProbability,
-    Tensor0D,
-    Tensor1D,
-    Tensor2D,
-    Tensor3D,
-)
+from ..typedefs._defs import IntPositive, NumPositive, NumProbability
 
 
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
-    logpdf_aux: Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]]
-    init_state: Tensor3D
+    logpdf_aux: Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]
+    init_state: torch.Tensor
     n_chains: IntPositive
     adapt_rate: NumPositive
     target_accept_rate: NumProbability
-    state: Tensor3D
-    logpdf: Tensor2D
+    state: torch.Tensor
+    logpdf: torch.Tensor
     aux: tuple[torch.Tensor, ...]
-    step_sizes: Tensor1D
-    n_samples: Tensor0D
-    n_accepted: Tensor1D
+    step_sizes: torch.Tensor
+    n_samples: torch.Tensor
+    n_accepted: torch.Tensor
 
     def __init__(
         self,
-        logpdf_aux_fn: Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]],
-        init_state: Tensor3D,
+        logpdf_aux_fn: Callable[
+            [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]
+        ],
+        init_state: torch.Tensor,
         n_chains: IntPositive,
         init_step_size: NumPositive,
         adapt_rate: NumPositive,
@@ -41,8 +35,8 @@ class MetropolisHastingsSampler:
         """Initialize the Metropolis-Hastings sampler kernel.
 
         Args:
-            logpdf_aux_fn (Callable[[Tensor3D], tuple[Tensor2D, tuple[torch.Tensor, ...]]]): logpdf function.
-            init_state (Tensor3D): Starting state for the chain.
+            logpdf_aux_fn (Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]): logpdf function.
+            init_state (torch.Tensor): Starting state for the chain.
             n_chains (IntPositive): The number of parallel chains to spawn.
             init_step_size (NumPositive): Kernel step in Metropolis Hastings.
             adapt_rate (NumPositive): Adaptation rate for the step_size.
@@ -71,11 +65,11 @@ class MetropolisHastingsSampler:
         self.n_accepted = torch.zeros(init_state.shape[-2])
 
     @torch.no_grad()  # type: ignore
-    def step(self) -> tuple[Tensor2D, tuple[torch.Tensor, ...]]:
+    def step(self) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
         """Performs a single kernel step.
 
         Returns:
-            tuple[Tensor2D, tuple[torch.Tensor, ...]]: Current state and aux.
+            tuple[torch.Tensor, tuple[torch.Tensor, ...]]: Current state and aux.
         """
         # Generate proposal noise
         self._noise.uniform_(-1.0, 1.0)
@@ -102,14 +96,14 @@ class MetropolisHastingsSampler:
 
         return self.state, self.aux
 
-    def _adapt_step_sizes(self, accept_mask: Tensor1D):
+    def _adapt_step_sizes(self, accept_mask: torch.Tensor):
         adaptation = (
             accept_mask.to(torch.get_default_dtype()).mean(dim=0)
             - self.target_accept_rate
         ) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 
-    def run(self, n_steps: int) -> tuple[Tensor3D, tuple[torch.Tensor, ...]]:
+    def run(self, n_steps: int) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
         """Runs the MCMC for n_iterations.
 
         Args:
@@ -127,7 +121,7 @@ class MetropolisHastingsSampler:
         self,
         max_iterations: int,
         n_steps: int,
-        job: Callable[[Tensor3D, tuple[torch.Tensor, ...]], bool],
+        job: Callable[[torch.Tensor, tuple[torch.Tensor, ...]], bool],
         desc: str,
         verbose: bool,
     ) -> None:
@@ -146,7 +140,7 @@ class MetropolisHastingsSampler:
                 break
 
     @property
-    def acceptance_rates(self) -> Tensor1D:
+    def acceptance_rates(self) -> torch.Tensor:
         """Gets the acceptance_rate.
 
         Returns:

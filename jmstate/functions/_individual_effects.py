@@ -1,53 +1,49 @@
 import torch
 
-from ..typedefs._defs import Tensor2D, Tensor3D
 
-
-def identity(
-    gamma: torch.Tensor, x: Tensor2D, b: Tensor2D | Tensor3D
-) -> Tensor2D | Tensor3D:
+def identity(gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     """The standard linear transformation b.
 
     Args:
         gamma (torch.Tensor): The population parameters.
-        x (Tensor2D): The (fixed) covariates.
-        b (Tensor2D | Tensor3D): The random effects.
+        x (torch.Tensor): The (fixed) covariates.
+        b (torch.Tensor): The random effects.
 
     Returns:
-        Tensor2D | Tensor3D: The identity b
+        torch.Tensor: The identity b
     """
     return b
 
 
 def gamma_x_plus_b(
-    gamma: torch.Tensor, x: Tensor2D, b: Tensor2D | Tensor3D
-) -> Tensor2D | Tensor3D:
+    gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor
+) -> torch.Tensor:
     """The standard linear transformation x @ gamma + b.
 
     Args:
         gamma (torch.Tensor): The population parameters.
-        x (Tensor2D): The (fixed) covariates.
-        b (Tensor2D | Tensor3D): The random effects.
+        x (torch.Tensor): The (fixed) covariates.
+        b (torch.Tensor): The random effects.
 
     Returns:
-        Tensor2D | Tensor3D: The transformation x @ gamma + b
+        torch.Tensor: The transformation x @ gamma + b
     """
     return x @ gamma + b
 
 
 def gamma_plus_b(
     gamma: torch.Tensor,
-    x: Tensor2D,  # noqa: ARG001
-    b: Tensor2D | Tensor3D,
-) -> Tensor2D | Tensor3D:
+    x: torch.Tensor,  # noqa: ARG001
+    b: torch.Tensor,
+) -> torch.Tensor:
     """The linear transformation gamma + b.
 
     Args:
         gamma (torch.Tensor): The population parameters.
         x (torch.Tensor): The (fixed) covariates.
-        b (Tensor2D | Tensor3D): The random effects.
+        b (torch.Tensor): The random effects.
 
     Returns:
-        Tensor2D | Tensor3D: The transformation gamma + b
+        torch.Tensor: The transformation gamma + b
     """
     return gamma + b

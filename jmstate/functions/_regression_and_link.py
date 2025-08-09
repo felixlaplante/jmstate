@@ -2,39 +2,31 @@ import torch
 from beartype import beartype
 from torch import nn
 
-from ..typedefs._defs import (
-    IntPositive,
-    LinkFn,
-    RegressionFn,
-    Tensor1D,
-    Tensor2D,
-    Tensor3D,
-    Tensor4D,
-)
+from ..typedefs._defs import IntPositive, LinkFn, RegressionFn
 
 
-def linear(t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D) -> Tensor3D | Tensor4D:
+def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
     """Implements the linear transformation.
 
     Args:
-        t (Tensor1D | Tensor2D): The time points.
-        psi (Tensor2D | Tensor3D): The individual effects (parameters).
+        t (torch.Tensor): The time points.
+        psi (torch.Tensor): The individual effects (parameters).
 
     Returns:
-        Tensor3D | Tensor4D: The computed transformation.
+        torch.Tensor: The computed transformation.
     """
     return psi.unsqueeze(-2).expand(*psi.shape[:-1], t.size(-1), -1)
 
 
-def sigmoid(t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D) -> Tensor3D | Tensor4D:
+def sigmoid(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
     """Implements the sigmoid transformation.
 
     Args:
-        t (Tensor1D | Tensor2D): The time points.
-        psi (Tensor2D | Tensor3D): The individual effects (parameters).
+        t (torch.Tensor): The time points.
+        psi (torch.Tensor): The individual effects (parameters).
 
     Returns:
-        Tensor3D | Tensor4D: The computed transformation.
+        torch.Tensor: The computed transformation.
     """
     a, b, c = psi.chunk(3, dim=-1)
     return (a * torch.sigmoid((t - c) / b)).unsqueeze(-1)
@@ -51,17 +43,15 @@ class Net(nn.Module):
         self.net = net
         self.net.requires_grad_(False)
 
-    def forward(
-        self, t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D
-    ) -> Tensor3D | Tensor4D:
+    def forward(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
         """Implements the neural transformation.
 
         Args:
-            t (Tensor1D | Tensor2D): The time points.
-            psi (Tensor2D | Tensor3D): The individual effects (parameters).
+            t (torch.Tensor): The time points.
+            psi (torch.Tensor): The individual effects (parameters).
 
         Returns:
-            Tensor3D | Tensor4D: The computed transformation.
+            torch.Tensor: The computed transformation.
         """
         psi_ext = psi.unsqueeze(-2).expand(*psi.shape[:-1], t.size(-1), -1)
         t_ext = t.unsqueeze(-1).expand(*psi_ext.shape[:-1], 1)
@@ -81,16 +71,14 @@ class Net(nn.Module):
         max_deg = max(degs)
 
         @torch.enable_grad()  # type: ignore
-        def _derivatives(
-            t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D
-        ) -> Tensor3D | Tensor4D:
+        def _derivatives(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
             psi_ext = psi.unsqueeze(-2).expand(*psi.shape[:-1], t.size(-1), -1)
             t_ext = t.unsqueeze(-1).expand(*psi_ext.shape[:-1], 1).requires_grad_()
             x = torch.cat([t_ext, psi_ext], dim=-1)
             y = self.net(x)
 
             ones = torch.ones_like(y)
-            out_list: list[Tensor3D | Tensor4D] = []
+            out_list: list[torch.Tensor] = []
             for i in range(max_deg + 1):
                 if i in degs:
                     out_list.append(y)

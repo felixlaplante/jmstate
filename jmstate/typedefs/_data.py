@@ -15,10 +15,8 @@ from ..utils._checks import (
 )
 from ..utils._surv import build_traj_repr
 from ._defs import (
-    BaseHazardFn,
+    HazardFns,
     IndividualEffectsFn,
-    IntPositive,
-    LinkFn,
     RegressionFn,
     Tensor1D,
     Tensor2D,
@@ -40,10 +38,7 @@ class ModelDesign:
     regression_fn: RegressionFn
     surv: dict[
         tuple[Any, Any],
-        tuple[
-            BaseHazardFn,
-            LinkFn,
-        ],
+        HazardFns,
     ]
 
 
@@ -95,20 +90,20 @@ class ModelData:
             raise ValueError("NaN time values on non NaN y values")
 
     @cached_property
-    def size(self) -> IntPositive:
+    def size(self) -> int:
         """Gets the number of individuals.
 
         Returns:
-            IntPositive: The number of individuals.
+            int: The number of individuals.
         """
         return len(self.trajectories)
 
     @cached_property
-    def effective_size(self) -> IntPositive:
+    def effective_size(self) -> int:
         """Gets the effective size of the dataset, used for BIC.
 
         Returns:
-            IntPositive: The effective size.
+            int: The effective size.
         """
         return int((~torch.isnan(self.y)).any(dim=-1).sum()) + sum(
             len(trajectory) for trajectory in self.trajectories
@@ -191,10 +186,10 @@ class SampleData:
         check_trajectory_c(self.trajectories, self.c)
 
     @cached_property
-    def size(self) -> IntPositive:
+    def size(self) -> int:
         """Gets the number of individuals.
 
         Returns:
-            IntPositive: The number of individuals.
+            int: The number of individuals.
         """
         return len(self.trajectories)

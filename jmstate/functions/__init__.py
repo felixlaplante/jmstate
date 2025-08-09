@@ -1,16 +1,25 @@
-from ._base_hazards import exponential, gompertz, log_normal, weibull  # noqa: D104
+from ._base_hazards import (  # noqa: D104
+    Exponential,
+    Gompertz,
+    LogNormal,
+    Weibull,
+    clock_forward,
+    clock_reset,
+)
 from ._individual_effects import gamma_plus_b, gamma_x_plus_b, identity
 from ._regression_and_link import Net, linear, sigmoid
 
 __all__ = [
+    "Exponential",
+    "Gompertz",
+    "LogNormal",
     "Net",
-    "exponential",
+    "Weibull",
+    "clock_forward",
+    "clock_reset",
     "gamma_plus_b",
     "gamma_x_plus_b",
-    "gompertz",
     "identity",
     "linear",
-    "log_normal",
     "sigmoid",
-    "weibull",
 ]

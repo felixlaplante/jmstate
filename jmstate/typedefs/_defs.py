@@ -35,7 +35,6 @@ Tensor1D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 1]]  # type: ignore
 Tensor2D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2]]  # type: ignore
 Tensor3D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 3]]  # type: ignore
 Tensor4D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 4]]  # type: ignore
-TensorRow = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(0) == 1]]  # type: ignore
 TensorCol = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(1) == 1]]  # type: ignore
 IntPositive = Annotated[int, Is[lambda i: i >= 0]]  # type: ignore
 IntStrictlyPositive = Annotated[int, Is[lambda i: i > 0]]  # type: ignore
@@ -77,6 +76,11 @@ class ClockMethod(Protocol):
 
 
 # Named tuples
+class HazardFns(NamedTuple):
+    base_hazard_fn: BaseHazardFn
+    link_fn: LinkFn
+
+
 class MatRepr(NamedTuple):
     flat: Tensor1D
     dim: IntStrictlyPositive

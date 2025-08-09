@@ -5,9 +5,8 @@ from typing import Any, cast
 import torch
 
 from ..typedefs._defs import (
-    BaseHazardFn,
     BucketData,
-    LinkFn,
+    HazardFns,
     Trajectory,
     TrajRepr,
 )
@@ -51,7 +50,7 @@ def build_buckets(
 def build_traj_repr(
     trajectories: list[Trajectory],
     c: torch.Tensor,
-    surv: dict[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]],
+    surv: dict[tuple[Any, Any], HazardFns],
 ) -> dict[tuple[Any, Any], TrajRepr]:
     """Build vectorizable bucket representation.
 

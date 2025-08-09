@@ -3,23 +3,16 @@ from typing import Callable
 
 import torch
 
-from ..typedefs._defs import (
-    Info,
-    Job,
-    Metrics,
-    Tensor1D,
-    Tensor2D,
-    Tensor3D,
-)
+from ..typedefs._defs import Info, Job, Metrics
 from ..typedefs._params import params_like_from_flat
 
 
 class ComputeFIM(Job):
     """Job to compute the Fisher Information Matrix."""
 
-    grad_m1: Tensor1D
-    grad_m2: Tensor2D
-    jac_fn: Callable[[Tensor1D, Tensor3D], Tensor2D]
+    grad_m1: torch.Tensor
+    grad_m2: torch.Tensor
+    jac_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
     def init(self, info: Info):
         if not info.model.fit_:
@@ -32,7 +25,7 @@ class ComputeFIM(Job):
         self.grad_m1 = torch.zeros(d)
         self.grad_m2 = torch.zeros(d, d)
 
-        def _jac_fn(params_flat_tensor: Tensor1D, b: Tensor3D):
+        def _jac_fn(params_flat_tensor: torch.Tensor, b: torch.Tensor):
             params = params_like_from_flat(info.model.params_, params_flat_tensor)
             return info.logpdfs_fn(params, b).sum(dim=1)
 
@@ -83,7 +76,7 @@ class ComputeCriteria(Job):
 class ComputeEBEs(Job):
     """Job to compute the EBEs of b."""
 
-    ebes: Tensor2D
+    ebes: torch.Tensor
 
     def init(self, info: Info):
         self.ebes = torch.zeros(info.sampler.state.shape[1:])

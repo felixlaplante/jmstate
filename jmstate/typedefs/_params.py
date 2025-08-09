@@ -8,7 +8,7 @@ from beartype import beartype
 
 from ..utils._checks import check_inf, check_matrix_dim
 from ..utils._linalg import cov_from_repr
-from ._defs import IntPositive, MatRepr, Tensor1D, Tensor2D
+from ._defs import MatRepr, Tensor1D, Tensor2D
 
 
 @beartype
@@ -81,11 +81,11 @@ class ModelParams:
         return torch.cat([p.detach().view(-1) for p in self.as_list])
 
     @cached_property
-    def numel(self) -> IntPositive:
+    def numel(self) -> int:
         """Return the number of parameters.
 
         Returns:
-            IntPositive: The number of the parameters.
+            int: The number of the parameters.
         """
         return sum(p.numel() for p in self.as_list)
 

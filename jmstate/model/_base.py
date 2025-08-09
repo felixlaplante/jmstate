@@ -15,9 +15,6 @@ from ..typedefs._defs import (
     Metrics,
     NumPositive,
     NumProbability,
-    Tensor0D,
-    Tensor2D,
-    Tensor3D,
 )
 from ..typedefs._params import ModelParams, params_like_from_flat
 from ..utils._linalg import get_cholesky_and_log_eigvals
@@ -41,7 +38,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
     model_design: ModelDesign
     params_: ModelParams
-    pen: Callable[[ModelParams], Tensor0D] | None
+    pen: Callable[[ModelParams], torch.Tensor] | None
     n_quad: IntStrictlyPositive
     n_bissect: IntStrictlyPositive
     cache_limit: IntPositive | None
@@ -55,7 +52,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         model_design: ModelDesign,
         init_params: ModelParams,
         *,
-        pen: Callable[[ModelParams], Tensor0D] | None = None,
+        pen: Callable[[ModelParams], torch.Tensor] | None = None,
         n_quad: IntStrictlyPositive = 32,
         n_bissect: IntStrictlyPositive = 32,
         cache_limit: IntPositive | None = 256,
@@ -65,7 +62,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             model_design (ModelDesign): Model design containing modeling information.
             init_params (ModelParams): Initial values for the parameters.
-            pen (Callable[[ModelParams], Tensor0D] | None, optional): The penalization function. Defaults to None.
+            pen (Callable[[ModelParams], torch.Tensor] | None, optional): The penalization function. Defaults to None.
             n_quad (IntStrictlyPositive, optional): The used numnber of points for Gauss-Legendre quadrature. Defaults to 32.
             n_bissect (IntStrictlyPositive, optional): The number of bissection steps used in transition sampling. Defaults to 32.
             cache_limit (IntPositive | None, optional): The max length of cache. Defaults to 256.
@@ -93,20 +90,20 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         self.fit_ = False
 
     def _logpdfs_and_aux_fn(
-        self, params: ModelParams, b: Tensor3D, data: CompleteModelData
-    ) -> tuple[Tensor2D, tuple[Tensor2D, Tensor3D]]:
+        self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Computes the total log likelihood up to a constant.
 
         Args:
             params (ModelParams): The model parameters.
-            b (Tensor3D): The individual random effects.
+            b (torch.Tensor): The individual random effects.
             data (CompleteModelData): Dataset on which the likeihood is computed.
 
         Returns:
-            tuple[Tensor2D, Tensor2D, Tensor3D]: The computed quantities.
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The computed quantities.
         """
 
-        def _prior_logliks(b: Tensor3D) -> Tensor2D:
+        def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
             Q_inv_cholesky, Q_nlog_eigvals = get_cholesky_and_log_eigvals(params, "Q")
             Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
             Q_norm_factor = (Q_nlog_eigvals - LOGTWOPI).sum()
@@ -255,11 +252,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
         sampler.run(cast(int, warmup))
 
-        def _logpdfs_fn(params: ModelParams, b: Tensor3D) -> Tensor2D:
+        def _logpdfs_fn(params: ModelParams, b: torch.Tensor) -> torch.Tensor:
             logpdfs, _ = self._logpdfs_and_aux_fn(params, b, complete_data)
             return logpdfs
 
-        def _logliks_fn(params: ModelParams, b: Tensor3D) -> Tensor2D:
+        def _logliks_fn(params: ModelParams, b: torch.Tensor) -> torch.Tensor:
             psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
             long_logliks = super(type(self), self)._long_logliks(
                 params, psi, complete_data
@@ -281,7 +278,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         for job in jobs:
             job.init(info)
 
-        def _do(state: Tensor3D, aux: tuple[torch.Tensor, ...]):
+        def _do(state: torch.Tensor, aux: tuple[torch.Tensor, ...]):
             nonlocal info
 
             info.b, (info.logliks, info.psi) = state, aux
@@ -343,14 +340,14 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         return [params_like_from_flat(self.params_, sample) for sample in flat_samples]
 
     @property
-    def fim(self) -> Tensor2D:
+    def fim(self) -> torch.Tensor:
         """Returns the Fisher Information Matrix.
 
         Raises:
             ValueError: If Fisher Information Matrix has not yet been computed.
 
         Returns:
-            Tensor2D: The Fisher Information Matrix.
+            torch.Tensor: The Fisher Information Matrix.
         """
         if self.metrics_ is None or not hasattr(self.metrics_, "fim"):
             raise ValueError("Fisher Information Matrix must be previously computed.")

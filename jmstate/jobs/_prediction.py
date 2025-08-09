@@ -9,8 +9,6 @@ from ..typedefs._defs import (
     IntStrictlyPositive,
     Job,
     Metrics,
-    Tensor2D,
-    Tensor3D,
     TensorCol,
     Trajectory,
 )
@@ -21,8 +19,8 @@ from ..utils._checks import check_consistent_size
 class PredictY(Job):
     """Job to predict longitudinal values."""
 
-    u: Tensor2D
-    pred_y: list[Tensor3D]
+    u: torch.Tensor
+    pred_y: list[torch.Tensor]
 
     @beartype
     def __init__(self, u: torch.Tensor):
@@ -43,11 +41,11 @@ class PredictY(Job):
 class PredictSurvLogps(Job):
     """Job to predict survival log probability values."""
 
-    u: Tensor2D
-    pred_surv_logps: list[Tensor2D]
+    u: torch.Tensor
+    pred_surv_logps: list[torch.Tensor]
 
     @beartype
-    def __init__(self, u: Tensor2D):
+    def __init__(self, u: torch.Tensor):
         self.u = u.to(torch.get_default_dtype())
         self.pred_surv_logps = []
 

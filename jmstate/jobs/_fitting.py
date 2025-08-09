@@ -6,7 +6,7 @@ from typing import Any, Final, cast
 import torch
 from beartype import beartype
 
-from ..typedefs._defs import Info, Job, Metrics, Tensor0D
+from ..typedefs._defs import Info, Job, Metrics
 
 # Constants
 NO_GROUPS_OPT: Final[tuple[type[torch.optim.Optimizer], ...]] = (torch.optim.LBFGS,)
@@ -81,7 +81,7 @@ class _BaseFit(Job, ABC):
         info.model.fit_ = info.model.fit_ or self.is_fitting
 
     @abstractmethod
-    def closure(self, info: Info) -> Tensor0D:
+    def closure(self, info: Info) -> torch.Tensor:
         pass
 
 
@@ -91,7 +91,7 @@ class DeterministicFit(_BaseFit):
     default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_DETERMINISTIC_OPT_FACTORY
     is_fitting: bool = False
 
-    def closure(self, info: Info) -> Tensor0D:
+    def closure(self, info: Info) -> torch.Tensor:
         self.opt.zero_grad()  # type: ignore
         logliks = info.logliks_fn(info.model.params_, info.b)
         loss = (
@@ -109,7 +109,7 @@ class RandomFit(_BaseFit):
     default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_RANDOM_OPT_FACTORY
     is_fitting: bool = True
 
-    def closure(self, info: Info) -> Tensor0D:
+    def closure(self, info: Info) -> torch.Tensor:
         self.opt.zero_grad()  # type: ignore
         logpdfs = info.logpdfs_fn(info.model.params_, info.b)
         loss = (

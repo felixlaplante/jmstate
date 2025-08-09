@@ -1,7 +1,9 @@
 from typing import Any
 
+import torch
+
 from ..typedefs._data import CompleteModelData, ModelDesign
-from ..typedefs._defs import LOGTWOPI, Tensor2D, Tensor3D
+from ..typedefs._defs import LOGTWOPI
 from ..typedefs._params import ModelParams
 from ..utils._linalg import get_cholesky_and_log_eigvals
 
@@ -21,17 +23,17 @@ class LongitudinalMixin:
         super().__init__(*args, **kwargs)
 
     def _long_logliks(
-        self, params: ModelParams, psi: Tensor3D, data: CompleteModelData
-    ) -> Tensor2D:
+        self, params: ModelParams, psi: torch.Tensor, data: CompleteModelData
+    ) -> torch.Tensor:
         """Computes the longitudinal log likelihood.
 
         Args:
             params (ModelParams): The model parameters.
-            psi (Tensor3D): A 3D tensor of individual parameters.
+            psi (torch.Tensor): A 3D tensor of individual parameters.
             data (ModelData): Dataset on which likelihood is computed.
 
         Returns:
-            Tensor2D: The computed log likelihood.
+            torch.Tensor: The computed log likelihood.
         """
         predicted = self.model_design.regression_fn(data.valid_t, psi)
         diffs = data.valid_y - predicted * data.valid_mask

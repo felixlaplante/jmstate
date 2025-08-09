@@ -11,7 +11,6 @@ from ..typedefs._defs import (
     Metrics,
     NumPositive,
     NumProbability,
-    Tensor1D,
 )
 
 # Constants
@@ -24,20 +23,20 @@ DEFAULT_NOT_CONVERGED_WARNING = (
 class GradStop(Job):
     """Job to test the convergence."""
 
-    atol: NumPositive | Tensor1D
-    rtol: NumPositive | Tensor1D
+    atol: NumPositive | torch.Tensor
+    rtol: NumPositive | torch.Tensor
     min_consecutive: IntStrictlyPositive
     betas: tuple[NumProbability, NumProbability]
-    m: Tensor1D
-    v: Tensor1D
+    m: torch.Tensor
+    v: torch.Tensor
     n_consecutive: IntPositive
     stopped: bool
 
     @beartype
     def __init__(
         self,
-        atol: NumPositive | Tensor1D = 0.01,
-        rtol: NumPositive | Tensor1D = 0.01,
+        atol: NumPositive | torch.Tensor = 0.01,
+        rtol: NumPositive | torch.Tensor = 0.01,
         min_consecutive: IntStrictlyPositive = 20,
         betas: tuple[NumProbability, NumProbability] = (0.9, 0.999),
     ):
@@ -98,19 +97,19 @@ class GradStop(Job):
 class ValueStop(Job):
     """Job to test the convergence."""
 
-    atol: NumPositive | Tensor1D
-    rtol: NumPositive | Tensor1D
+    atol: NumPositive | torch.Tensor
+    rtol: NumPositive | torch.Tensor
     min_consecutive: IntStrictlyPositive
     beta: NumProbability
-    p: Tensor1D
+    p: torch.Tensor
     n_consecutive: IntPositive
     stopped: bool
 
     @beartype
     def __init__(
         self,
-        atol: NumPositive | Tensor1D = 0.01,
-        rtol: NumPositive | Tensor1D = 0.01,
+        atol: NumPositive | torch.Tensor = 0.01,
+        rtol: NumPositive | torch.Tensor = 0.01,
         min_consecutive: IntStrictlyPositive = 20,
         beta: NumProbability = 0.9,
     ):

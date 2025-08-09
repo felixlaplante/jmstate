@@ -4,7 +4,6 @@ import torch
 
 from ..typedefs._defs import (
     MatRepr,
-    TensorCol,
     Trajectory,
 )
 
@@ -74,12 +73,12 @@ def check_trajectory_sorting(trajectories: list[Trajectory]):
         raise ValueError("Trajectories must be sorted by time")
 
 
-def check_trajectory_c(trajectories: list[Trajectory], c: TensorCol | None):
+def check_trajectory_c(trajectories: list[Trajectory], c: torch.Tensor | None):
     """Check if the trajectories are compatible with censoring times.
 
     Args:
         trajectories (list[Trajectory]): The trajectories.
-        c (TensorCol | None): The censoring times.
+        c (torch.Tensor | None): The censoring times.
 
     Raises:
         ValueError: If some trajectory is not compatible with the censoring.

@@ -9,11 +9,8 @@ from ..typedefs._defs import (
     HazardInfo,
     IntPositive,
     IntStrictlyPositive,
-    Tensor1D,
     Tensor2D,
-    Tensor3D,
     TensorCol,
-    TensorRow,
     Trajectory,
 )
 from ..typedefs._params import ModelParams
@@ -34,8 +31,8 @@ class HazardMixin:
     n_quad: IntStrictlyPositive
     n_bissect: IntStrictlyPositive
     cache_limit: IntPositive | None
-    _std_nodes: TensorRow
-    _std_weights: Tensor1D
+    _std_nodes: torch.Tensor
+    _std_weights: torch.Tensor
     _cache: Cache
 
     def __init__(
@@ -67,7 +64,7 @@ class HazardMixin:
         self,
         hazard_info: HazardInfo,
         enable_cache: bool,
-    ) -> Tensor2D | Tensor3D:
+    ) -> torch.Tensor:
         """Computes log hazard.
 
         Args:
@@ -75,7 +72,7 @@ class HazardMixin:
             enable_cache (bool): Enables caching.
 
         Returns:
-            Tensor2D | Tensor3D: The computed log hazard.
+            torch.Tensor: The computed log hazard.
         """
         # Unpack data
         t0, t1, x, psi, alpha, beta, base_hazard_fn, link_fn = hazard_info
@@ -111,7 +108,7 @@ class HazardMixin:
         hazard_info: HazardInfo,
         c: TensorCol | None,
         enable_cache: bool,
-    ) -> Tensor1D | Tensor2D:
+    ) -> torch.Tensor:
         """Computes cumulative hazard.
 
         Args:
@@ -120,7 +117,7 @@ class HazardMixin:
             enable_cache (bool): Enables caching.
 
         Returns:
-            Tensor1D | Tensor2D: The computed cumulative hazard.
+            torch.Tensor: The computed cumulative hazard.
         """
         # Unpack data
         t0, t1, *_ = hazard_info
@@ -159,7 +156,7 @@ class HazardMixin:
         self,
         hazard_info: HazardInfo,
         enable_cache: bool,
-    ) -> tuple[Tensor1D | Tensor2D, Tensor1D | Tensor2D]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Computes both log and cumulative hazard.
 
         Args:
@@ -170,7 +167,7 @@ class HazardMixin:
             RuntimeError: If the computation fails.
 
         Returns:
-            tuple[Tensor1D | Tensor2D, Tensor1D | Tensor2D]: The log and cum hazard.
+            tuple[torch.Tensor, torch.Tensor]: The log and cum hazard.
         """
         # Unpack data
         t0, t1, *_ = hazard_info
@@ -216,7 +213,7 @@ class HazardMixin:
             c (TensorCol | None): Conditionning time.
 
         Returns:
-            Tensor1D: The computed pre transition times.
+            torch.Tensor: The computed pre transition times.
         """
         # Unpack data
         t0, t1, *_ = hazard_info
@@ -353,9 +350,7 @@ class HazardMixin:
         ]
 
     @beartype
-    def compute_surv_logps(
-        self, sample_data: SampleData, u: Tensor2D
-    ) -> Tensor2D | Tensor3D:
+    def compute_surv_logps(self, sample_data: SampleData, u: Tensor2D) -> torch.Tensor:
         """Computes log probabilites of remaining event free up to time u.
 
         Args:
@@ -366,7 +361,7 @@ class HazardMixin:
             ValueError: If u is of incorrect shape.
 
         Returns:
-            Tensor2D | Tensor3D: The computed survival log probabilities.
+            torch.Tensor: The computed survival log probabilities.
         """
         # Unpack data
         u = u.to(torch.get_default_dtype())
@@ -414,18 +409,18 @@ class HazardMixin:
         return -nlogps.clamp(min=0.0)
 
     def _hazard_logliks(
-        self, params: ModelParams, psi: Tensor3D, data: CompleteModelData
-    ) -> Tensor2D:
+        self, params: ModelParams, psi: torch.Tensor, data: CompleteModelData
+    ) -> torch.Tensor:
         """Computes the hazard log likelihood.
 
         Args:
             params (ModelParams): The model parameters.
-            psi (Tensor3D): A matrix of individual parameters.
+            psi (torch.Tensor): A matrix of individual parameters.
             data (CompleteModelData): Dataset on which likelihood is computed.
             enable_cache (bool): Enable caching
 
         Returns:
-            Tensor2D: The computed log likelihood.
+            torch.Tensor: The computed log likelihood.
         """
         logliks = torch.zeros(psi.shape[:-1])
 
