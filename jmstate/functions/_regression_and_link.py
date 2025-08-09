@@ -99,6 +99,7 @@ class Net(nn.Module):
             x = torch.cat([t_ext, psi_ext], dim=-1)
             y = self.net(x)
 
+            ones = torch.ones_like(y)
             out_list: list[Tensor3D | Tensor4D] = []
             for i in range(max_deg + 1):
                 if i in degs:
@@ -107,7 +108,7 @@ class Net(nn.Module):
                     y, *_ = torch.autograd.grad(
                         y,
                         t_ext,
-                        torch.ones_like(y),
+                        ones,
                         create_graph=needs_grad or i < max_deg - 1,
                     )
 
