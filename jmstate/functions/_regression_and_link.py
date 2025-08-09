@@ -54,6 +54,6 @@ class Net(nn.Module):
             Tensor3D | Tensor4D: The computed transformation.
         """
         psi_ext = psi.unsqueeze(-2).expand(*psi.shape[:-1], t.size(-1), -1)
-        t_ext = t.unsqueeze(-1).broadcast_to(*psi_ext.shape[:-1], 1)
+        t_ext = t.unsqueeze(-1).expand(*psi_ext.shape[:-1], 1)
         x = torch.cat([t_ext, psi_ext], dim=-1)
         return self.net(x)
