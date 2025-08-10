@@ -27,8 +27,8 @@ if TYPE_CHECKING:
 
 
 # Type Aliases
-Trajectory: TypeAlias = list[tuple[float, Any]]
 Num = int | float
+Trajectory: TypeAlias = list[tuple[Num, Any]]
 
 
 # Pydantic annotations
