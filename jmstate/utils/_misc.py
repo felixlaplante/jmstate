@@ -3,14 +3,14 @@ from typing import Any, cast
 import numpy as np
 import torch
 
-from ..typedefs._defs import Info, IntStrictlyPositive, Job
+from ..typedefs._defs import Info, Job
 
 
-def legendre_quad(n_quad: IntStrictlyPositive) -> tuple[torch.Tensor, torch.Tensor]:
+def legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Get the Legendre quadrature nodes and weights.
 
     Args:
-        n_quad (IntStrictlyPositive): The number of quadrature points.
+        n_quad (int): The number of quadrature points.
 
     Returns:
         tuple[torch.Tensor, torch.Tensor]: The nodes and weights.

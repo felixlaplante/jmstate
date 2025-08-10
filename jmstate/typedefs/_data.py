@@ -4,7 +4,7 @@ from functools import cached_property
 from typing import Any
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, dataclasses
 
 from ..utils._checks import (
     check_consistent_size,
@@ -29,8 +29,7 @@ from ._params import ModelParams
 
 
 # Dataclasses
-@beartype
-@dataclass
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelDesign:
     """Class containing all multistate joint model design."""
 
@@ -42,8 +41,7 @@ class ModelDesign:
     ]
 
 
-@beartype
-@dataclass
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelData:
     """Dataclass containing learnable multistate joint model data.
 
@@ -110,7 +108,6 @@ class ModelData:
         )
 
 
-@beartype
 @dataclass
 class CompleteModelData(ModelData):
     valid_mask: Tensor3D = field(init=False)
@@ -152,8 +149,7 @@ class CompleteModelData(ModelData):
         self.buckets = build_traj_repr(self.trajectories, self.c, model_design.surv)
 
 
-@beartype
-@dataclass
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class SampleData:
     """Dataclass for data used in sampling.
 

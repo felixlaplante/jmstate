@@ -2,7 +2,7 @@ import copy
 from typing import Any, Callable, cast
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
 from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS
@@ -39,14 +39,14 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     model_design: ModelDesign
     params_: ModelParams
     pen: Callable[[ModelParams], torch.Tensor] | None
-    n_quad: IntStrictlyPositive
-    n_bissect: IntStrictlyPositive
-    cache_limit: IntPositive | None
+    n_quad: int
+    n_bissect: int
+    cache_limit: int | None
     data: ModelData | None
     metrics_: Metrics | None
     fit_: bool
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         model_design: ModelDesign,
@@ -127,19 +127,19 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     def _setup_mcmc(
         self,
         data: CompleteModelData,
-        n_chains: IntStrictlyPositive,
-        init_step_size: NumPositive,
-        adapt_rate: NumPositive,
-        target_accept_rate: NumProbability,
+        n_chains: int,
+        init_step_size: int | float,
+        adapt_rate: int | float,
+        target_accept_rate: int | float,
     ) -> MetropolisHastingsSampler:
         """Setup the MCMC kernel and hyperparameters.
 
         Args:
             data (CompleteModelData): The complete dataset.
-            n_chains (IntStrictlyPositive): The number of parallel MCMC chains.
-            init_step_size (NumPositive): Kernel standard error in Metropolis.
-            adapt_rate (NumPositive): Adaptation rate for the step_size.
-            target_accept_rate (NumProbability): Mean acceptance target.
+            n_chains (int): The number of parallel MCMC chains.
+            init_step_size (int | float): Kernel standard error in Metropolis.
+            adapt_rate (int | float): Adaptation rate for the step_size.
+            target_accept_rate (int | float): Mean acceptance target.
 
         Returns:
             MetropolisHastingsSampler: The intialized Markov kernel.
@@ -179,7 +179,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         return jobs, hyperparameters
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def do(
         self,
         new_data: ModelData | None = None,
@@ -266,6 +266,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             )
             return long_logliks + hazard_logliks
 
+        # Initialize info
         info = Info(
             data=data,
             logpdfs_fn=_logpdfs_fn,
@@ -316,7 +317,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             case _:
                 return metrics
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def sample_params(self, sample_size: IntPositive) -> list[ModelParams]:
         """Sample parameters based on asymptotic behavior of the MLE.
 

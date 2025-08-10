@@ -1,18 +1,17 @@
 import itertools
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import cached_property
 from typing import Any
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, dataclasses, validate_call
 
 from ..utils._checks import check_inf, check_matrix_dim
 from ..utils._linalg import cov_from_repr
 from ._defs import MatRepr, Tensor1D, Tensor2D
 
 
-@beartype
-@dataclass
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelParams:
     """Dataclass containing model parameters.
 
@@ -128,7 +127,7 @@ class ModelParams:
         return cov_from_repr(getattr(self, matrix + "_repr"))
 
 
-@beartype
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def params_like_from_flat(ref_params: ModelParams, flat: Tensor1D) -> ModelParams:
     """Gets a ModelParams instance based on the flat representation.
 

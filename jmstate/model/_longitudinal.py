@@ -35,6 +35,7 @@ class LongitudinalMixin:
         Returns:
             torch.Tensor: The computed log likelihood.
         """
+        # Careful with NaNs
         predicted = self.model_design.regression_fn(data.valid_t, psi)
         diffs = data.valid_y - predicted * data.valid_mask
 

@@ -1,7 +1,7 @@
 from typing import cast
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._defs import LOGTWOPI, ClockMethod, Num, NumStrictlyPositive
 
@@ -35,7 +35,10 @@ def clock_reset(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
 class Exponential:
     """Implements the exponential base hazard."""
 
-    @beartype
+    lmda: torch.Tensor
+    log_lmda: torch.Tensor
+
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, lmda: NumStrictlyPositive):
         """Initializes the exponential hazard.
 
@@ -65,7 +68,7 @@ class Weibull:
     log_k: torch.Tensor
     log_lmda: torch.Tensor
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         k: NumStrictlyPositive,
@@ -105,12 +108,12 @@ class Gompertz:
     """Implements the weibull base hazard."""
 
     a: torch.Tensor
-    b: Num
+    b: int | float
     clock_method: ClockMethod
     log_k: torch.Tensor
     log_lmda: torch.Tensor
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         a: NumStrictlyPositive,
@@ -144,12 +147,12 @@ class Gompertz:
 class LogNormal:
     """Implements the weibull base hazard."""
 
-    mu: Num
+    mu: int | float
     scale: torch.Tensor
     clock_method: ClockMethod
     log_scale: torch.Tensor
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         mu: Num,

@@ -1,16 +1,16 @@
 import warnings
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._defs import (
     Info,
-    IntPositive,
     IntStrictlyPositive,
     Job,
     Metrics,
     NumPositive,
     NumProbability,
+    Tensor1DPositive,
 )
 
 # Constants
@@ -23,20 +23,20 @@ DEFAULT_NOT_CONVERGED_WARNING = (
 class GradStop(Job):
     """Job to test the convergence."""
 
-    atol: NumPositive | torch.Tensor
-    rtol: NumPositive | torch.Tensor
-    min_consecutive: IntStrictlyPositive
-    betas: tuple[NumProbability, NumProbability]
+    atol: int | float | torch.Tensor
+    rtol: int | float | torch.Tensor
+    min_consecutive: int
+    betas: tuple[int | float, int | float]
     m: torch.Tensor
     v: torch.Tensor
-    n_consecutive: IntPositive
+    n_consecutive: int
     stopped: bool
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        atol: NumPositive | torch.Tensor = 0.01,
-        rtol: NumPositive | torch.Tensor = 0.01,
+        atol: NumPositive | Tensor1DPositive = 0.01,
+        rtol: NumPositive | Tensor1DPositive = 0.01,
         min_consecutive: IntStrictlyPositive = 20,
         betas: tuple[NumProbability, NumProbability] = (0.9, 0.999),
     ):
@@ -44,11 +44,6 @@ class GradStop(Job):
         self.rtol = rtol
         self.min_consecutive = min_consecutive
         self.betas = betas
-
-        if isinstance(atol, torch.Tensor) and (self.atol < 0).any():  # type: ignore
-            raise ValueError(f"atol must be all positive, got {self.atol}")
-        if isinstance(rtol, torch.Tensor) and (self.rtol < 0).any():  # type: ignore
-            raise ValueError(f"rtol must be all positive, got {self.rtol}")
 
         self.n_consecutive = 0
         self.stopped = False
@@ -97,19 +92,19 @@ class GradStop(Job):
 class ValueStop(Job):
     """Job to test the convergence."""
 
-    atol: NumPositive | torch.Tensor
-    rtol: NumPositive | torch.Tensor
-    min_consecutive: IntStrictlyPositive
-    beta: NumProbability
+    atol: int | float | torch.Tensor
+    rtol: int | float | torch.Tensor
+    min_consecutive: int
+    beta: int | float
     p: torch.Tensor
-    n_consecutive: IntPositive
+    n_consecutive: int
     stopped: bool
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        atol: NumPositive | torch.Tensor = 0.01,
-        rtol: NumPositive | torch.Tensor = 0.01,
+        atol: NumPositive | Tensor1DPositive = 0.01,
+        rtol: NumPositive | Tensor1DPositive = 0.01,
         min_consecutive: IntStrictlyPositive = 20,
         beta: NumProbability = 0.9,
     ):
@@ -117,11 +112,6 @@ class ValueStop(Job):
         self.rtol = rtol
         self.min_consecutive = min_consecutive
         self.beta = beta
-
-        if isinstance(atol, torch.Tensor) and (self.atol < 0).any():  # type: ignore
-            raise ValueError(f"atol must be all positive, got {self.atol}")
-        if isinstance(rtol, torch.Tensor) and (self.rtol < 0).any():  # type: ignore
-            raise ValueError(f"rtol must be all positive, got {self.rtol}")
 
         self.n_consecutive = 0
         self.stopped = False

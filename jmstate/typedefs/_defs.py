@@ -15,7 +15,9 @@ from typing import (
 )
 
 import torch
-from beartype.vale import Is
+from pydantic import AfterValidator
+
+from ._validators import is_col, is_ndim, is_pos, is_prob, is_strict_pos
 
 if TYPE_CHECKING:
     from ..model._base import MultiStateJointModel
@@ -29,18 +31,19 @@ Trajectory: TypeAlias = list[tuple[float, Any]]
 Num = int | float
 
 
-# Beartype checks
-Tensor0D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 0]]  # type: ignore
-Tensor1D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 1]]  # type: ignore
-Tensor2D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2]]  # type: ignore
-Tensor3D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 3]]  # type: ignore
-Tensor4D = Annotated[torch.Tensor, Is[lambda t: t.ndim == 4]]  # type: ignore
-TensorCol = Annotated[torch.Tensor, Is[lambda t: t.ndim == 2 and t.size(1) == 1]]  # type: ignore
-IntPositive = Annotated[int, Is[lambda i: i >= 0]]  # type: ignore
-IntStrictlyPositive = Annotated[int, Is[lambda i: i > 0]]  # type: ignore
-NumPositive = Annotated[Num, Is[lambda i: i >= 0]]  # type: ignore
-NumStrictlyPositive = Annotated[Num, Is[lambda i: i > 0]]  # type: ignore
-NumProbability = Annotated[Num, Is[lambda i: 0 <= i <= 1]]  # type: ignore
+# Pydantic annotations
+Tensor0D = Annotated[torch.Tensor, AfterValidator(is_ndim(0))]
+Tensor1D = Annotated[torch.Tensor, AfterValidator(is_ndim(1))]
+Tensor2D = Annotated[torch.Tensor, AfterValidator(is_ndim(2))]
+Tensor3D = Annotated[torch.Tensor, AfterValidator(is_ndim(3))]
+Tensor4D = Annotated[torch.Tensor, AfterValidator(is_ndim(4))]
+TensorCol = Annotated[torch.Tensor, AfterValidator(is_col)]
+Tensor1DPositive = Annotated[Tensor1D, AfterValidator(is_pos)]
+IntPositive = Annotated[int, AfterValidator(is_pos)]
+IntStrictlyPositive = Annotated[int, AfterValidator(is_strict_pos)]
+NumPositive = Annotated[Num, AfterValidator(is_pos)]
+NumStrictlyPositive = Annotated[Num, AfterValidator(is_strict_pos)]
+NumProbability = Annotated[Num, AfterValidator(is_prob)]
 
 
 # Protocols

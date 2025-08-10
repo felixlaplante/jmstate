@@ -1,7 +1,7 @@
 import copy
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._data import SampleData
 from ..typedefs._defs import (
@@ -22,7 +22,7 @@ class PredictY(Job):
     u: torch.Tensor
     pred_y: list[torch.Tensor]
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, u: torch.Tensor):
         self.u = u.to(torch.get_default_dtype())
         self.pred_y = []
@@ -44,7 +44,7 @@ class PredictSurvLogps(Job):
     u: torch.Tensor
     pred_surv_logps: list[torch.Tensor]
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, u: torch.Tensor):
         self.u = u.to(torch.get_default_dtype())
         self.pred_surv_logps = []
@@ -72,14 +72,14 @@ class PredictTrajectories(Job):
     """Job to predict trajectories."""
 
     c_max: torch.Tensor
-    max_length: IntStrictlyPositive
+    max_length: int
     pred_trajectories: list[Trajectory]
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         c_max: TensorCol,
-        max_length: int = 10,
+        max_length: IntStrictlyPositive = 10,
     ):
         self.c_max = c_max.to(torch.get_default_dtype())
         self.max_length = max_length
@@ -112,12 +112,14 @@ class SwitchParams(Job):
     """Job to simulate different parameter values."""
 
     param_list: list[ModelParams]
-    n_iterations_per_param: IntStrictlyPositive
-    n_params: IntStrictlyPositive
+    n_iterations_per_param: int
+    n_params: int
     init_params: ModelParams
 
-    @beartype
-    def __init__(self, param_list: list[ModelParams], n_iterations_per_param: int):
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def __init__(
+        self, param_list: list[ModelParams], n_iterations_per_param: IntStrictlyPositive
+    ):
         self.param_list = param_list
         self.n_iterations_per_param = n_iterations_per_param
         self.n_params = len(param_list)

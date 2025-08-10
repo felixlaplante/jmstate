@@ -2,12 +2,11 @@ from dataclasses import replace
 from typing import Any, Final
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import (
     HazardInfo,
-    IntPositive,
     IntStrictlyPositive,
     Tensor2D,
     TensorCol,
@@ -28,27 +27,27 @@ class HazardMixin:
 
     params_: ModelParams
     model_design: ModelDesign
-    n_quad: IntStrictlyPositive
-    n_bissect: IntStrictlyPositive
-    cache_limit: IntPositive | None
+    n_quad: int
+    n_bissect: int
+    cache_limit: int | None
     _std_nodes: torch.Tensor
     _std_weights: torch.Tensor
     _cache: Cache
 
     def __init__(
         self,
-        n_quad: IntStrictlyPositive,
-        n_bissect: IntStrictlyPositive,
-        cache_limit: IntPositive | None,
+        n_quad: int,
+        n_bissect: int,
+        cache_limit: int | None,
         *args: Any,
         **kwargs: Any,
     ):
         """Initializes the class.
 
         Args:
-            n_quad (IntStrictlyPositive): Number of quadrature nodes.
-            n_bissect (IntStrictlyPositive): The number of bissection steps.
-            cache_limit (IntPositive | None): Max length of cache.
+            n_quad (int): Number of quadrature nodes.
+            n_bissect (int): The number of bissection steps.
+            cache_limit (int | None): Max length of cache.
             args (Any): Additional args.
             kwargs (Any): Additional kwargs.
         """
@@ -255,12 +254,11 @@ class HazardMixin:
         """
         # Unpack data
         x = sample_data.x
-        trajectories = sample_data.trajectories
         psi = sample_data.psi
         c = sample_data.c
 
         # Get initial buckets from last states
-        last_states = [trajectory[-1:] for trajectory in trajectories]
+        last_states = [trajectory[-1:] for trajectory in sample_data.trajectories]
         current_buckets = build_traj_repr(last_states, c_max, self.model_design.surv)
 
         if not current_buckets:
@@ -272,7 +270,9 @@ class HazardMixin:
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
             idx, t0, t1, _ = bucket
-            t1 = torch.nextafter(t1, torch.tensor(torch.inf))
+            t1 = torch.nextafter(
+                t1, torch.tensor(torch.inf, dtype=torch.get_default_dtype())
+            )
 
             # Create info
             hazard_info = HazardInfo(
@@ -299,11 +299,13 @@ class HazardMixin:
 
         for i, (time, arg_idx) in enumerate(zip(min_times, argmin_idxs)):
             if torch.isfinite(time):
-                trajectories[i].append((time.item(), bucket_keys[int(arg_idx)][1]))
+                sample_data.trajectories[i].append(
+                    (time.item(), bucket_keys[int(arg_idx)][1])
+                )
 
         return True
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def sample_trajectories(
         self,
         sample_data: SampleData,
@@ -328,13 +330,8 @@ class HazardMixin:
         c_max = c_max.to(torch.get_default_dtype())
         check_consistent_size(((c_max, 0),), sample_data.size)
 
-        # Initialize with copies of current trajectories
-        trajectories_copied = [
-            list(trajectory) for trajectory in sample_data.trajectories
-        ]
-        sample_data_copied = replace(
-            sample_data, trajectories=trajectories_copied, skip_validation=True
-        )
+        # Copy
+        sample_data_copied = replace(sample_data, skip_validation=True)
 
         # Sample future transitions iteratively
         for _ in range(max_length):
@@ -346,10 +343,10 @@ class HazardMixin:
 
         return [
             trajectory[:-1] if trajectory[-1][0] > c_max[i] else trajectory
-            for i, trajectory in enumerate(trajectories_copied)
+            for i, trajectory in enumerate(sample_data_copied.trajectories)
         ]
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def compute_surv_logps(self, sample_data: SampleData, u: Tensor2D) -> torch.Tensor:
         """Computes log probabilites of remaining event free up to time u.
 

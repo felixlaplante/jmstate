@@ -3,20 +3,20 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
-from ..typedefs._defs import IntStrictlyPositive, MatRepr, Tensor2D
+from ..typedefs._defs import MatRepr, Tensor2D
 
 if TYPE_CHECKING:
     from ..typedefs._params import ModelParams
 
 
-def _tril_from_flat(flat: torch.Tensor, dim: IntStrictlyPositive) -> torch.Tensor:
+def _tril_from_flat(flat: torch.Tensor, dim: int) -> torch.Tensor:
     """Generate the lower triangular matrix associated with flat tensor.
 
     Args:
         flat (torch.Tensor): Flat tehsnro
-        dim (IntStrictlyPositive): Dimension of the matrix.
+        dim (int): Dimension of the matrix.
 
     Returns:
         torch.Tensor: The lower triangular matrix.
@@ -45,13 +45,13 @@ def _flat_from_tril(L: torch.Tensor) -> torch.Tensor:
 
 
 def _log_cholesky_from_flat(
-    flat: torch.Tensor, dim: IntStrictlyPositive, method: str = "full"
+    flat: torch.Tensor, dim: int, method: str = "full"
 ) -> torch.Tensor:
     """Computes log cholesky from flat tensor according to choice of method.
 
     Args:
         flat (torch.Tensor): The flat tensor parameter.
-        dim (IntStrictlyPositive): The dimension of the matrix.
+        dim (int): The dimension of the matrix.
         method (str, optional): The method, full, diagonal or ball. Defaults to "full".
 
     Raises:
@@ -95,7 +95,7 @@ def _flat_from_log_cholesky(L: torch.Tensor, method: str = "full") -> torch.Tens
             raise ValueError(f"Got method {method} unknown")
 
 
-@beartype
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
     """Computes covariance matrix from representation.
 
@@ -138,7 +138,7 @@ def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
     return L_inv.T @ L_inv
 
 
-@beartype
+@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
 def repr_from_cov(V: Tensor2D, method: str = "full") -> MatRepr:
     """Computes representation from covariance matrix according to choice of method.
 

@@ -3,17 +3,15 @@ from typing import Any, Callable
 import torch
 from tqdm import trange
 
-from ..typedefs._defs import IntPositive, NumPositive, NumProbability
-
 
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
     logpdf_aux: Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]
     init_state: torch.Tensor
-    n_chains: IntPositive
-    adapt_rate: NumPositive
-    target_accept_rate: NumProbability
+    n_chains: int
+    adapt_rate: int | float
+    target_accept_rate: int | float
     state: torch.Tensor
     logpdf: torch.Tensor
     aux: tuple[torch.Tensor, ...]
@@ -27,20 +25,20 @@ class MetropolisHastingsSampler:
             [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]
         ],
         init_state: torch.Tensor,
-        n_chains: IntPositive,
-        init_step_size: NumPositive,
-        adapt_rate: NumPositive,
-        target_accept_rate: NumProbability,
+        n_chains: int,
+        init_step_size: int | float,
+        adapt_rate: int | float,
+        target_accept_rate: int | float,
     ):
         """Initialize the Metropolis-Hastings sampler kernel.
 
         Args:
             logpdf_aux_fn (Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]): logpdf function.
             init_state (torch.Tensor): Starting state for the chain.
-            n_chains (IntPositive): The number of parallel chains to spawn.
-            init_step_size (NumPositive): Kernel step in Metropolis Hastings.
-            adapt_rate (NumPositive): Adaptation rate for the step_size.
-            target_accept_rate (NumProbability): Mean acceptance target.
+            n_chains (int): The number of parallel chains to spawn.
+            init_step_size (int | float): Kernel step in Metropolis Hastings.
+            adapt_rate (int | float): Adaptation rate for the step_size.
+            target_accept_rate (int | float): Mean acceptance target.
         """
         self.logpdf_aux_fn = logpdf_aux_fn
         self.n_chains = n_chains

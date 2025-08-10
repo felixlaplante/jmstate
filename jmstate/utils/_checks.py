@@ -2,10 +2,7 @@ import itertools
 
 import torch
 
-from ..typedefs._defs import (
-    MatRepr,
-    Trajectory,
-)
+from ..typedefs._defs import MatRepr, Trajectory
 
 
 def check_inf(tensors: tuple[torch.Tensor | None, ...]):

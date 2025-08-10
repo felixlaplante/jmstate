@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Final
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._defs import Info, Job, Metrics, NumPositive
 
@@ -15,10 +15,10 @@ ADAM_LIKE: Final[tuple[type[torch.optim.Optimizer], ...]] = (
 
 class _BaseL1Proximal(Job, ABC):
     group: str
-    lmda: NumPositive
+    lmda: int | float
     param_groups: list[dict[str, Any]]
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, lmda: NumPositive, group: str = "betas"):
         self.group = group
         self.lmda = lmda

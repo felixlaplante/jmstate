@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Final, cast
 
 import torch
-from beartype import beartype
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._defs import Info, Job, Metrics
 
@@ -25,7 +25,7 @@ class _BaseFit(Job, ABC):
     default_opt_factory: type[torch.optim.Optimizer]
     is_fitting: bool
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         opt_factory: type[torch.optim.Optimizer] | None = None,
@@ -128,7 +128,7 @@ class Scheduling(Job):
     sched: torch.optim.lr_scheduler.LRScheduler
     kwargs: Any
 
-    @beartype
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         sched_factory: type[torch.optim.lr_scheduler.LRScheduler],
