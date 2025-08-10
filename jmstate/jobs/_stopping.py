@@ -41,6 +41,18 @@ class GradStop(Job):
         min_consecutive: IntStrictlyPositive = 20,
         betas: tuple[NumProbability, NumProbability] = (0.9, 0.999),
     ):
+        """Initializes the ValueStop class.
+
+        Args:
+            atol (NumPositive | Tensor1DPositive, optional): Absolute tolerance, either
+                scalar or elementwise. Defaults to 0.01.
+            rtol (NumPositive | Tensor1DPositive, optional): Relative tolerance, either
+                scalar or elementwise. Defaults to 0.01.
+            min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
+                iterations with grad difference less than tolerance. Defaults to 20.
+            beta (tuple[NumProbability, NumProbability], optional): Exponential moving
+                averages forget parameters. Defaults to (0.9, 0.999).
+        """
         self.atol = atol
         self.rtol = rtol
         self.min_consecutive = min_consecutive
@@ -87,7 +99,7 @@ class GradStop(Job):
 
         return self.stopped
 
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not self.stopped:
             warnings.warn(
                 DEFAULT_NOT_CONVERGED_WARNING,
@@ -114,6 +126,18 @@ class ValueStop(Job):
         min_consecutive: IntStrictlyPositive = 20,
         beta: NumProbability = 0.9,
     ):
+        """Initializes the ValueStop class.
+
+        Args:
+            atol (NumPositive | Tensor1DPositive, optional): Absolute tolerance, either
+                scalar or elementwise. Defaults to 0.01.
+            rtol (NumPositive | Tensor1DPositive, optional): Relative tolerance, either
+                scalar or elementwise. Defaults to 0.01.
+            min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
+                iterations with value difference less than tolerance. Defaults to 20.
+            beta (NumProbability, optional): Exponential moving average forget
+                parameter. Defaults to 0.9.
+        """
         self.atol = atol
         self.rtol = rtol
         self.min_consecutive = min_consecutive
@@ -146,7 +170,7 @@ class ValueStop(Job):
 
         return self.stopped
 
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not self.stopped:
             warnings.warn(
                 DEFAULT_NOT_CONVERGED_WARNING,

@@ -33,7 +33,9 @@ class MetropolisHastingsSampler:
         """Initialize the Metropolis-Hastings sampler kernel.
 
         Args:
-            logpdf_aux_fn (Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]): logpdf function.
+            logpdf_aux_fn (
+                Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]
+            ): logpdf function.
             init_state (torch.Tensor): Starting state for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (int | float): Kernel step in Metropolis Hastings.

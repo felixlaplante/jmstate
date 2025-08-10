@@ -78,7 +78,7 @@ def is_strict_pos(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
     return x
 
 
-def is_prob(x: int | float):
+def is_prob(x: int | float) -> int | float:
     """Checks if the number is a probability.
 
     Args:
@@ -88,7 +88,7 @@ def is_prob(x: int | float):
         ValueError: If the number is not 0 < x < 1.
 
     Returns:
-        _type_: The output number.
+        int | float: The output number.
     """
     if not 0 < x < 1:
         raise ValueError(f"Expected probability, got {x}")

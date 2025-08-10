@@ -20,6 +20,16 @@ class _BaseL1Proximal(Job, ABC):
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, lmda: NumPositive, group: str = "betas"):
+        """Initialize the proximal operator.
+
+        Args:
+            lmda (NumPositive): The penalty.
+            group (str, optional): The group to penalize, either the link or covariate
+                parameters. Defaults to "betas".
+
+        Raises:
+            ValueError: If the group is not in 'alphas' nor 'betas'.
+        """
         self.group = group
         self.lmda = lmda
         if group not in ("alphas", "betas"):
@@ -67,11 +77,39 @@ class _BaseL1Proximal(Job, ABC):
 
 
 class AdamL1Proximal(_BaseL1Proximal):
+    """Adam proximal operator.
+
+    Args:
+        lmda (NumPositive): The penalty.
+        group (str, optional): The group to penalize, either the link or covariate
+            parameters. Defaults to "betas".
+
+    Raises:
+        ValueError: If the optimizer is not supported.
+    """
+
     @staticmethod
     def check_optimizer(optimizer: torch.optim.Optimizer):
+        """Checks if the optimizer is supported.
+
+        Args:
+            optimizer (torch.optim.Optimizer): The optimizer.
+
+        Raises:
+            ValueError: If the optimizer is not Adam-like.
+        """
         if not isinstance(optimizer, ADAM_LIKE):
             raise ValueError("Optimizer must be Adam or Adam-like")
 
     @staticmethod
-    def get_effective_lr(g: dict[str, Any], state: dict[str, Any]):
+    def get_effective_lr(g: dict[str, Any], state: dict[str, Any]) -> float:
+        """Gets the effective learning rate.
+
+        Args:
+            g (dict[str, Any]): The parameter group.
+            state (dict[str, Any]): The optimizer state.
+
+        Returns:
+            float: The effective learning rate.
+        """
         return g["lr"] / torch.sqrt(state["exp_avg_sq"] + g["eps"])

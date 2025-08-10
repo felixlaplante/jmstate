@@ -318,7 +318,8 @@ class HazardMixin:
         Args:
             sample_data (SampleData): Prediction data.
             c_max (TensorCol): The maximum trajectory censoring times.
-            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling. Defaults to 10.
+            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling.
+                Defaults to 10.
 
         Raises:
             ValueError: If c_max has incorrect shape.

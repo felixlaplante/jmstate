@@ -25,7 +25,8 @@ def check_consistent_size(
     """Checks if all the tensors are consistent in size.
 
     Args:
-        groups (tuple[tuple[torch.Tensor | list[Any] | None, int | None, str], ...]): The tuples to check.
+        groups (tuple[tuple[torch.Tensor | list[Any] | None, int | None, str], ...]):
+            The tuples to check.
 
     Raises:
         ValueError: If any of the sizes are inconsistent.
@@ -111,12 +112,14 @@ def check_matrix_dim(mat_repr: MatRepr, name: str):
         case "full":
             if flat.numel() != (dim * (dim + 1)) // 2:
                 raise ValueError(
-                    f"{flat.numel()} is incompatible with full matrix {name} of dimension {dim}"
+                    f"{flat.numel()} is incompatible with full matrix {name} of "
+                    f"dimension {dim}"
                 )
         case "diag":
             if flat.numel() != dim:
                 raise ValueError(
-                    f"{flat.numel()} is incompatible with diag matrix {name} of dimension {dim}"
+                    f"{flat.numel()} is incompatible with diag matrix {name} of "
+                    f"dimension {dim}"
                 )
         case "ball":
             if flat.numel() != 1:

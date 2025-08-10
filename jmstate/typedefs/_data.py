@@ -31,7 +31,7 @@ from ._params import ModelParams
 # Dataclasses
 @dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelDesign:
-    """Class containing all multistate joint model design."""
+    """Class containing model design. Base hazard function is expected to be pure."""
 
     individual_effects_fn: IndividualEffectsFn
     regression_fn: RegressionFn
@@ -148,7 +148,10 @@ class CompleteModelData(ModelData):
             and (valid_mask.any(dim=-1) & nan_mask.any(dim=-1)).any()
         ):
             warnings.warn(
-                "R method should not be full when having mixed NaNs as incorrect likelihood will be computed",
+                (
+                    "R method should not be full when having mixed NaNs as incorrect "
+                    "likelihood will be computed"
+                ),
                 stacklevel=2,
             )
 

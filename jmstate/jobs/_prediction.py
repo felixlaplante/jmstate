@@ -9,6 +9,7 @@ from ..typedefs._defs import (
     IntStrictlyPositive,
     Job,
     Metrics,
+    Tensor2D,
     TensorCol,
     Trajectory,
 )
@@ -17,13 +18,22 @@ from ..utils._checks import check_consistent_size
 
 
 class PredictY(Job):
-    """Job to predict longitudinal values."""
+    """Job to predict longitudinal values.
+
+    Raises:
+        ValueError: If u has incompatible shape.
+    """
 
     u: torch.Tensor
     pred_y: list[torch.Tensor]
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, u: torch.Tensor):
+    def __init__(self, u: Tensor2D):
+        """Inits the predicting job.
+
+        Args:
+            u (Tensor2D): The matrix containing prediction times.
+        """
         self.u = u.to(torch.get_default_dtype())
         self.pred_y = []
 
@@ -39,18 +49,27 @@ class PredictY(Job):
 
 
 class PredictSurvLogps(Job):
-    """Job to predict survival log probability values."""
+    """Job to predict survival log probability values.
+
+    Raises:
+        ValueError: If u has incompatible shape.
+    """
 
     u: torch.Tensor
     pred_surv_logps: list[torch.Tensor]
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, u: torch.Tensor):
+    def __init__(self, u: Tensor2D):
+        """Inits the predicting job.
+
+        Args:
+            u (Tensor2D): The matrix containing prediction times.
+        """
         self.u = u.to(torch.get_default_dtype())
         self.pred_surv_logps = []
 
     def init(self, info: Info):
-        pass
+        check_consistent_size(((self.u, 0, "u"), (info.data.size, None, "data.size")))
 
     def run(self, info: Info):
         sample_data = SampleData(
@@ -64,12 +83,16 @@ class PredictSurvLogps(Job):
 
         self.pred_surv_logps += [surv_logps[i] for i in range(surv_logps.size(0))]
 
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         metrics.pred_surv_logps = self.pred_surv_logps
 
 
 class PredictTrajectories(Job):
-    """Job to predict trajectories."""
+    """Job to predict trajectories.
+
+    Raises:
+        ValueError: If c_max has incompatible shape.
+    """
 
     c_max: torch.Tensor
     max_length: int
@@ -81,6 +104,13 @@ class PredictTrajectories(Job):
         c_max: TensorCol,
         max_length: IntStrictlyPositive = 10,
     ):
+        """Inits the sampling predicting job.
+
+        Args:
+            c_max (TensorCol): The maximum sampling (censoring) times.
+            max_length (IntStrictlyPositive, optional): The max length of the
+                trajectories. Defaults to 10.
+        """
         self.c_max = c_max.to(torch.get_default_dtype())
         self.max_length = max_length
         self.pred_trajectories = []
@@ -106,7 +136,7 @@ class PredictTrajectories(Job):
 
             self.pred_trajectories += trajectories
 
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         metrics.pred_trajectories = self.pred_trajectories
 
 
@@ -122,6 +152,13 @@ class SwitchParams(Job):
     def __init__(
         self, param_list: list[ModelParams], n_iterations_per_param: IntStrictlyPositive
     ):
+        """A job to switch between multiple parameters.
+
+        Args:
+            param_list (list[ModelParams]): The list of parameters.
+            n_iterations_per_param (IntStrictlyPositive): The number of iterations to
+                execute before switching.
+        """
         self.param_list = param_list
         self.n_iterations_per_param = n_iterations_per_param
         self.n_params = len(param_list)

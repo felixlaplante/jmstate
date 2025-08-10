@@ -6,7 +6,7 @@ from pydantic import ConfigDict, validate_call
 from ..typedefs._defs import LOGTWOPI, ClockMethod, Num, NumStrictlyPositive
 
 
-def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
     """Time transformation for clock forward method.
 
     Args:
@@ -55,7 +55,7 @@ class Exponential:
 
         self.log_lmda = torch.log(self.lmda)
 
-    def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG002
         return self.log_lmda
 
 
@@ -80,7 +80,8 @@ class Weibull:
         Args:
             k (NumStrictlyPositive): The shape parameter.
             lmda (NumStrictlyPositive): The scale parameter.
-            clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
+            clock_method (ClockMethod, optional): The ClockMethod transformation.
+                Defaults to clock_reset.
 
         Raises:
             ValueError: If k is not strictly positive.
@@ -125,7 +126,8 @@ class Gompertz:
         Args:
             a (NumStrictlyPositive): The baseline hazard.
             b (Num): The shape parameter.
-            clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
+            clock_method (ClockMethod, optional): The ClockMethod transformation.
+                Defaults to clock_reset.
 
         Raises:
             ValueError: If a is not strictly positive.
@@ -164,7 +166,8 @@ class LogNormal:
         Args:
             mu (Num):  log time mean.
             scale (NumStrictlyPositive): The log time scale.
-            clock_method (ClockMethod, optional): The ClockMethod transformation. Defaults to clock_reset.
+            clock_method (ClockMethod, optional): The ClockMethod transformation.
+                Defaults to clock_reset.
 
         Raises:
             ValueError: If scale is not strictly positive.

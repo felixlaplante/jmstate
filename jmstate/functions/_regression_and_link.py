@@ -18,20 +18,6 @@ def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
     return psi.unsqueeze(-2).expand(*psi.shape[:-1], t.size(-1), -1)
 
 
-def sigmoid(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
-    """Implements the sigmoid transformation.
-
-    Args:
-        t (torch.Tensor): The time points.
-        psi (torch.Tensor): The individual effects (parameters).
-
-    Returns:
-        torch.Tensor: The computed transformation.
-    """
-    a, b, c = psi.chunk(3, dim=-1)
-    return (a * torch.sigmoid((t - c) / b)).unsqueeze(-1)
-
-
 class Net(nn.Module):
     """Implements a neural network."""
 

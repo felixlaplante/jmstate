@@ -1,7 +1,7 @@
 import torch
 
 
-def identity(gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+def identity(gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
     """The standard linear transformation b.
 
     Args:

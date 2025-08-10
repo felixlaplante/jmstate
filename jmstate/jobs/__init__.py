@@ -1,4 +1,4 @@
-from ._computation import ComputeCriteria, ComputeEBEs, ComputeFIM
+from ._computation import ComputeCriteria, ComputeEBEs, ComputeFIM  # noqa: D104
 from ._fitting import DeterministicFit, RandomFit, Scheduling
 from ._logging import LogParamsHistory, MCMCDiagnostics
 from ._prediction import PredictSurvLogps, PredictTrajectories, PredictY, SwitchParams

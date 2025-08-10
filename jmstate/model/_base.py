@@ -32,8 +32,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     optimizer of choice.
 
     Args:
-        LongitudinalMixin (_type_): The longitudinal part of the model.
-        HazardMixin (_type_): The hazard part of the model.
+        LongitudinalMixin (LongitudinalMixin): The longitudinal part of the model.
+        HazardMixin (HazardMixin): The hazard part of the model.
     """
 
     model_design: ModelDesign
@@ -62,10 +62,14 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             model_design (ModelDesign): Model design containing modeling information.
             init_params (ModelParams): Initial values for the parameters.
-            pen (Callable[[ModelParams], torch.Tensor] | None, optional): The penalization function. Defaults to None.
-            n_quad (IntStrictlyPositive, optional): The used numnber of points for Gauss-Legendre quadrature. Defaults to 32.
-            n_bissect (IntStrictlyPositive, optional): The number of bissection steps used in transition sampling. Defaults to 32.
-            cache_limit (IntPositive | None, optional): The max length of cache. Defaults to 256.
+            pen (Callable[[ModelParams], torch.Tensor] | None, optional):
+                The penalization function. Defaults to None.
+            n_quad (IntStrictlyPositive, optional): The used numnber of points for
+                Gauss-Legendre quadrature. Defaults to 32.
+            n_bissect (IntStrictlyPositive, optional): The number of bissection steps
+                used in transition sampling. Defaults to 32.
+            cache_limit (IntPositive | None, optional): The max length of cache.
+                Defaults to 256.
         """
         # Store model components
         self.model_design = model_design
@@ -165,7 +169,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             jobs (Job | list[Job]): The job(s).
 
         Returns:
-            tuple[list[Job], dict[str, Any] | None]: The jobs and default hyperparameters.
+            tuple[list[Job], dict[str, Any] | None]: The jobs and default
+                hyperparameters.
         """
         # Initialize jobs
         if isinstance(jobs, Job):
@@ -194,18 +199,25 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         accept_target: NumProbability = 0.234,
         verbose: bool = True,
     ) -> Metrics | Any | None:
-        """Runs the MultiStateJointModel loop and some jobs.
+        """Runs the sampler loop and some jobs.
 
         Args:
             new_data (ModelData): The dataset to learn from.
             jobs (Job | list[Job]): A list of jobs to execute in order.
-            max_iterations (int | None, optional): Maximum number of iterations. Defaults to None.
-            n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults to None.
-            warmup (IntPositive | None, optional): The number of iteration steps used in the warmup. Defaults to None.
-            n_steps (IntPositive | None, optional): The steps to do at each iteration. Defaults to None.
-            init_step_size (NumPositive, optional): Kernel step in Metropolis Hastings. Defaults to 0.1.
-            adapt_rate (NumPositive, optional): Adaptation rate for the step_size. Defaults to 0.01.
-            accept_target (NumProbability, optional): Mean acceptation target. Defaults to 0.234.
+            max_iterations (int | None, optional): Maximum number of iterations.
+                Defaults to None.
+            n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
+                to None.
+            warmup (IntPositive | None, optional): The number of iteration steps used in
+                the warmup. Defaults to None.
+            n_steps (IntPositive | None, optional): The steps to do at each iteration.
+                Defaults to None.
+            init_step_size (NumPositive, optional): Kernel step in Metropolis Hastings.
+                Defaults to 0.1.
+            adapt_rate (NumPositive, optional): Adaptation rate for the step_size.
+                Defaults to 0.01.
+            accept_target (NumProbability, optional): Mean acceptation target. Defaults
+                to 0.234.
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:

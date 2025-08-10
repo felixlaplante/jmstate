@@ -7,7 +7,7 @@ from ._base_hazards import (  # noqa: D104
     clock_reset,
 )
 from ._individual_effects import gamma_plus_b, gamma_x_plus_b, identity
-from ._regression_and_link import Net, linear, sigmoid
+from ._regression_and_link import Net, linear
 
 __all__ = [
     "Exponential",
@@ -21,5 +21,4 @@ __all__ = [
     "gamma_x_plus_b",
     "identity",
     "linear",
-    "sigmoid",
 ]

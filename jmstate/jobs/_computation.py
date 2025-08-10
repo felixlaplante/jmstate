@@ -17,7 +17,10 @@ class ComputeFIM(Job):
     def init(self, info: Info):
         if not info.model.fit_:
             warnings.warn(
-                "Model should be (random) fitted before computing Fisher Information Matrix",
+                (
+                    "Model should be (random) fitted before computing Fisher "
+                    "Information Matrix"
+                ),
                 stacklevel=2,
             )
 

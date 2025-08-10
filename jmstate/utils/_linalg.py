@@ -114,11 +114,13 @@ def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
 
     if method == "full" and flat.numel() != (dim * (dim + 1)) // 2:
         raise ValueError(
-            f"Inconsistent dim:{dim} with method 'full', flat with {flat.numel()} elements"
+            f"Inconsistent dim:{dim} with method 'full', flat with {flat.numel()} "
+            "elements"
         )
     if method == "diag" and flat.numel() != dim:
         raise ValueError(
-            f"Inconsistent dim:{dim} with method 'diag', flat with {flat.numel()} elements"
+            f"Inconsistent dim:{dim} with method 'diag', flat with {flat.numel()} "
+            "elements"
         )
     if method == "ball" and flat.numel() != 1:
         raise ValueError("Inconsistent with method 'ball', flat must have one element")

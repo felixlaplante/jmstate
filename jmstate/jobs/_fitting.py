@@ -32,6 +32,16 @@ class _BaseFit(Job, ABC):
         fit_extra: bool = True,
         **kwargs: Any,
     ):
+        """Initializes the fitting base class.
+
+        Args:
+            opt_factory (type[torch.optim.Optimizer] | None, optional): The optimizer
+                factory, if None, it defaults to the current default set by a file
+                constant. Defaults to None.
+            fit_extra (bool, optional): An option to fit extra parameters or not.
+                Defaults to True.
+            kwargs (Any): Additional kwargs passed to the optimizer factory, such as lr.
+        """
         self.opt_factory = opt_factory or self.default_opt_factory
         self.fit_extra = fit_extra
         self.kwargs = kwargs

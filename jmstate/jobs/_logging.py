@@ -20,7 +20,7 @@ class LogParamsHistory(Job):
             params_like_from_flat(info.model.params_, info.model.params_.as_flat_tensor)
         )
 
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not hasattr(metrics, "params_history"):
             metrics.params_history = self.params_history
         else:
@@ -41,7 +41,7 @@ class MCMCDiagnostics(Job):
     def run(self, info: Info):
         self.mcmc_diagnostics.append(info.sampler.diagnostics)
 
-    def end(self, info: Info, metrics: Metrics):
+    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         if not hasattr(metrics, "mcmc_diagnostics"):
             metrics.mcmc_diagnostics = self.mcmc_diagnostics
         else:

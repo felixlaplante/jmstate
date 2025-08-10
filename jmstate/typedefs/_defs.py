@@ -70,12 +70,12 @@ class IndividualEffectsFn(Protocol):
 
 @runtime_checkable
 class BaseHazardFn(Protocol):
-    def __call__(self, t0: TensorCol, t1: Tensor2D) -> torch.Tensor: ...
+    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
 
 
 @runtime_checkable
 class ClockMethod(Protocol):
-    def __call__(self, t0: TensorCol, t1: Tensor2D) -> torch.Tensor: ...
+    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
 
 
 # Named tuples
