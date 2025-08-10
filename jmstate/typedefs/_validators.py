@@ -85,11 +85,11 @@ def is_prob(x: int | float):
         x (int | float): The number to check.
 
     Raises:
-        ValueError: If the number is not 0 <= x <= 1.
+        ValueError: If the number is not 0 < x < 1.
 
     Returns:
         _type_: The output number.
     """
-    if not 0 <= x <= 1:
+    if not 0 < x < 1:
         raise ValueError(f"Expected probability, got {x}")
     return x
