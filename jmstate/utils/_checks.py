@@ -37,7 +37,7 @@ def check_consistent_size(
         raise ValueError(f"Incoherent dimension, found sizes: {sorted(sizes)}")
     if ref is not None and ref not in sizes:
         raise ValueError(
-            f"Tensor sizes {sizes} don't match the reference dimension {ref}"
+            f"Input sizes {sizes} don't match the reference dimension {ref}"
         )
 
 

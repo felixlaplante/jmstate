@@ -12,6 +12,7 @@ from ..typedefs._defs import (
     NumProbability,
     Tensor1DPositive,
 )
+from ..utils._checks import check_consistent_size
 
 # Constants
 DEFAULT_NOT_CONVERGED_WARNING = (
@@ -53,6 +54,11 @@ class GradStop(Job):
             raise ValueError("Optimizer must be set for GradStop")
 
         d = info.model.params_.numel
+        if isinstance(self.atol, torch.Tensor):
+            check_consistent_size(((self.atol, 0),), d)
+        if isinstance(self.rtol, torch.Tensor):
+            check_consistent_size(((self.rtol, 0),), d)
+
         self.m = torch.zeros(d)
         self.v = torch.zeros(d)
 
@@ -117,7 +123,13 @@ class ValueStop(Job):
         self.stopped = False
 
     def init(self, info: Info):
-        self.p = torch.zeros(info.model.params_.numel)
+        d = info.model.params_.numel
+        if isinstance(self.atol, torch.Tensor):
+            check_consistent_size(((self.atol, 0),), d)
+        if isinstance(self.rtol, torch.Tensor):
+            check_consistent_size(((self.rtol, 0),), d)
+
+        self.p = torch.zeros(d)
 
     def run(self, info: Info) -> bool | None:
         params = info.model.params_.as_flat_tensor
