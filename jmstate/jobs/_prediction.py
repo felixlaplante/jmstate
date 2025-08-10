@@ -28,7 +28,7 @@ class PredictY(Job):
         self.pred_y = []
 
     def init(self, info: Info):
-        check_consistent_size(((self.u, 0),), info.data.size)
+        check_consistent_size(((self.u, 0, "u"), (info.data.size, None, "data.size")))
 
     def run(self, info: Info):
         y = info.model.model_design.regression_fn(self.u, info.psi.detach())
@@ -86,7 +86,9 @@ class PredictTrajectories(Job):
         self.pred_trajectories = []
 
     def init(self, info: Info):
-        check_consistent_size(((self.c_max, 0),), info.data.size)
+        check_consistent_size(
+            ((self.c_max, 0, "u"), (info.data.size, None, "data.size"))
+        )
 
     def run(self, info: Info):
         for i in range(info.psi.size(0)):

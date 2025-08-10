@@ -5,40 +5,41 @@ import torch
 from ..typedefs._defs import MatRepr, Trajectory
 
 
-def check_inf(tensors: tuple[torch.Tensor | None, ...]):
+def check_inf(tensors: tuple[tuple[torch.Tensor | None, str], ...]):
     """Check if any of the tensors contains infinity.
 
     Args:
-        tensors (tuple[torch.Tensor | None, ...]): The tensors to check.
+        tensors (tuple[tuple[torch.Tensor | None, str] ,...]): The tensors to check.
 
     Raises:
         ValueError: If one tensor contains infinity.
     """
-    if any(t is not None and t.isinf().any() for t in tensors):
-        raise ValueError("Tensors cannot contain inf values")
+    for t, name in tensors:
+        if t is not None and t.isinf().any():
+            raise ValueError(f"Tensor {name} cannot contain inf values")
 
 
 def check_consistent_size(
-    groups: tuple[tuple[torch.Tensor | None, int], ...],
-    ref: int | None = None,
+    groups: tuple[tuple[torch.Tensor | int | None, int | None, str], ...],
 ):
     """Checks if all the tensors are consistent in size.
 
     Args:
-        groups (tuple[tuple[torch.Tensor  |  None, int], ...]): The tuple of tensors.
-        ref (int | None, optional): The regerence or None. Defaults to None.
+        groups (tuple[tuple[torch.Tensor | list[Any] | None, int | None, str], ...]): The tuples to check.
 
     Raises:
-        ValueError: If the sizes are inconsistent.
-        ValueError: If the size does not match the reference.
+        ValueError: If any of the sizes are inconsistent.
     """
-    sizes = {t.size(d) for t, d in groups if t is not None}
-    if len(sizes) > 1:
-        raise ValueError(f"Incoherent dimension, found sizes: {sorted(sizes)}")
-    if ref is not None and ref not in sizes:
-        raise ValueError(
-            f"Input sizes {sizes} don't match the reference dimension {ref}"
-        )
+    for (t0, d0, name0), (t1, d1, name1) in itertools.pairwise(groups):
+        if t0 is None or t1 is None:
+            continue
+        dim0 = t0 if isinstance(t0, int) else t0.size(d0)
+        dim1 = t1 if isinstance(t1, int) else t1.size(d1)
+
+        if dim0 != dim1:
+            raise ValueError(
+                f"{dim0} != {dim1} at dims {d0, d1} for args {name0, name1}"
+            )
 
 
 def check_trajectory_empty(trajectories: list[Trajectory]):
@@ -83,40 +84,44 @@ def check_trajectory_c(trajectories: list[Trajectory], c: torch.Tensor | None):
     if c is not None and any(
         trajectory[-1][0] > c for trajectory, c in zip(trajectories, c)
     ):
-        raise ValueError("Last trajectory time must not be greater than c")
+        raise ValueError("Last trajectory time must not be greater than censoring time")
 
 
-def check_matrix_dim(mat_repr: MatRepr):
+def check_matrix_dim(mat_repr: MatRepr, name: str):
     """Sets dimensions for matrix.
 
     Args:
         mat_repr (MatRepr): The matrix representation.
+        name (str): The matrix name.
 
     Raises:
-        ValueError: If flat is not flat.
+        ValueError: If flat tensor is not flat.
         ValueError: If the number of elements is incompatible with method "full".
         ValueError: If the number of elements is icompatible with method "diag".
         ValueError: If the number of elements is not one and the method is "ball".
-        ValueError: If the method is unknown.
     """
     flat, dim, method = mat_repr
 
     if flat.ndim != 1:
-        raise ValueError(f"flat must be flat tensor, got shpe {flat.shape}")
+        raise ValueError(
+            f"flat must be flat tensor, got shape {flat.shape} for matrix {name}"
+        )
 
     match method:
         case "full":
             if flat.numel() != (dim * (dim + 1)) // 2:
                 raise ValueError(
-                    f"{flat.numel()} is incompatible with full matrix of dimension {dim}"
+                    f"{flat.numel()} is incompatible with full matrix {name} of dimension {dim}"
                 )
         case "diag":
             if flat.numel() != dim:
                 raise ValueError(
-                    f"{flat.numel()} is incompatible with diag matrix of dimension {dim}"
+                    f"{flat.numel()} is incompatible with diag matrix {name} of dimension {dim}"
                 )
         case "ball":
             if flat.numel() != 1:
-                raise ValueError(f"Expected 1 element for flat, got {flat.numel()}")
+                raise ValueError(
+                    f"Expected 1 element for flat, got {flat.numel()} for matrix {name}"
+                )
         case _:
-            raise ValueError(f"Got method {method} unknown")
+            pass

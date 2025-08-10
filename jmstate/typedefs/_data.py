@@ -76,9 +76,16 @@ class ModelData:
         self.y = self.y.to(torch.get_default_dtype())
         self.c = self.c.to(torch.get_default_dtype())
 
-        check_inf((self.x, self.t, self.y, self.c))
-        check_consistent_size(((self.x, 0), (self.y, 0), (self.c, 0)), self.size)
-        check_consistent_size(((self.t, -1), (self.y, -2)))
+        check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
+        check_consistent_size(
+            (
+                (self.x, 0, "x"),
+                (self.y, 0, "y"),
+                (self.c, 0, "c"),
+                (self.size, None, "trajectories"),
+            )
+        )
+        check_consistent_size(((self.t, -1, "t"), (self.y, -2, "y")))
         check_trajectory_empty(self.trajectories)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
@@ -126,13 +133,16 @@ class CompleteModelData(ModelData):
             model_design (ModelDesign): The design of the model.
             params (ModelParams): The model parameters.
         """
+        check_consistent_size(((params.R_repr.dim, None, "R"), (self.y, -1, "y")))
+
         nan_mask = torch.isnan(self.y)
         valid_mask = ~nan_mask
+        self.valid_mask = valid_mask.to(torch.get_default_dtype())
+        self.n_valid = self.valid_mask.sum(dim=-2)
+        self.valid_t = torch.nan_to_num(self.t)
+        self.valid_y = torch.nan_to_num(self.y)
+        self.buckets = build_traj_repr(self.trajectories, self.c, model_design.surv)
 
-        if params.R_repr.dim != self.y.size(-1):
-            raise ValueError(
-                f"Shape mismatch : R dimension ({params.R_repr.dim}) and y must be compatible ({self.y.size(-1)})"
-            )
         if (
             params.R_repr.method == "full"
             and (valid_mask.any(dim=-1) & nan_mask.any(dim=-1)).any()
@@ -141,12 +151,6 @@ class CompleteModelData(ModelData):
                 "R method should not be full when having mixed NaNs as incorrect likelihood will be computed",
                 stacklevel=2,
             )
-
-        self.valid_mask = valid_mask.to(torch.get_default_dtype())
-        self.n_valid = self.valid_mask.sum(dim=-2)
-        self.valid_t = torch.nan_to_num(self.t)
-        self.valid_y = torch.nan_to_num(self.y)
-        self.buckets = build_traj_repr(self.trajectories, self.c, model_design.surv)
 
 
 @dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
@@ -175,8 +179,15 @@ class SampleData:
         self.psi = self.psi.to(torch.get_default_dtype())
         self.c = None if self.c is None else self.c.to(torch.get_default_dtype())
 
-        check_inf((self.c, self.x, self.psi))
-        check_consistent_size(((self.x, -2), (self.psi, -2), (self.c, -2)), self.size)
+        check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
+        check_consistent_size(
+            (
+                (self.x, -2, "x"),
+                (self.psi, -2, "psi"),
+                (self.c, -2, "c"),
+                (self.size, None, "trajectories"),
+            )
+        )
         check_trajectory_empty(self.trajectories)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)

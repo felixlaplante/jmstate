@@ -40,10 +40,10 @@ class ModelParams:
             for t in self.extra:
                 t.data = t.to(torch.get_default_dtype())
 
-        check_matrix_dim(self.Q_repr)
-        check_matrix_dim(self.R_repr)
-        for val in self.as_groups.values():
-            check_inf(tuple(val))
+        check_matrix_dim(self.Q_repr, "Q")
+        check_matrix_dim(self.R_repr, "R")
+        for key, val in self.as_groups.items():
+            check_inf(tuple((t, key) for t in val))
 
     @property
     def as_groups(self) -> dict[str, list[torch.Tensor]]:

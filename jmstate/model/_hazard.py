@@ -328,7 +328,9 @@ class HazardMixin:
         """
         # Convert and check if c_max matches the right shape
         c_max = c_max.to(torch.get_default_dtype())
-        check_consistent_size(((c_max, 0),), sample_data.size)
+        check_consistent_size(
+            ((c_max, 0, "c_max"), (sample_data.size, None, "sample_data.size"))
+        )
 
         # Copy
         sample_data_copied = replace(sample_data, skip_validation=True)
@@ -362,7 +364,9 @@ class HazardMixin:
         """
         # Unpack data
         u = u.to(torch.get_default_dtype())
-        check_consistent_size(((u, 0),), sample_data.size)
+        check_consistent_size(
+            ((u, 0, "u"), (sample_data.size, None, "sample_data.size"))
+        )
 
         x = sample_data.x
         trajectories = sample_data.trajectories
