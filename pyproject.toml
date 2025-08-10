@@ -3,7 +3,7 @@ requires-python = ">=3.10"
 name = "jmstate"
 
 [tool.poetry.dependencies]
-dependencies = ["torch", "numpy", "beartype"]
+dependencies = ["torch", "numpy", "pydantic"]
 
 [tool.ruff]
 lint.select = [
