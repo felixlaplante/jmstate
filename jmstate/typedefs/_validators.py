@@ -33,7 +33,7 @@ def is_col(t: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: The output tensor.
     """
-    if t.ndim != 2 or t.size(1) != 1:
+    if t.size(1) != 1:
         raise ValueError(f"expected column tensor, got  shape {t.shape}")
     return t
 
