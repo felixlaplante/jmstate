@@ -57,7 +57,7 @@ class GradStop(Job):
         if isinstance(self.atol, torch.Tensor):
             check_consistent_size(((self.atol, 0, "atol"), (d, None, "params.numel")))
         if isinstance(self.rtol, torch.Tensor):
-            check_consistent_size(((self.rtol, 0, "atol"), (d, None, "params.numel")))
+            check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
         self.m = torch.zeros(d)
         self.v = torch.zeros(d)
@@ -127,7 +127,7 @@ class ValueStop(Job):
         if isinstance(self.atol, torch.Tensor):
             check_consistent_size(((self.atol, 0, "atol"), (d, None, "params.numel")))
         if isinstance(self.rtol, torch.Tensor):
-            check_consistent_size(((self.rtol, 0, "atol"), (d, None, "params.numel")))
+            check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
         self.p = torch.zeros(d)
 

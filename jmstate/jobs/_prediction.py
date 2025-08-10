@@ -87,7 +87,7 @@ class PredictTrajectories(Job):
 
     def init(self, info: Info):
         check_consistent_size(
-            ((self.c_max, 0, "u"), (info.data.size, None, "data.size"))
+            ((self.c_max, 0, "c_max"), (info.data.size, None, "data.size"))
         )
 
     def run(self, info: Info):
