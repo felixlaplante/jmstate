@@ -1,26 +1,43 @@
 from typing import Any
 
 from ..typedefs._defs import Info, Job, Metrics
-from ..typedefs._params import ModelParams, params_like_from_flat
+from ..typedefs._params import ModelParams
 
 
 class LogParamsHistory(Job):
-    """Job to log the evolution of the paramters during fit."""
+    """Job to log the evolution of the paramters during fit.
+
+    This yields a list of `ModelParams`.
+
+    Attributes:
+        params_history (list[ModelParams]): The history of the model parameters.
+    """
 
     params_history: list[ModelParams]
 
-    def __init__(self):
+    def __init__(self, info: Info):  # noqa: ARG002
+        """Initializes the history to an empty list.
+
+        Args:
+            info (Info): The job information object.
+        """
         self.params_history = []
 
-    def init(self, info: Info):
-        pass
-
     def run(self, info: Info):
-        self.params_history.append(
-            params_like_from_flat(info.model.params_, info.model.params_.as_flat_tensor)
-        )
+        """Appends the current parameter values to the parameter list.
+
+        Args:
+            info (Info): The job information object.
+        """
+        self.params_history.append(info.model.params_.clone())
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+        """Adds by concatenation or erases the metrics history.
+
+        Args:
+            info (Info): The job information object.
+            metrics (Metrics): The metrics object.
+        """
         if not hasattr(metrics, "params_history"):
             metrics.params_history = self.params_history
         else:
@@ -28,20 +45,40 @@ class LogParamsHistory(Job):
 
 
 class MCMCDiagnostics(Job):
-    """Job to log the evolution of the MCMC sampler."""
+    """Job to log the evolution of the MCMC sampler.
+
+    This yields a list of dicts containing MCMC diagnostics, such as step sizes and
+    acceptance rates.
+
+    Attributes:
+        mcmc_diagnostics (list[dict[str, Any]]): A list of MCMC diagnostic informations.
+    """
 
     mcmc_diagnostics: list[dict[str, Any]]
 
-    def __init__(self):
+    def __init__(self, info: Info):  # noqa: ARG002
+        """Initializes the diagnostics to an empty list.
+
+        Args:
+            info (Info): The job information object.
+        """
         self.mcmc_diagnostics = []
 
-    def init(self, info: Info):
-        pass
-
     def run(self, info: Info):
+        """Appends the current diagnostics dict to the parameter list.
+
+        Args:
+            info (Info): The job information object.
+        """
         self.mcmc_diagnostics.append(info.sampler.diagnostics)
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+        """Adds by concatenation or erases the metrics MCMC diagnostics.
+
+        Args:
+            info (Info): The job information object.
+            metrics (Metrics): The metrics object.
+        """
         if not hasattr(metrics, "mcmc_diagnostics"):
             metrics.mcmc_diagnostics = self.mcmc_diagnostics
         else:

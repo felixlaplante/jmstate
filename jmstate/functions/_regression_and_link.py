@@ -2,11 +2,18 @@ import torch
 from pydantic import ConfigDict, validate_call
 from torch import nn
 
-from ..typedefs._defs import IntPositive, LinkFn, RegressionFn
+from ..typedefs._defs import IntNonNegative, LinkFn, RegressionFn
 
 
 def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
-    """Implements the linear transformation.
+    r"""Implements the linear regression or link function.
+
+    When reverting to a linear joint model, this gives the mapping:
+
+    .. math::
+        h(t, \psi) = \psi,
+
+    where :math:`\psi` are the individual parameters.
 
     Args:
         t (torch.Tensor): The time points.
@@ -19,7 +26,23 @@ def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
 
 
 class Net(nn.Module):
-    """Implements a neural network."""
+    r"""Implements a neural network.
+
+    This neural network is very flexible, and any nn.Module may be used, in particular
+    sequentials. When not knowing which link or regression function to use, try Net.
+    You can use derivatives of arbitrary order for the link function using the
+    derivatives method.
+    If the input layer is in :math:`\mathbb{R}^d`, then one dimension is used for the
+    input :math:`t`, and the rest for the individual parameters.
+
+    Attributes:
+        net (nn.Module): The neural network module.
+
+    Examples:
+        >>> from torch import nn
+        >>> net = Net(nn.Sequential(nn.Linear(3, 4), nn.ReLU(), nn.Linear(4, 1)))
+        >>> link = net.derivatives((0, 1)) # derivatives of order 0 and 1
+    """
 
     net: nn.Module
 
@@ -45,11 +68,11 @@ class Net(nn.Module):
         return self.net(x)
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def derivatives(self, degs: tuple[IntPositive, ...]) -> RegressionFn | LinkFn:
+    def derivatives(self, degs: tuple[IntNonNegative, ...]) -> RegressionFn | LinkFn:
         """Gets a function returning multiple derivatives of the neural network.
 
         Args:
-            degs (tuple[IntPositive, ...]): The degrees.
+            degs (tuple[IntNonNegative, ...]): The degrees.
 
         Returns:
             RegressionFn | LinkFn: A regresion/link function.

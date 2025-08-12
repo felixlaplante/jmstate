@@ -1,39 +1,75 @@
 import copy
-from typing import Any, Callable, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import torch
 from pydantic import ConfigDict, validate_call
+
+from jmstate.typedefs._data import SampleData
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
 from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS
 from ..typedefs._defs import (
     LOGTWOPI,
+    Final,
     Info,
-    IntPositive,
+    IntNonNegative,
     IntStrictlyPositive,
     Job,
     Metrics,
-    NumPositive,
+    NumNonNegative,
     NumProbability,
+    Trajectory,
 )
-from ..typedefs._params import ModelParams, params_like_from_flat
+from ..typedefs._params import ModelParams
+from ..utils._checks import check_consistent_size
 from ..utils._linalg import get_cholesky_and_log_eigvals
 from ..utils._misc import run_jobs
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._sampler import MetropolisHastingsSampler
 
+# Constants
+DEFAULT_HYPERPARAMETERS_FIELDS: Final[tuple[str, ...]] = (
+    "max_iterations",
+    "n_chains",
+    "warmup",
+    "n_steps",
+)
+
 
 class MultiStateJointModel(LongitudinalMixin, HazardMixin):
-    """A class of the nonlinear multistate joint model.
+    r"""A class of the nonlinear multistate joint model.
 
-    It feature possibility
-    to simulate data, fit based on stochastic gradient with any torch.optim
-    optimizer of choice.
+    It features possibility to simulate data, fit based on stochastic gradient with any
+    `torch.optim.Optimizer` of choice.
 
-    Args:
-        LongitudinalMixin (LongitudinalMixin): The longitudinal part of the model.
-        HazardMixin (HazardMixin): The hazard part of the model.
+    It leverages the Fisher identity and stochastic gradient algorithm coupled
+    with a MCMC (Metropolis Hastings) sampler:
+
+    .. math::
+        \nabla_\theta \log \mathcal{L}(\theta ; x) = \mathbb{E}_{b \sim p(\cdot \mid x,
+        \theta)} \bigl(\nabla_\theta \log \mathcal{L}(\theta ; x, b)\bigr).
+
+    The use of penalization is possible through the attribute `pen`.
+
+    Please note this class encopasses both the linear joint model and the standard joint
+    model, but also allows for the modelling of multiple states assuming a semi Markov
+    property.
+
+    Attributes:
+        model_design (ModelDesign): The model design.
+        params_ (ModelParams): The (variable) model parameters.
+        pen (Callable[[ModelParams], torch.Tensor] | None): The log likelihood penalty.
+        n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
+        n_bissect (int): The number of bissection steps for the bissection algorithm.
+        cache_limit (int | None): The limit of the cache used in hazard computation,
+            greatly reducing memory and CPU usage. None means infinite, 0 means no
+            caching.
+        data (ModelData | None): The learnable dataset used when the model was fitted.
+        metrics_ (Metrics | None): Metrics object containing information about the model
+            and the jobs it executed.
+        fit_ (bool): A boolean value set to True when the model has been fitted.
     """
 
     model_design: ModelDesign
@@ -55,7 +91,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         pen: Callable[[ModelParams], torch.Tensor] | None = None,
         n_quad: IntStrictlyPositive = 32,
         n_bissect: IntStrictlyPositive = 32,
-        cache_limit: IntPositive | None = 256,
+        cache_limit: IntNonNegative | None = 256,
     ):
         """Initializes the joint model based on the user defined design.
 
@@ -68,7 +104,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 Gauss-Legendre quadrature. Defaults to 32.
             n_bissect (IntStrictlyPositive, optional): The number of bissection steps
                 used in transition sampling. Defaults to 32.
-            cache_limit (IntPositive | None, optional): The max length of cache.
+            cache_limit (IntNonNegative | None, optional): The max length of cache.
                 Defaults to 256.
         """
         # Store model components
@@ -161,63 +197,162 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
 
     def _setup_jobs(
-        self, jobs: Job | list[Job]
-    ) -> tuple[list[Job], dict[str, Any] | None]:
+        self, job_factories: Callable[[Info], Job] | list[Callable[[Info], Job]]
+    ) -> tuple[list[Callable[[Info], Job]], dict[str, Any] | None]:
         """Sets up jobs, and gets default hyperparameters.
 
         Args:
-            jobs (Job | list[Job]): The job(s).
+            job_factories (Callable[[Info], Job] | list[Callable[[Info], Job]]): The
+            job factorie(s).
 
         Returns:
-            tuple[list[Job], dict[str, Any] | None]: The jobs and default
-                hyperparameters.
+            tupl[list[Callable[[Info], Job]], dict[str, Any] | None]: The job factories
+                and default hyperparameters associated.
         """
         # Initialize jobs
-        if isinstance(jobs, Job):
-            jobs = [jobs]
+        if callable(job_factories):
+            job_factories = [job_factories]
 
-        hyperparameters: dict[str, Any] | None = None
-        for job in jobs:
-            val = DEFAULT_HYPERPARAMETERS.get(type(job))
-            if val is not None:
-                hyperparameters = val
+        for job_factory in reversed(job_factories):
+            key = getattr(job_factory, "cls", None)
+            if not (isinstance(key, type) and issubclass(key, Job)):
+                continue
 
-        return jobs, hyperparameters
+            hyperparameters = DEFAULT_HYPERPARAMETERS.get(key)
+            if hyperparameters is not None:
+                return job_factories, hyperparameters
+
+        return job_factories, None
+
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def sample_trajectories(
+        self,
+        sample_data: SampleData,
+        c_max: torch.Tensor,
+        *,
+        max_length: IntNonNegative = 10,
+    ) -> list[Trajectory]:
+        """Sample future trajectories from the fitted joint model.
+
+        Args:
+            sample_data (SampleData): Prediction data.
+            c_max (TensorCol): The maximum trajectory censoring times.
+            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling.
+                Defaults to 10.
+
+        Raises:
+            ValueError: If c_max has incorrect shape.
+
+        Returns:
+            list[Trajectory]: The sampled trajectories.
+        """
+        c_max = c_max.to(torch.get_default_dtype())
+        check_consistent_size(
+            ((c_max, 0, "c_max"), (sample_data.size, None, "sample_data.size"))
+        )
+
+        return super()._sample_trajectories(sample_data, c_max, max_length=max_length)
+
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def compute_surv_logps(
+        self, sample_data: SampleData, u: torch.Tensor
+    ) -> torch.Tensor:
+        r"""Computes log probabilites of remaining event free up to time u.
+
+        A censoring time may also be given. With known individual effects, this computes
+        at the times :math:`u` the values of the log survival probabilities given input
+        data conditionally to survival up to time :math:`c`:
+
+        .. math::
+            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt.
+
+        When multiple transitions are allowed, :math:`\lambda(t)` is a sum over all
+        possible transitions, that is to say if an individual is in the state :math:`k`
+        from time :math:`t_0`, this gives:
+
+        .. math::
+            -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt.
+
+        Please note this makes use of the Chasles property in order to avoid the
+        computation of two integrals and make computations more precise.
+
+        The variable `u` is expected to be a matrix with the same number of rows as
+        individuals, and the same number of columns as prediction times.
+
+        Args:
+            sample_data (SampleData): The data on which to compute the probabilities.
+            u (Tensor2D): The time at which to evaluate the probabilities.
+
+        Raises:
+            ValueError: If u is of incorrect shape.
+
+        Returns:
+            torch.Tensor: The computed survival log probabilities.
+        """
+        u = u.to(torch.get_default_dtype())
+        check_consistent_size(
+            ((u, 0, "u"), (sample_data.size, None, "sample_data.size"))
+        )
+
+        return super()._compute_surv_logps(sample_data, u)
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def do(
         self,
         new_data: ModelData | None = None,
         *,
-        jobs: Job | list[Job],
+        job_factories: Callable[[Info], Job] | list[Callable[[Info], Job]],
         max_iterations: int | None = None,
         n_chains: IntStrictlyPositive | None = None,
-        warmup: IntPositive | None = None,
-        n_steps: IntPositive | None = None,
-        init_step_size: NumPositive = 0.1,
-        adapt_rate: NumPositive = 0.1,
+        warmup: IntNonNegative | None = None,
+        n_steps: IntNonNegative | None = None,
+        init_step_size: NumNonNegative = 0.1,
+        adapt_rate: NumNonNegative = 0.1,
         accept_target: NumProbability = 0.234,
         verbose: bool = True,
     ) -> Metrics | Any | None:
         """Runs the sampler loop and some jobs.
 
+        Many jobs are predefined for user convenience, but you can use the base class
+        `Job` to define your own. The `Job` class returns a factory that is not
+        initialized until this function calls the job factories. For default jobs, a set
+        of default hyperparameters allows matching via the `.cls` attribute, but these
+        defaults can always be overriden. In the case where multiple jobs with
+        conflicting defaults are passed, only the last default will be kept and used.
+
+        To do parallel MCMC sampling, which is enabled by default, use `n_chains`.
+
+        To enable caching, please refer to the argument `cache_limit` to see the
+        behaviour.
+
+        This returns either a `Metrics` object, or a single element if only one element
+        has been computed, or nothing if the jobs did not yield any information at
+        output.
+
+        If `new_data` is not given, then previous data will be used if it has been
+        passed during a fitting step. If not, this will raise an error. The metrics
+        are completed when reusing the fitting data.
+
         Args:
             new_data (ModelData): The dataset to learn from.
-            jobs (Job | list[Job]): A list of jobs to execute in order.
+            job_factories (Callable[[Info], Job] | list[Callable[[Info], Job]]): A list
+                of job factories to execute in the order in which they are given. It
+                may also be a single job factory.
             max_iterations (int | None, optional): Maximum number of iterations.
                 Defaults to None.
             n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
                 to None.
-            warmup (IntPositive | None, optional): The number of iteration steps used in
-                the warmup. Defaults to None.
-            n_steps (IntPositive | None, optional): The steps to do at each iteration.
-                Defaults to None.
-            init_step_size (NumPositive, optional): Kernel step in Metropolis Hastings.
+            warmup (IntNonNegative | None, optional): The number of iteration steps used
+            in the warmup. Defaults to None.
+            n_steps (IntNonNegative | None, optional): The steps to do at each
+                iteration; this is subsampling. Defaults to None.
+            init_step_size (NumNonNegative, optional): Initial kernel step size in
+                Metropolis Hastings. Defaults to 0.1.
+            adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
+                The adaptation is done with the Robbins Monro algorithm in log scale.
                 Defaults to 0.1.
-            adapt_rate (NumPositive, optional): Adaptation rate for the step_size.
-                Defaults to 0.01.
-            accept_target (NumProbability, optional): Mean acceptation target. Defaults
-                to 0.234.
+            accept_target (NumProbability, optional): Acceptance target. Defaults to
+                0.234.
             verbose (bool, optional): Wheter or not to show progress. Defaults to True.
 
         Raises:
@@ -235,10 +370,10 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         complete_data = CompleteModelData(
             data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
-        complete_data.init(self.model_design, self.params_)
+        complete_data.prepare(self.model_design, self.params_)
 
         # Set up jobs and hyperparameters.
-        jobs, hyperparameters = self._setup_jobs(jobs)
+        job_factories, hyperparameters = self._setup_jobs(job_factories)
         if hyperparameters is not None:
             max_iterations = (
                 hyperparameters["max_iterations"]
@@ -250,7 +385,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             n_steps = hyperparameters["n_steps"] if n_steps is None else n_steps
 
         # Check everything is there
-        for field in ("max_iterations", "n_chains", "warmup", "n_steps"):
+        for field in DEFAULT_HYPERPARAMETERS_FIELDS:
             if locals()[field] is None:
                 raise TypeError(f"Missing required argument: '{field}'")
 
@@ -288,8 +423,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             sampler=sampler,
         )
 
-        for job in jobs:
-            job.init(info)
+        jobs = [job_factory(info) for job_factory in job_factories]
 
         def _do(state: torch.Tensor, aux: tuple[torch.Tensor, ...]):
             nonlocal info
@@ -330,11 +464,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 return metrics
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def sample_params(self, sample_size: IntPositive) -> list[ModelParams]:
+    def sample_params(self, sample_size: IntNonNegative) -> list[ModelParams]:
         """Sample parameters based on asymptotic behavior of the MLE.
 
         Args:
-            sample_size (IntPositive): The desired sample size.
+            sample_size (IntNonNegative): The desired sample size.
 
         Raises:
             ValueError: If the model has not been fitted, or FIM not computed.
@@ -350,7 +484,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
         flat_samples = dist.sample((sample_size,))
 
-        return [params_like_from_flat(self.params_, sample) for sample in flat_samples]
+        return [self.params_.from_flat_tensor(sample) for sample in flat_samples]
 
     @property
     def fim(self) -> torch.Tensor:
@@ -369,11 +503,17 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
     @property
     def stderror(self) -> ModelParams:
-        """Returns the standard error of the parameters.
+        r"""Returns the standard error of the parameters.
 
-        They can be used to draw confidence intervals.
+        They can be used to draw confidence intervals. The standard errors are computed
+        using the diagonal of the inverse of the inverse Fisher Information Matrix at
+        the MLE:
+
+        .. math::
+            \text{sd} = \sqrt{\operatorname{diag}\bigl(\mathcal{I}(\hat{\theta})^{-1}
+            \bigr)}
 
         Returns:
             ModelParams: The standard error in the same format as the parameters.
         """
-        return params_like_from_flat(self.params_, self.fim.inverse().diagonal().sqrt())
+        return self.params_.from_flat_tensor(self.fim.inverse().diagonal().sqrt())

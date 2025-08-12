@@ -8,7 +8,7 @@ from ..typedefs._defs import (
     IntStrictlyPositive,
     Job,
     Metrics,
-    NumPositive,
+    NumNonNegative,
     NumProbability,
     Tensor1DPositive,
 )
@@ -22,7 +22,34 @@ DEFAULT_NOT_CONVERGED_WARNING = (
 
 
 class GradStop(Job):
-    """Job to test the convergence."""
+    r"""Job to test the convergence based on gradient.
+
+    Mathematically, an estimate of the first and second moments of the gradient are
+    stochastically computed, using exponential moving averages with the formula:
+
+    .. math::
+        m_i^{(t+1)} \gets \beta_i m_i^{(t)} + (1 - \beta_i) \nabla^{(t)}, \quad
+        \hat{m}_i^{(t)} = \frac{m_i^{(t)}}{1 - \beta_i^t}.
+
+    The `run` method returns true when for `min_consecutive` iterations:
+
+    .. math::
+        \hat{m}_1^{(t)} \leq \text{atol} + \text{rtol} \odot
+        \sqrt{\hat{m}_2^{(t)}}.
+
+    Please note the tolerance must both be positive and can represent elementwise
+    tolerances or global tolerance common to all parameters.
+
+    Attributes:
+        atol (int | float | torch.Tensor): Absolute tolerance.
+        rtol (int | float | torch.Tensor): Relative tolerance.
+        min_consecutive (int): Minimum consecutive iterations to declare convergence.
+        betas (tuple[int | float, int | float]): The forget parameters.
+        m (torch.Tensor): The first moment estimate.
+        v (torch.Tensor): The second moment estimate.
+        n_consecutive (int): The number of iterations with convergence criterion met.
+        stopped (bool): Indicator whether or not convergence has happened.
+    """
 
     atol: int | float | torch.Tensor
     rtol: int | float | torch.Tensor
@@ -36,22 +63,30 @@ class GradStop(Job):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        atol: NumPositive | Tensor1DPositive = 0.01,
-        rtol: NumPositive | Tensor1DPositive = 0.01,
+        atol: NumNonNegative | Tensor1DPositive = 0.01,
+        rtol: NumNonNegative | Tensor1DPositive = 0.01,
         min_consecutive: IntStrictlyPositive = 20,
         betas: tuple[NumProbability, NumProbability] = (0.9, 0.999),
+        *,
+        info: Info,
     ):
         """Initializes the ValueStop class.
 
         Args:
-            atol (NumPositive | Tensor1DPositive, optional): Absolute tolerance, either
-                scalar or elementwise. Defaults to 0.01.
-            rtol (NumPositive | Tensor1DPositive, optional): Relative tolerance, either
-                scalar or elementwise. Defaults to 0.01.
+            atol (NumNonNegative | Tensor1DPositive, optional): Absolute tolerance,
+            either scalar or elementwise. Defaults to 0.01.
+            rtol (NumNonNegative | Tensor1DPositive, optional): Relative tolerance,
+            either scalar or elementwise. Defaults to 0.01.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 20.
-            beta (tuple[NumProbability, NumProbability], optional): Exponential moving
+            betas (tuple[NumProbability, NumProbability], optional): Exponential moving
                 averages forget parameters. Defaults to (0.9, 0.999).
+            info (Info): The job information object.
+
+        Raises:
+            ValueError: If the optimizer has not been set before GradStop.
+            ValueError: If `atol` is not all nonnegative.
+            ValueError: If `rtol` is not all nonnegative.
         """
         self.atol = atol
         self.rtol = rtol
@@ -61,8 +96,7 @@ class GradStop(Job):
         self.n_consecutive = 0
         self.stopped = False
 
-    def init(self, info: Info):
-        if not hasattr(info, "optimizer"):
+        if not hasattr(info, "opt"):
             raise ValueError("Optimizer must be set for GradStop")
 
         d = info.model.params_.numel
@@ -74,7 +108,15 @@ class GradStop(Job):
         self.m = torch.zeros(d)
         self.v = torch.zeros(d)
 
-    def run(self, info: Info) -> bool | None:
+    def run(self, info: Info) -> bool:
+        """Updates the moment estimates stochastically and checks for convergence.
+
+        Args:
+            info (Info): The job information object.
+
+        Returns:
+            bool: True if parameters have convergence, else False.
+        """
         grads_list: list[torch.Tensor] = []
         for p in info.model.params_.as_list:
             if p.grad is None:
@@ -100,6 +142,12 @@ class GradStop(Job):
         return self.stopped
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+        """Checks and warns the user if the parameters have not yet converged.
+
+        Args:
+            info (Info): The job information object.
+            metrics (Metrics): The metrics information object.
+        """
         if not self.stopped:
             warnings.warn(
                 DEFAULT_NOT_CONVERGED_WARNING,
@@ -108,7 +156,33 @@ class GradStop(Job):
 
 
 class ValueStop(Job):
-    """Job to test the convergence."""
+    r"""Job to test the convergence based on parameter values.
+
+    Mathematically, an estimate of the first moments of the parameter values are
+    stochastically computed, using exponential moving averages with the formula:
+
+    .. math::
+        m^{(t+1)} \gets \beta m^{(t)} + (1 - \beta) \theta^{(t)}, \quad
+        \hat{m}^{(t)} = \frac{m^{(t)}}{1 - \beta^t}.
+
+    The `run` method returns true when for `min_consecutive` iterations:
+
+    .. math::
+        \vert \theta^{(t)} - \hat{m}_1^{(t)} \vert \leq \text{atol} + \text{rtol} \odot
+        \hat{m}^{(t)}.
+
+    Please note the tolerance must both be positive and can represent elementwise
+    tolerances or global tolerance common to all parameters.
+
+    Attributes:
+        atol (int | float | torch.Tensor): Absolute tolerance.
+        rtol (int | float | torch.Tensor): Relative tolerance.
+        min_consecutive (int): Minimum consecutive iterations to declare convergence.
+        beta (int | float): The forget parameter.
+        p (torch.Tensor): The first moment estimate.
+        n_consecutive (int): The number of iterations with convergence criterion met.
+        stopped (bool): Indicator whether or not convergence has happened.
+    """
 
     atol: int | float | torch.Tensor
     rtol: int | float | torch.Tensor
@@ -121,22 +195,30 @@ class ValueStop(Job):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        atol: NumPositive | Tensor1DPositive = 0.01,
-        rtol: NumPositive | Tensor1DPositive = 0.01,
+        atol: NumNonNegative | Tensor1DPositive = 0.01,
+        rtol: NumNonNegative | Tensor1DPositive = 0.01,
         min_consecutive: IntStrictlyPositive = 20,
         beta: NumProbability = 0.9,
+        *,
+        info: Info,
     ):
         """Initializes the ValueStop class.
 
         Args:
-            atol (NumPositive | Tensor1DPositive, optional): Absolute tolerance, either
-                scalar or elementwise. Defaults to 0.01.
-            rtol (NumPositive | Tensor1DPositive, optional): Relative tolerance, either
-                scalar or elementwise. Defaults to 0.01.
+            atol (NumNonNegative | Tensor1DPositive, optional): Absolute tolerance,
+            either scalar or elementwise. Defaults to 0.01.
+            rtol (NumNonNegative | Tensor1DPositive, optional): Relative tolerance,
+            either scalar or elementwise. Defaults to 0.01.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
-                iterations with value difference less than tolerance. Defaults to 20.
-            beta (NumProbability, optional): Exponential moving average forget
-                parameter. Defaults to 0.9.
+                iterations with grad difference less than tolerance. Defaults to 20.
+            beta (tuple[NumProbability, NumProbability], optional): Exponential moving
+                averages forget parameters. Defaults to 0.9.
+            info (Info): The job information object.
+
+        Raises:
+            ValueError: If the optimizer has not been set before ValueStop.
+            ValueError: If `atol` is not all nonnegative.
+            ValueError: If `rtol` is not all nonnegative.
         """
         self.atol = atol
         self.rtol = rtol
@@ -146,7 +228,6 @@ class ValueStop(Job):
         self.n_consecutive = 0
         self.stopped = False
 
-    def init(self, info: Info):
         d = info.model.params_.numel
         if isinstance(self.atol, torch.Tensor):
             check_consistent_size(((self.atol, 0, "atol"), (d, None, "params.numel")))
@@ -155,7 +236,15 @@ class ValueStop(Job):
 
         self.p = torch.zeros(d)
 
-    def run(self, info: Info) -> bool | None:
+    def run(self, info: Info) -> bool:
+        """Updates the moment estimate stochastically and checks for convergence.
+
+        Args:
+            info (Info): The job information object.
+
+        Returns:
+            bool: True if parameters have convergence, else False.
+        """
         params = info.model.params_.as_flat_tensor
         self.p = self.beta * self.p + (1 - self.beta) * params
         p_hat = self.p / (1 - self.beta ** (info.iteration + 1))
@@ -171,6 +260,12 @@ class ValueStop(Job):
         return self.stopped
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+        """Checks and warns the user if the parameters have not yet converged.
+
+        Args:
+            info (Info): The job information object.
+            metrics (Metrics): The metrics information object.
+        """
         if not self.stopped:
             warnings.warn(
                 DEFAULT_NOT_CONVERGED_WARNING,

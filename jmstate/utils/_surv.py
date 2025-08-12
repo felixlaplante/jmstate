@@ -17,9 +17,13 @@ def build_buckets(
 ) -> dict[tuple[Any, Any], BucketData]:
     """Builds buckets from trajectories for user convenience.
 
+    This yeilds a `NamedTuple` containing transiftion information containing:
+        idxs (Tensor1D): The individual indices.
+        t0 (TensorCol): A column vector of previous transition times.
+        t1 (TensorCol): A column vecotr of next transition times.
+
     Args:
         trajectories (list[Trajectory]): The list of individual trajectories.
-
 
     Returns:
         dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).

@@ -25,7 +25,7 @@ def check_consistent_size(
     """Checks if all the tensors are consistent in size.
 
     Args:
-        groups (tuple[tuple[torch.Tensor | list[Any] | None, int | None, str], ...]):
+        groups (tuple[tuple[torch.Tensor | int | None, int | None, str], ...]):
             The tuples to check.
 
     Raises:
@@ -83,7 +83,7 @@ def check_trajectory_c(trajectories: list[Trajectory], c: torch.Tensor | None):
         ValueError: If some trajectory is not compatible with the censoring.
     """
     if c is not None and any(
-        trajectory[-1][0] > c for trajectory, c in zip(trajectories, c)
+        trajectory[-1][0] > c for trajectory, c in zip(trajectories, c, strict=False)
     ):
         raise ValueError("Last trajectory time must not be greater than censoring time")
 

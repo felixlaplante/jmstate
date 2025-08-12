@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 
@@ -38,23 +38,23 @@ def is_col(t: torch.Tensor) -> torch.Tensor:
     return t
 
 
-def is_pos(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
-    """Checks if the argument is positive.
+def is_non_neg(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
+    """Checks if the argument is nonnegative.
 
     Args:
         x (int | float | torch.Tensor): The input number or tensor.
 
     Raises:
-        ValueError: If the tensor is not all positive.
-        ValueError: If the number is not positive.
+        ValueError: If the tensor is not all nonnegative.
+        ValueError: If the number is not nonnegative.
 
     Returns:
         int | float | torch.Tensor: The output number or tensor.
     """
     if isinstance(x, torch.Tensor) and (x < 0).any():
-        raise ValueError(f"Expected positive tensor, got {x}")
+        raise ValueError(f"Expected nonnegative tensor, got {x}")
     if x < 0:
-        raise ValueError(f"Expected strictly positive number, got {x}")
+        raise ValueError(f"Expected nonnegative number, got {x}")
     return x
 
 

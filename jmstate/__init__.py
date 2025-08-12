@@ -1,6 +1,6 @@
-"""Multi-state joint modeling package.
+"""multistate joint modeling package.
 
-This package provides tools for multi-state joint modeling with PyTorch.
+This package provides tools for multistate joint modeling with PyTorch.
 """
 
 from .functions import (
@@ -50,8 +50,6 @@ from .typedefs import (
     ModelParams,
     RegressionFn,
     SampleData,
-    Trajectory,
-    params_like_from_flat,
 )
 from .utils import build_buckets, cov_from_repr, repr_from_cov
 
@@ -94,7 +92,6 @@ __all__ = [
     "SampleData",
     "Scheduling",
     "SwitchParams",
-    "Trajectory",
     "ValueStop",
     "Weibull",
     "build_buckets",
@@ -105,6 +102,5 @@ __all__ = [
     "gamma_x_plus_b",
     "identity",
     "linear",
-    "params_like_from_flat",
     "repr_from_cov",
 ]

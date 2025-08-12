@@ -2,7 +2,6 @@ from dataclasses import replace
 from typing import Any, Final
 
 import torch
-from pydantic import ConfigDict, validate_call
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import (
@@ -13,7 +12,6 @@ from ..typedefs._defs import (
     Trajectory,
 )
 from ..typedefs._params import ModelParams
-from ..utils._checks import check_consistent_size
 from ..utils._misc import legendre_quad
 from ..utils._surv import build_traj_repr
 from ._cache import Cache
@@ -297,7 +295,7 @@ class HazardMixin:
         min_times, argmin_idxs = torch.min(t_candidates, dim=1)
         bucket_keys = list(current_buckets.keys())
 
-        for i, (time, arg_idx) in enumerate(zip(min_times, argmin_idxs)):
+        for i, (time, arg_idx) in enumerate(zip(min_times, argmin_idxs, strict=False)):
             if torch.isfinite(time):
                 sample_data.trajectories[i].append(
                     (time.item(), bucket_keys[int(arg_idx)][1])
@@ -305,8 +303,7 @@ class HazardMixin:
 
         return True
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def sample_trajectories(
+    def _sample_trajectories(
         self,
         sample_data: SampleData,
         c_max: TensorCol,
@@ -321,19 +318,9 @@ class HazardMixin:
             max_length (IntStrictlyPositive, optional): Maximum iterations or sampling.
                 Defaults to 10.
 
-        Raises:
-            ValueError: If c_max has incorrect shape.
-
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
-        # Convert and check if c_max matches the right shape
-        c_max = c_max.to(torch.get_default_dtype())
-        check_consistent_size(
-            ((c_max, 0, "c_max"), (sample_data.size, None, "sample_data.size"))
-        )
-
-        # Copy
         sample_data_copied = replace(sample_data, skip_validation=True)
 
         # Sample future transitions iteratively
@@ -349,26 +336,17 @@ class HazardMixin:
             for i, trajectory in enumerate(sample_data_copied.trajectories)
         ]
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def compute_surv_logps(self, sample_data: SampleData, u: Tensor2D) -> torch.Tensor:
+    def _compute_surv_logps(self, sample_data: SampleData, u: Tensor2D) -> torch.Tensor:
         """Computes log probabilites of remaining event free up to time u.
 
         Args:
             sample_data (SampleData): The data on which to compute the probabilities.
             u (Tensor2D): The time at which to evaluate the probabilities.
 
-        Raises:
-            ValueError: If u is of incorrect shape.
-
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
         # Unpack data
-        u = u.to(torch.get_default_dtype())
-        check_consistent_size(
-            ((u, 0, "u"), (sample_data.size, None, "sample_data.size"))
-        )
-
         x = sample_data.x
         trajectories = sample_data.trajectories
         psi = sample_data.psi

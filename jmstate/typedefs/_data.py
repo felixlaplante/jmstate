@@ -1,5 +1,5 @@
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import cached_property
 from typing import Any
 
@@ -31,7 +31,38 @@ from ._params import ModelParams
 # Dataclasses
 @dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelDesign:
-    """Class containing model design. Base hazard function is expected to be pure."""
+    """Class containing model design.
+
+    For all functions, please use broadcasting as much as possible. It is almost always
+    possible to broadcast parameters to vectorize efficiently the operations. If you
+    copy, beware of a heavy performance hit. If unable, please use vmap.
+
+    Attributes:
+        individual_effects_fn (IndividualEffectsFn): The individual effects function. It
+            must be able to yield 2D or 3D tensors given inputs of `gamma` (population
+            parameters), `x` (covariates matrix), and `b` (random effects). Note `b` is
+            either 2D or 3D.
+        regression_fn (RegressionFn): The regression function. It
+            must be able to yield 3D and 4D tensors given 1D or 2D time inputs, as well
+            as `psi` input of order 2 or 3. This is not very restrictive, but requires
+            to be careful. The last dimesion is the dimension of the response variable;
+            second last is the repeated measurements; third last is individual based;
+            possible fourth last is for parallelization of the MCMC sampler.
+        surv (dict[tuple[Any, Any], HazardFns]): A tuple of transition keys that can be
+            typed however you want. The HazardFns are a NamedTuple containing a base
+            hazard function in log scale, as well as a link function that shares the
+            same requirements as `regression_fn`. Base hazard function is expected to be
+            pure if caching is enabled, otherwise it will lead to false computations.
+
+    Examples:
+        >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
+        >>>     scale, offset, slope = psi.chunk(3, dim=-1)
+        >>>     # Fully broadcasted
+        >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
+        >>> individual_effects_fn = lambda gamma, x, b: gamma + b
+        >>> regression_fn = sigmoid
+        >>> surv = {("alive", "dead"): (Exponential(1.2), sigmoid)}
+    """
 
     individual_effects_fn: IndividualEffectsFn
     regression_fn: RegressionFn
@@ -43,13 +74,28 @@ class ModelDesign:
 
 @dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelData:
-    """Dataclass containing learnable multistate joint model data.
+    r"""Dataclass containing learnable multistate joint model data.
 
     Raises:
         ValueError: If the tensors contain inf.
         ValueError: If the size is not consistent between tensors.
         ValueError: If the trajectories are not sorted by time.
         ValueError: If the censoring time is lower than the maximum transition time.
+
+    Attributes:
+        x (Tensor2D | None): The fixed covariates.
+        t (Tensor1D | Tensor2D): The measurement times. Either a 1D tensor if the
+            times are shared by all individual, or a matrix of individual times.
+            Use padding with NaNs when necessary.
+        y (Tensor3D): The measurements. A 3D tensor of dimension :math:`(n, m, d)`
+            if there are :math:`n` individual, with a maximum number of :math:`m`
+            measurements in :math:`\mathbb{R}^d`. Use padding with NaNs when
+            necessary.
+        trajectories (list[Trajectory]): The list of the individual trajectories.
+            A `Trajectory` is a list of tuples containing time and state.
+        c (TensorCol): The censoring times as a column vector. They must not
+            be less than the trajectory maximum times.
+        skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
     x: Tensor2D | None
@@ -115,15 +161,16 @@ class ModelData:
         )
 
 
-@dataclass
 class CompleteModelData(ModelData):
+    """Complete model data class."""
+
     valid_mask: Tensor3D = field(init=False)
     n_valid: Tensor2D = field(init=False)
     valid_t: Tensor1D | Tensor2D = field(init=False)
     valid_y: Tensor2D | Tensor3D = field(init=False)
     buckets: dict[tuple[Any, Any], TrajRepr] = field(init=False)
 
-    def init(self, model_design: ModelDesign, params: ModelParams):
+    def prepare(self, model_design: ModelDesign, params: ModelParams):
         """Sets the missing representation.
 
         Raises:
@@ -165,6 +212,20 @@ class SampleData:
         ValueError: If the size is not consistent between tensors.
         ValueError: If the trajectories are not sorted by time.
         ValueError: If the censoring time is lower than the maximum transition time.
+
+    Attributes:
+        x (Tensor2D | None): The fixed covariates.
+        trajectories (list[Trajectory]): The list of the individual trajectories.
+            A `Trajectory` is a list of tuples containing time and state.
+        psi (Tensor2D | Tensor3D): The individual parameters. Define it as a matrix with
+            the same number of rows as there are `len(trajectories)`. Only use a 3D
+            tensor if you fully understand the codebase and the mechanisms. Trajectory
+            sampling may only be used with matrices.
+        c (TensorCol | None, optional): The censoring times as a column vector. They
+            must not be less than the trajectory maximum times. This corresponds to
+            the last times of observation of the individuals or prediction current
+            times.
+        skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
     x: Tensor2D | None

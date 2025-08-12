@@ -1,7 +1,7 @@
 import itertools
 from dataclasses import field
 from functools import cached_property
-from typing import Any
+from typing import Any, Self
 
 import torch
 from pydantic import ConfigDict, dataclasses, validate_call
@@ -13,7 +13,36 @@ from ._defs import MatRepr, Tensor1D, Tensor2D
 
 @dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class ModelParams:
-    """Dataclass containing model parameters.
+    r"""Dataclass containing model parameters.
+
+    Note three types of covariance matrices parametrization are provided: scalar
+    matrix; diagonal matrix; full matrix. Defaults to the full matrix parametrization.
+    This is achieved through a log Cholesky parametrization of the inverse covariance
+    matrix. Formally, consider :math:`P = \Sigma^{-1}` the precision matrix and let
+    :math:`L` be the Cholesky factor with positive diagonal elements, the log Cholseky
+    is given by:
+
+    .. math::
+        \tilde{L}_{ij} = L_{ij}, i > j,
+
+    and:
+
+    .. math::
+        \tilde{L}_{ii} = \log L_{ii}.
+
+    This is very numerically stable and fast, as it doesn't require inverting the
+    matrix when computing quadratic forms. The log determinant is then equal to:
+
+    .. math::
+
+        \log \det P = 2 \operatorname{Tr}(\tilde{L}).
+
+    You can use these methods by creating the appropriate `MatRepr` with methods of
+    `ball`, `diag` or `full`.
+
+    Additionnally, if your data has mixed missing values, do not use `full` matrix
+    parametrization for the residuals, as is this case the components must be
+    independent.
 
     Raises:
         ValueError: If the number of elements is not triangular with method "full".
@@ -126,49 +155,57 @@ class ModelParams:
         # Get flat then covariance
         return cov_from_repr(getattr(self, matrix + "_repr"))
 
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def from_flat_tensor(self, flat: Tensor1D) -> Self:
+        """Gets a ModelParams object based on the flat representation.
 
-@validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-def params_like_from_flat(ref_params: ModelParams, flat: Tensor1D) -> ModelParams:
-    """Gets a ModelParams instance based on the flat representation.
+        This uses the current object as the reference.
 
-    Args:
-        ref_params (ModelParams): The reference params.
-        flat (torch.Tensor): The flat representation.
+        Args:
+            flat (torch.Tensor): The flat representation.
 
-    Raises:
-        ValueError: If the shape makes the conversion impossible.
+        Raises:
+            ValueError: If the shape makes the conversion impossible.
 
-    Returns:
-        ModelParams: The constructed ModelParams.
-    """
-    i = 0
+        Returns:
+            Self: The constructed ModelParams.
+        """
+        i = 0
 
-    def _next(ref: torch.Tensor):
-        nonlocal i
-        n = ref.numel()
-        result = flat[i : i + n]
-        i += n
-        return result.view(ref.shape)
+        def _next(ref: torch.Tensor):
+            nonlocal i
+            n = ref.numel()
+            result = flat[i : i + n]
+            i += n
+            return result.view(ref.shape)
 
-    gamma = None if ref_params.gamma is None else _next(ref_params.gamma)
+        gamma = None if self.gamma is None else _next(self.gamma)
 
-    Q_flat = _next(ref_params.Q_repr.flat)
-    R_flat = _next(ref_params.R_repr.flat)
+        Q_flat = _next(self.Q_repr.flat)
+        R_flat = _next(self.R_repr.flat)
 
-    alphas = {key: _next(val) for key, val in ref_params.alphas.items()}
+        alphas = {key: _next(val) for key, val in self.alphas.items()}
 
-    betas = (
-        None
-        if ref_params.betas is None
-        else {key: _next(val) for key, val in ref_params.betas.items()}
-    )
+        betas = (
+            None
+            if self.betas is None
+            else {key: _next(val) for key, val in self.betas.items()}
+        )
 
-    return ModelParams(
-        gamma,
-        ref_params.Q_repr._replace(flat=Q_flat),
-        ref_params.R_repr._replace(flat=R_flat),
-        alphas,
-        betas,
-        extra=ref_params.extra,
-        skip_validation=True,
-    )
+        return type(self)(
+            gamma,
+            self.Q_repr._replace(flat=Q_flat),
+            self.R_repr._replace(flat=R_flat),
+            alphas,
+            betas,
+            extra=self.extra,
+            skip_validation=True,
+        )
+
+    def clone(self) -> Self:
+        """Returns a detached clone of the parameters.
+
+        Returns:
+            ModelParams: The clone.
+        """
+        return self.from_flat_tensor(self.as_flat_tensor)

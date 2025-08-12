@@ -1,4 +1,5 @@
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import torch
 from tqdm import trange
@@ -7,7 +8,9 @@ from tqdm import trange
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
-    logpdf_aux: Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]
+    logpdf_aux_fn: Callable[
+        [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]
+    ]
     init_state: torch.Tensor
     n_chains: int
     adapt_rate: int | float
@@ -30,12 +33,12 @@ class MetropolisHastingsSampler:
         adapt_rate: int | float,
         target_accept_rate: int | float,
     ):
-        """Initialize the Metropolis-Hastings sampler kernel.
+        """Initializes the Metropolis-Hastings sampler kernel.
 
         Args:
             logpdf_aux_fn (
                 Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]
-            ): logpdf function.
+                ): logpdf function.
             init_state (torch.Tensor): Starting state for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (int | float): Kernel step in Metropolis Hastings.

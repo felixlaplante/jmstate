@@ -2,7 +2,13 @@ import torch
 
 
 def identity(gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
-    """The standard linear transformation b.
+    r"""The standard identity transformation.
+
+    It is useful when only random effects are considered as individual parameters.
+    This is simply the mapping:
+
+    .. math::
+        (\gamma, x, b) \mapsto b.
 
     Args:
         gamma (torch.Tensor): The population parameters.
@@ -18,7 +24,14 @@ def identity(gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> torch.Ten
 def gamma_x_plus_b(
     gamma: torch.Tensor, x: torch.Tensor, b: torch.Tensor
 ) -> torch.Tensor:
-    """The standard linear transformation x @ gamma + b.
+    r"""The standard linear transformation.
+
+    It is useful when a linear combination of covariates and random effects are
+    considered as individual parameters.
+    This is simply the mapping:
+
+    .. math::
+        (\gamma, x, b) \mapsto \gamma x + b
 
     Args:
         gamma (torch.Tensor): The population parameters.
@@ -36,7 +49,14 @@ def gamma_plus_b(
     x: torch.Tensor,  # noqa: ARG001
     b: torch.Tensor,
 ) -> torch.Tensor:
-    """The linear transformation gamma + b.
+    r"""The standard linear transformation.
+
+    It is useful when a linear combination of population parameters and random effects
+    are considered as individual parameters.
+    This is simply the mapping:
+
+    .. math::
+        (\gamma, x, b) \mapsto \gamma + b
 
     Args:
         gamma (torch.Tensor): The population parameters.
