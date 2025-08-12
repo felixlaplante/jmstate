@@ -141,7 +141,7 @@ class Weibull:
         lmda: NumStrictlyPositive,
         clock_method: ClockMethod = clock_reset,
     ):
-        """Initializes the Weivull base hazard.
+        """Initializes the Weibull base hazard.
 
         Args:
             k (NumStrictlyPositive): The shape parameter.
@@ -166,7 +166,7 @@ class Weibull:
         self.log_lmda = torch.log(self.lmda)
 
     def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
-        """Calls the Weivull base hazard.
+        """Calls the Weibull base hazard.
 
         Args:
             t0 (torch.Tensor): Past transition time.
