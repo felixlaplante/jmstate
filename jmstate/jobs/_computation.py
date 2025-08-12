@@ -24,7 +24,7 @@ class ComputeFIM(Job):
     Attributes:
         grad_m1 (torch.Tensor): The moment of order 1 estimate of the gradient.
         grad_m2 (torch.Tensor): The moment of order 2 estimate of the gradient.
-        jac_fn (Callable[[torch.Tensor, torch.Tensor], torch.Tensor]): The jacobian
+        jac_fn (Callable[[torch.Tensor, torch.Tensor], torch.Tensor]): The Jacobian
             function. Useful because of batching.
     """
 

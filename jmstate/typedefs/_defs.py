@@ -82,7 +82,7 @@ class RegressionFn(Protocol):
 
     It must be able to yield 3D and 4D tensors given 1D or 2D time inputs, as well
         as `psi` input of order 2 or 3. This is not very restrictive, but requires to be
-        careful. The last dimesion is the dimension of the response variable; second
+        careful. The last dimension is the dimension of the response variable; second
         last is the repeated measurements; third last is individual based; possible
         fourth last is for parallelization of the MCMC sampler.
 
@@ -114,7 +114,7 @@ class LinkFn(Protocol):
 
     It must be able to yield 3D and 4D tensors given 1D or 2D time inputs, as well
         as `psi` input of order 2 or 3. This is not very restrictive, but requires to be
-        careful. The last dimesion is the dimension of the response variable; second
+        careful. The last dimension is the dimension of the response variable; second
         last is the repeated measurements; third last is individual based; possible
         fourth last is for parallelization of the MCMC sampler.
 
@@ -225,7 +225,7 @@ class MatRepr(NamedTuple):
 
 
 class BucketData(NamedTuple):
-    """A simple `NamedTuple` containing transiftion information.
+    """A simple `NamedTuple` containing transition information.
 
     Attributes:
         idxs (Tensor1D): The individual indices.
@@ -380,7 +380,7 @@ class Job(_Job, ABC):
         Returns:
             bool | None: None or False if not requiring to stop. True to require stop.
                 When all non None returning jobs are returning True, then the main loop
-                wille be stopped.
+                will be stopped.
         """
 
     @abstractmethod

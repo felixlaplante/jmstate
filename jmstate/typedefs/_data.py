@@ -45,7 +45,7 @@ class ModelDesign:
         regression_fn (RegressionFn): The regression function. It
             must be able to yield 3D and 4D tensors given 1D or 2D time inputs, as well
             as `psi` input of order 2 or 3. This is not very restrictive, but requires
-            to be careful. The last dimesion is the dimension of the response variable;
+            to be careful. The last dimension is the dimension of the response variable;
             second last is the repeated measurements; third last is individual based;
             possible fourth last is for parallelization of the MCMC sampler.
         surv (dict[tuple[Any, Any], HazardFns]): A tuple of transition keys that can be

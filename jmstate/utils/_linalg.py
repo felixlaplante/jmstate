@@ -15,7 +15,7 @@ def _tril_from_flat(flat: torch.Tensor, dim: int) -> torch.Tensor:
     """Generate the lower triangular matrix associated with flat tensor.
 
     Args:
-        flat (torch.Tensor): Flat tehsnro
+        flat (torch.Tensor): Flat tensor
         dim (int): Dimension of the matrix.
 
     Returns:

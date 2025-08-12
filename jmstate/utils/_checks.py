@@ -98,7 +98,7 @@ def check_matrix_dim(mat_repr: MatRepr, name: str):
     Raises:
         ValueError: If flat tensor is not flat.
         ValueError: If the number of elements is incompatible with method "full".
-        ValueError: If the number of elements is icompatible with method "diag".
+        ValueError: If the number of elements is incompatible with method "diag".
         ValueError: If the number of elements is not one and the method is "ball".
     """
     flat, dim, method = mat_repr

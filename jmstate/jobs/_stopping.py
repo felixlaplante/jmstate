@@ -37,7 +37,7 @@ class GradStop(Job):
         \hat{m}_1^{(t)} \leq \text{atol} + \text{rtol} \odot
         \sqrt{\hat{m}_2^{(t)}}.
 
-    Please note the tolerance must both be positive and can represent elementwise
+    Please note the tolerance must both be positive and can represent element-wise
     tolerances or global tolerance common to all parameters.
 
     Attributes:
@@ -74,9 +74,9 @@ class GradStop(Job):
 
         Args:
             atol (NumNonNegative | Tensor1DPositive, optional): Absolute tolerance,
-            either scalar or elementwise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.01.
             rtol (NumNonNegative | Tensor1DPositive, optional): Relative tolerance,
-            either scalar or elementwise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.01.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 20.
             betas (tuple[NumProbability, NumProbability], optional): Exponential moving
@@ -85,8 +85,8 @@ class GradStop(Job):
 
         Raises:
             ValueError: If the optimizer has not been set before GradStop.
-            ValueError: If `atol` is not all nonnegative.
-            ValueError: If `rtol` is not all nonnegative.
+            ValueError: If `atol` is not all non-negative.
+            ValueError: If `rtol` is not all non-negative.
         """
         self.atol = atol
         self.rtol = rtol
@@ -171,7 +171,7 @@ class ValueStop(Job):
         \vert \theta^{(t)} - \hat{m}_1^{(t)} \vert \leq \text{atol} + \text{rtol} \odot
         \hat{m}^{(t)}.
 
-    Please note the tolerance must both be positive and can represent elementwise
+    Please note the tolerance must both be positive and can represent element-wise
     tolerances or global tolerance common to all parameters.
 
     Attributes:
@@ -206,9 +206,9 @@ class ValueStop(Job):
 
         Args:
             atol (NumNonNegative | Tensor1DPositive, optional): Absolute tolerance,
-            either scalar or elementwise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.01.
             rtol (NumNonNegative | Tensor1DPositive, optional): Relative tolerance,
-            either scalar or elementwise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.01.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 20.
             beta (tuple[NumProbability, NumProbability], optional): Exponential moving
@@ -217,8 +217,8 @@ class ValueStop(Job):
 
         Raises:
             ValueError: If the optimizer has not been set before ValueStop.
-            ValueError: If `atol` is not all nonnegative.
-            ValueError: If `rtol` is not all nonnegative.
+            ValueError: If `atol` is not all non-negative.
+            ValueError: If `rtol` is not all non-negative.
         """
         self.atol = atol
         self.rtol = rtol

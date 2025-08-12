@@ -26,7 +26,7 @@ class HazardMixin:
     params_: ModelParams
     model_design: ModelDesign
     n_quad: int
-    n_bissect: int
+    n_bisect: int
     cache_limit: int | None
     _std_nodes: torch.Tensor
     _std_weights: torch.Tensor
@@ -35,7 +35,7 @@ class HazardMixin:
     def __init__(
         self,
         n_quad: int,
-        n_bissect: int,
+        n_bisect: int,
         cache_limit: int | None,
         *args: Any,
         **kwargs: Any,
@@ -44,13 +44,13 @@ class HazardMixin:
 
         Args:
             n_quad (int): Number of quadrature nodes.
-            n_bissect (int): The number of bissection steps.
+            n_bisect (int): The number of bisection steps.
             cache_limit (int | None): Max length of cache.
             args (Any): Additional args.
             kwargs (Any): Additional kwargs.
         """
         self.n_quad = n_quad
-        self.n_bissect = n_bissect
+        self.n_bisect = n_bisect
         self.cache_limit = cache_limit
         self._std_nodes, self._std_weights = legendre_quad(n_quad)
         self._cache = Cache(cache_limit, HAZARD_CACHE_KEYS)
@@ -222,7 +222,7 @@ class HazardMixin:
         target = -torch.log(torch.rand_like(t_left))
 
         # Bisection search for survival times
-        for _ in range(self.n_bissect):
+        for _ in range(self.n_bisect):
             t_mid = 0.5 * (t_left + t_right)
 
             surv_logps = self._cum_hazard(

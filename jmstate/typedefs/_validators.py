@@ -39,22 +39,22 @@ def is_col(t: torch.Tensor) -> torch.Tensor:
 
 
 def is_non_neg(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
-    """Checks if the argument is nonnegative.
+    """Checks if the argument is non-negative.
 
     Args:
         x (int | float | torch.Tensor): The input number or tensor.
 
     Raises:
-        ValueError: If the tensor is not all nonnegative.
-        ValueError: If the number is not nonnegative.
+        ValueError: If the tensor is not all non-negative.
+        ValueError: If the number is not non-negative.
 
     Returns:
         int | float | torch.Tensor: The output number or tensor.
     """
     if isinstance(x, torch.Tensor) and (x < 0).any():
-        raise ValueError(f"Expected nonnegative tensor, got {x}")
+        raise ValueError(f"Expected non-negative tensor, got {x}")
     if x < 0:
-        raise ValueError(f"Expected nonnegative number, got {x}")
+        raise ValueError(f"Expected non-negative number, got {x}")
     return x
 
 

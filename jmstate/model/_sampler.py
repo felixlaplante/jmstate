@@ -128,14 +128,14 @@ class MetropolisHastingsSampler:
         desc: str,
         verbose: bool,
     ) -> None:
-        """Loops while subsampling.
+        """Loops while sub-sampling.
 
         Args:
             max_iterations (int): The number of iterations to do.
             n_steps (int): The sublamping MCMC number.
             job (Callable[[], bool | None]): The function to execute.
             desc (str): The description during the loop.
-            verbose (bool): Wheter or not to show progress.
+            verbose (bool): Whether or not to show progress.
         """
         for _ in trange(max_iterations, desc=desc, disable=not verbose):
             state, aux = self.run(n_steps)
@@ -147,7 +147,7 @@ class MetropolisHastingsSampler:
         """Gets the acceptance_rate.
 
         Returns:
-            torch.Tensor: The means of the acceptance_rates accross iterations.
+            torch.Tensor: The means of the acceptance_rates across iterations.
         """
         return self.n_accepted / torch.clamp(self.n_samples, min=1.0)
 
@@ -156,7 +156,7 @@ class MetropolisHastingsSampler:
         """Gets the acceptance_rate mean across all individuals.
 
         Returns:
-            torch.Tensor: The means accross iterations and individuals.
+            torch.Tensor: The means across iterations and individuals.
         """
         return self.acceptance_rates.mean().item()
 

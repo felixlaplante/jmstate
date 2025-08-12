@@ -60,7 +60,7 @@ class Exponential:
     r"""Implements the Exponential base hazard.
 
     Exponential base hazard is time independent.
-    It is given by the fomrula:
+    It is given by the formula:
 
     .. math::
         \lambda(t) = \lambda.
@@ -141,7 +141,7 @@ class Weibull:
         lmda: NumStrictlyPositive,
         clock_method: ClockMethod = clock_reset,
     ):
-        """Initializes the weibull base hazard.
+        """Initializes the Weivull base hazard.
 
         Args:
             k (NumStrictlyPositive): The shape parameter.
@@ -166,7 +166,7 @@ class Weibull:
         self.log_lmda = torch.log(self.lmda)
 
     def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
-        """Calls the weibull base hazard.
+        """Calls the Weivull base hazard.
 
         Args:
             t0 (torch.Tensor): Past transition time.
@@ -208,7 +208,7 @@ class Gompertz:
         b: NumStrictlyPositive,
         clock_method: ClockMethod = clock_reset,
     ):
-        """Initializes the gompertz base hazard.
+        """Initializes the Gompertz base hazard.
 
         Raises:
             ValueError: If a is not strictly positive.
@@ -249,8 +249,8 @@ class LogNormal:
     It is given by the formula :
 
     .. math::
-        \lambda(t) = \frac{\phi\left( \frac{\ln t - \mu}{\sigma} \right)}{t \sigma
-        \Phi\left( -\frac{\ln t - \mu}{\sigma} \right)},
+        \lambda(t) = \frac{\phi\left( \frac{\log t - \mu}{\sigma} \right)}{t \sigma
+        \Phi\left( -\frac{\log t - \mu}{\sigma} \right)},
         \quad t > 0,
 
     where:

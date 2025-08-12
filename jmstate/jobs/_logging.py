@@ -51,7 +51,7 @@ class MCMCDiagnostics(Job):
     acceptance rates.
 
     Attributes:
-        mcmc_diagnostics (list[dict[str, Any]]): A list of MCMC diagnostic informations.
+        mcmc_diagnostics (list[dict[str, Any]]): A list of MCMC diagnostic information.
     """
 
     mcmc_diagnostics: list[dict[str, Any]]

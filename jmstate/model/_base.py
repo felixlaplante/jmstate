@@ -53,16 +53,16 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
     The use of penalization is possible through the attribute `pen`.
 
-    Please note this class encopasses both the linear joint model and the standard joint
-    model, but also allows for the modelling of multiple states assuming a semi Markov
-    property.
+    Please note this class encompasses both the linear joint model and the standard
+    joint model, but also allows for the modeling of multiple states assuming a semi
+    Markov property.
 
     Attributes:
         model_design (ModelDesign): The model design.
         params_ (ModelParams): The (variable) model parameters.
         pen (Callable[[ModelParams], torch.Tensor] | None): The log likelihood penalty.
         n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
-        n_bissect (int): The number of bissection steps for the bissection algorithm.
+        n_bisect (int): The number of bisection steps for the bisection algorithm.
         cache_limit (int | None): The limit of the cache used in hazard computation,
             greatly reducing memory and CPU usage. None means infinite, 0 means no
             caching.
@@ -76,7 +76,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     params_: ModelParams
     pen: Callable[[ModelParams], torch.Tensor] | None
     n_quad: int
-    n_bissect: int
+    n_bisect: int
     cache_limit: int | None
     data: ModelData | None
     metrics_: Metrics | None
@@ -90,7 +90,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         *,
         pen: Callable[[ModelParams], torch.Tensor] | None = None,
         n_quad: IntStrictlyPositive = 32,
-        n_bissect: IntStrictlyPositive = 32,
+        n_bisect: IntStrictlyPositive = 32,
         cache_limit: IntNonNegative | None = 256,
     ):
         """Initializes the joint model based on the user defined design.
@@ -100,9 +100,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             init_params (ModelParams): Initial values for the parameters.
             pen (Callable[[ModelParams], torch.Tensor] | None, optional):
                 The penalization function. Defaults to None.
-            n_quad (IntStrictlyPositive, optional): The used numnber of points for
+            n_quad (IntStrictlyPositive, optional): The used number of points for
                 Gauss-Legendre quadrature. Defaults to 32.
-            n_bissect (IntStrictlyPositive, optional): The number of bissection steps
+            n_bisect (IntStrictlyPositive, optional): The number of bisection steps
                 used in transition sampling. Defaults to 32.
             cache_limit (IntNonNegative | None, optional): The max length of cache.
                 Defaults to 256.
@@ -120,7 +120,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Info of the Mixin Classes
         super().__init__(
             n_quad=n_quad,
-            n_bissect=n_bissect,
+            n_bisect=n_bisect,
             cache_limit=cache_limit,
         )
 
@@ -137,7 +137,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Args:
             params (ModelParams): The model parameters.
             b (torch.Tensor): The individual random effects.
-            data (CompleteModelData): Dataset on which the likeihood is computed.
+            data (CompleteModelData): Dataset on which the likelihood is computed.
 
         Returns:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The computed quantities.
@@ -172,7 +172,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         adapt_rate: int | float,
         target_accept_rate: int | float,
     ) -> MetropolisHastingsSampler:
-        """Setup the MCMC kernel and hyperparameters.
+        """Setup the MCMC kernel and hyper-parameters.
 
         Args:
             data (CompleteModelData): The complete dataset.
@@ -199,15 +199,15 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     def _setup_jobs(
         self, job_factories: Callable[[Info], Job] | list[Callable[[Info], Job]]
     ) -> tuple[list[Callable[[Info], Job]], dict[str, Any] | None]:
-        """Sets up jobs, and gets default hyperparameters.
+        """Sets up jobs, and gets default hyper-parameters.
 
         Args:
             job_factories (Callable[[Info], Job] | list[Callable[[Info], Job]]): The
-            job factorie(s).
+            job factories.
 
         Returns:
             tupl[list[Callable[[Info], Job]], dict[str, Any] | None]: The job factories
-                and default hyperparameters associated.
+                and default hyper-parameters associated.
         """
         # Initialize jobs
         if callable(job_factories):
@@ -316,7 +316,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         Many jobs are predefined for user convenience, but you can use the base class
         `Job` to define your own. The `Job` class returns a factory that is not
         initialized until this function calls the job factories. For default jobs, a set
-        of default hyperparameters allows matching via the `.cls` attribute, but these
+        of default hyper-parameters allows matching via the `.cls` attribute, but these
         defaults can always be overriden. In the case where multiple jobs with
         conflicting defaults are passed, only the last default will be kept and used.
 
@@ -345,7 +345,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             warmup (IntNonNegative | None, optional): The number of iteration steps used
             in the warmup. Defaults to None.
             n_steps (IntNonNegative | None, optional): The steps to do at each
-                iteration; this is subsampling. Defaults to None.
+                iteration; this is sub-sampling. Defaults to None.
             init_step_size (NumNonNegative, optional): Initial kernel step size in
                 Metropolis Hastings. Defaults to 0.1.
             adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
@@ -353,7 +353,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
                 Defaults to 0.1.
             accept_target (NumProbability, optional): Acceptance target. Defaults to
                 0.234.
-            verbose (bool, optional): Wheter or not to show progress. Defaults to True.
+            verbose (bool, optional): Whether or not to show progress. Defaults to True.
 
         Raises:
             ValueError: If both new_data and self.data are None.
@@ -372,7 +372,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
         complete_data.prepare(self.model_design, self.params_)
 
-        # Set up jobs and hyperparameters.
+        # Set up jobs and hyper-parameters.
         job_factories, hyperparameters = self._setup_jobs(job_factories)
         if hyperparameters is not None:
             max_iterations = (

@@ -123,7 +123,7 @@ class DeterministicFit(_BaseFit):
 
     This is a deterministic fitting job, but it does not set the `fit_` attribute as it
     does not take random effects into account. This job helps to find probably good
-    initial values for the paramaters.
+    initial values for the parameters.
 
     It can be used with any optimizer factory built on the base class
     `torch.optim.Optimizer`. If None, it defaults to Adam.
@@ -132,7 +132,7 @@ class DeterministicFit(_BaseFit):
 
     Change the value of `fit_extra` if you do not want to fit extra parameters.
 
-    It warns the user if the paramaters contain infinite or NaN values.
+    It warns the user if the parameters contain infinite or NaN values.
 
     Please not its use is discouraged when using in conjunction with a neural network.
 
@@ -181,7 +181,7 @@ class RandomFit(_BaseFit):
 
     Change the value of `fit_extra` if you do not want to fit extra parameters.
 
-    It warns the user if the paramaters contain infinite or NaN values.
+    It warns the user if the parameters contain infinite or NaN values.
 
 
     Attributes:
