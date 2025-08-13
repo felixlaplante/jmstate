@@ -51,10 +51,8 @@ def is_non_neg(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
     Returns:
         int | float | torch.Tensor: The output number or tensor.
     """
-    if isinstance(x, torch.Tensor) and (x < 0).any():
-        raise ValueError(f"Expected non-negative tensor, got {x}")
-    if x < 0:
-        raise ValueError(f"Expected non-negative number, got {x}")
+    if (torch.as_tensor(x) < 0).any():
+        raise ValueError(f"Expected non-negative number/tensor, got {x}")
     return x
 
 
@@ -71,10 +69,12 @@ def is_strict_pos(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
     Returns:
         int | float | torch.Tensor: The output number or tensor.
     """
-    if isinstance(x, torch.Tensor) and (x <= 0).any():
-        raise ValueError(f"Expected strictly positive tensor, got {x}")
-    if x <= 0:
-        raise ValueError(f"Expected strictly positive number, got {x}")
+    dtype = torch.get_default_dtype()
+    x_ = torch.as_tensor(x, dtype=dtype)
+    if (x_ <= 0).any():
+        raise ValueError(
+            f"Expected strictly positive number/tensor when cast to {dtype}, got {x}"
+        )
     return x
 
 
@@ -90,6 +90,10 @@ def is_prob(x: int | float) -> int | float:
     Returns:
         int | float: The output number.
     """
-    if not 0 < x < 1:
-        raise ValueError(f"Expected probability, got {x}")
+    dtype = torch.get_default_dtype()
+    x_ = torch.as_tensor(x, dtype=dtype)
+    if not 0 < x_ < 1:
+        raise ValueError(
+            f"Expected probability in (0, 1) when cast to {dtype}, got {x}"
+        )
     return x

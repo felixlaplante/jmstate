@@ -93,10 +93,6 @@ class Exponential(BaseHazardFn):
         super().__init__()  # type: ignore
 
         lmda_ = torch.tensor(lmda, dtype=torch.get_default_dtype())
-
-        if lmda_ <= 0:
-            raise ValueError(f"lmda must be strictly positive, got {lmda_}")
-
         self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
 
     def forward(
@@ -170,12 +166,6 @@ class Weibull(BaseHazardFn):
         k_ = torch.tensor(k, dtype=torch.get_default_dtype())
         lmda_ = torch.tensor(lmda, dtype=torch.get_default_dtype())
         self.clock_method = clock_method
-
-        if k_ <= 0:
-            raise ValueError(f"k must be strictly positive, got {k_}")
-        if lmda_ <= 0:
-            raise ValueError(f"lmda must be strictly positive, got {lmda_}")
-
         self.log_k = nn.Parameter(torch.log(k_), requires_grad=False)
         self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
 
@@ -258,10 +248,6 @@ class Gompertz(BaseHazardFn):
             torch.tensor(b, dtype=torch.get_default_dtype()), requires_grad=False
         )
         self.clock_method = clock_method
-
-        if a_ <= 0:
-            raise ValueError(f"a must be strictly positive, got {a_}")
-
         self.log_a = nn.Parameter(torch.log(a_), requires_grad=False)
 
     def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
@@ -344,10 +330,6 @@ class LogNormal(BaseHazardFn):
         )
         scale_ = torch.tensor(scale, dtype=torch.get_default_dtype())
         self.clock_method = clock_method
-
-        if scale_ <= 0:
-            raise ValueError(f"scale must be strictly positive, got {scale_}")
-
         self.log_scale = nn.Parameter(torch.log(scale_), requires_grad=False)
 
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
