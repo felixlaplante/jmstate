@@ -100,15 +100,37 @@ class _BaseL1Proximal(Job, ABC):
 
 
 class AdamL1Proximal(_BaseL1Proximal):
-    """Adam proximal operator.
+    r"""Adam proximal operator.
 
-    Args:
-        lmda (NumNonNegative): The penalty.
-        group (str, optional): The group to penalize, either the link or covariate
-            parameters. Defaults to "betas".
+    This proximal operator aims at bringing variable selection to joint modeling.
+    This proximal operator only works with Adam or Adam-like optimizers that compute
+    exponential moving averages of the order 1 and 2 moments of the gradient.
 
-    Raises:
-        ValueError: If the optimizer is not supported.
+    Mathematically, consider the debiased estimates of the gradient and its element-wise
+    square:
+
+    .. math::
+        \hat{m}_1^{(t)}, \quad \hat{m}_2^{(t)}.
+
+    The proximal operator is given by the following formula. If :math:`\theta` are the
+    model parameters, define for a L1 penalty :math:`\lambda \geq 0`:
+
+    .. math::
+        \theta_\text{pre}^{(t+1)} \gets \theta^{(t+1)} + \frac{\text{lr}}{\epsilon +
+        \sqrt{\hat{m}_2^{(t)}}} \hat{m}_1^{(t)},
+
+    then compute the projection:
+
+    .. math::
+        \theta^{(t+1)} \gets \operatorname{Proxi}_{\lambda \frac{\text{lr}}{\epsilon
+        + \sqrt{\hat{m}_2^{(t)}}}}(\theta_\text{pre}^{(t+1)}).
+
+    The proximal operator is defined by the element-wise soft thresholding:
+
+    .. math::
+        \theta_i^{(t+1)} \gets \operatorname{sgn}(\theta_{\text{pre}, i}^{(t+1)})
+        \max\bigl(\vert \theta_{\text{pre}, i}^{(t+1)} \vert - \lambda \frac{\text{lr}}
+        {\epsilon + \sqrt{\hat{m}_{2, i}^{(t)}}}, 0\bigr).
     """
 
     @staticmethod

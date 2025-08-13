@@ -1,4 +1,4 @@
-import itertools
+from collections.abc import Callable
 from dataclasses import field
 from functools import cached_property
 from typing import Any, Self
@@ -8,7 +8,7 @@ from pydantic import ConfigDict, dataclasses, validate_call
 
 from ..utils._checks import check_inf, check_matrix_dim
 from ..utils._linalg import cov_from_repr
-from ._defs import MatRepr, Tensor1D, Tensor2D
+from ._defs import MatRepr, Tensor1D
 
 
 @dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
@@ -23,7 +23,7 @@ class ModelParams:
     is given by:
 
     .. math::
-        \tilde{L}_{ij} = L_{ij}, i > j,
+        \tilde{L}_{ij} = L_{ij}, \, i > j,
 
     and:
 
@@ -44,10 +44,15 @@ class ModelParams:
     parametrization for the residuals, as is this case the components must be
     independent.
 
-    Raises:
-        ValueError: If the number of elements is not triangular with method "full".
-        ValueError: If the number of elements is not one and the method is "ball".
-        ValueError: If the method is unknown.
+    Attributes:
+        gamma (torch.Tensor | None): The population level parameters.
+        Q_repr (MatRepr): The random effects precision matrix representation.
+        R_repr (MatRepr): The residuals precision matrix representation.
+        alphas (dict[tuple[Any, Any], Tensor1D]) The link linear parameters.
+        betas (dict[tuple[Any, Any], Tensor1D] | None): The covariates parameters.
+        extra (list[torch.Tensor] | None): A list of parameters that can be passed in
+            addition to other mandatory parameters.
+        skip_validation (bool): A boolean value to skip validation.
     """
 
     gamma: torch.Tensor | None
@@ -59,7 +64,7 @@ class ModelParams:
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
-        """Validate and put to float32 all tensors."""
+        """Validate and put to dtype all tensors."""
         if self.skip_validation:
             return
 
@@ -97,7 +102,7 @@ class ModelParams:
         Returns:
             list[torch.Tensor]: The list of the parameters.
         """
-        return list(itertools.chain.from_iterable(self.as_groups.values()))
+        return [t for val in self.as_groups.values() for t in val]
 
     @property
     def as_flat_tensor(self) -> Tensor1D:
@@ -106,7 +111,7 @@ class ModelParams:
         Returns:
             torch.Tensor: The flattened parameters.
         """
-        return torch.cat([p.detach().view(-1) for p in self.as_list])
+        return torch.cat([p.view(-1) for p in self.as_list])
 
     @cached_property
     def numel(self) -> int:
@@ -137,7 +142,7 @@ class ModelParams:
         for t in self.extra:
             t.requires_grad_(req)
 
-    def get_cov(self, matrix: str) -> Tensor2D:
+    def get_cov(self, matrix: str) -> torch.Tensor:
         """Get covariance from parameter.
 
         Args:
@@ -147,13 +152,36 @@ class ModelParams:
             ValueError: If the matrix is not in ("Q", "R")
 
         Returns:
-            Tensor2D: The covariance matrix.
+            torch.Tensor: The covariance matrix.
         """
         if matrix not in ("Q", "R"):
             raise ValueError(f"matrix must be either Q or R, got {matrix}")
 
-        # Get flat then covariance
+        # Get repr then covariance
         return cov_from_repr(getattr(self, matrix + "_repr"))
+
+    def _map_fn_params(self, fn: Callable[[torch.Tensor], torch.Tensor]) -> Self:
+        """Map operation and get new parameters.
+
+        Args:
+            fn (Callable[[torch.Tensor], torch.Tensor]): The operation.
+
+        Returns:
+            Self: The new parameters (it might be a view).
+        """
+
+        def _map_fn(dict: dict[tuple[Any, Any], Tensor1D]):
+            return {key: fn(val) for key, val in dict.items()}
+
+        return type(self)(
+            None if self.gamma is None else fn(self.gamma),
+            self.Q_repr._replace(flat=fn(self.Q_repr.flat)),
+            self.R_repr._replace(flat=fn(self.R_repr.flat)),
+            _map_fn(self.alphas),
+            None if self.betas is None else _map_fn(self.betas),
+            extra=self.extra,
+            skip_validation=True,
+        )
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def from_flat_tensor(self, flat: Tensor1D) -> Self:
@@ -163,9 +191,6 @@ class ModelParams:
 
         Args:
             flat (torch.Tensor): The flat representation.
-
-        Raises:
-            ValueError: If the shape makes the conversion impossible.
 
         Returns:
             Self: The constructed ModelParams.
@@ -179,33 +204,20 @@ class ModelParams:
             i += n
             return result.view(ref.shape)
 
-        gamma = None if self.gamma is None else _next(self.gamma)
+        return self._map_fn_params(_next)
 
-        Q_flat = _next(self.Q_repr.flat)
-        R_flat = _next(self.R_repr.flat)
+    def detach(self) -> Self:
+        """Returns a detached view of the parameters.
 
-        alphas = {key: _next(val) for key, val in self.alphas.items()}
-
-        betas = (
-            None
-            if self.betas is None
-            else {key: _next(val) for key, val in self.betas.items()}
-        )
-
-        return type(self)(
-            gamma,
-            self.Q_repr._replace(flat=Q_flat),
-            self.R_repr._replace(flat=R_flat),
-            alphas,
-            betas,
-            extra=self.extra,
-            skip_validation=True,
-        )
+        Returns:
+            ModelParams: The detached view.
+        """
+        return self._map_fn_params(torch.detach)
 
     def clone(self) -> Self:
-        """Returns a detached clone of the parameters.
+        """Returns a clone of the parameters.
 
         Returns:
             ModelParams: The clone.
         """
-        return self.from_flat_tensor(self.as_flat_tensor)
+        return self._map_fn_params(torch.clone)

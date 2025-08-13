@@ -2,8 +2,15 @@ from typing import cast
 
 import torch
 from pydantic import ConfigDict, validate_call
+from torch import nn
 
-from ..typedefs._defs import LOGTWOPI, ClockMethod, Num, NumStrictlyPositive
+from ..typedefs._defs import (
+    LOGTWOPI,
+    BaseHazardFn,
+    ClockMethod,
+    Num,
+    NumStrictlyPositive,
+)
 
 
 def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
@@ -56,7 +63,7 @@ def clock_reset(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
     return t1 - t0
 
 
-class Exponential:
+class Exponential(BaseHazardFn):
     r"""Implements the Exponential base hazard.
 
     Exponential base hazard is time independent.
@@ -68,12 +75,10 @@ class Exponential:
     This returns the base hazard in log scale.$
 
     Attributes:
-        lmda (torch.Tensor): The rate factor.
-        log_lmda (torch.Tensor): The log rate factor.
+        log_lmda (nn.Parameter): The log rate factor.
     """
 
-    lmda: torch.Tensor
-    log_lmda: torch.Tensor
+    log_lmda: nn.Parameter
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, lmda: NumStrictlyPositive):
@@ -85,14 +90,16 @@ class Exponential:
         Raises:
             ValueError: If lmda is not strictly positive.
         """
-        self.lmda = torch.tensor(lmda, dtype=torch.get_default_dtype())
+        super().__init__()  # type: ignore
 
-        if self.lmda <= 0:
-            raise ValueError(f"lmda must be strictly positive, got {self.lmda}")
+        lmda_ = torch.tensor(lmda, dtype=torch.get_default_dtype())
 
-        self.log_lmda = torch.log(self.lmda)
+        if lmda_ <= 0:
+            raise ValueError(f"lmda must be strictly positive, got {lmda_}")
 
-    def __call__(
+        self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
+
+    def forward(
         self,
         t0: torch.Tensor,  # noqa: ARG002
         t1: torch.Tensor,  # noqa: ARG002
@@ -108,8 +115,17 @@ class Exponential:
         """
         return self.log_lmda
 
+    @property
+    def lmda(self) -> torch.Tensor:
+        """Gets the rate factor.
 
-class Weibull:
+        Returns:
+            torch.Tensor: The rate factor.
+        """
+        return self.log_lmda.exp()
+
+
+class Weibull(BaseHazardFn):
     r"""Implements the Weibull base hazard.
 
     Weibull base hazard is time dependent.
@@ -121,18 +137,14 @@ class Weibull:
     This returns the base hazard in log scale.
 
     Attributes:
-        k (torch.Tensor): The shape parameter.
-        lmda (torch.Tensor): The scale parameter.
         clock_method (ClockMethod): The ClockMethod transformation.
-        log_k (torch.Tensor): The log of the shape parameter.
-        log_lmda (torch.Tensor): The log of the scale parameter.
+        log_k (nn.Parameter): The log of the shape parameter.
+        log_lmda (nn.Parameter): The log of the scale parameter.
     """
 
-    k: torch.Tensor
-    lmda: torch.Tensor
     clock_method: ClockMethod
-    log_k: torch.Tensor
-    log_lmda: torch.Tensor
+    log_k: nn.Parameter
+    log_lmda: nn.Parameter
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
@@ -153,19 +165,21 @@ class Weibull:
             ValueError: If k is not strictly positive.
             ValueError: If lmda is not strictly positive.
         """
-        self.k = torch.tensor(k, dtype=torch.get_default_dtype())
-        self.lmda = torch.tensor(lmda, dtype=torch.get_default_dtype())
+        super().__init__()  # type: ignore
+
+        k_ = torch.tensor(k, dtype=torch.get_default_dtype())
+        lmda_ = torch.tensor(lmda, dtype=torch.get_default_dtype())
         self.clock_method = clock_method
 
-        if self.k <= 0:
-            raise ValueError(f"k must be strictly positive, got {self.k}")
-        if self.lmda <= 0:
-            raise ValueError(f"lmda must be strictly positive, got {self.lmda}")
+        if k_ <= 0:
+            raise ValueError(f"k must be strictly positive, got {k_}")
+        if lmda_ <= 0:
+            raise ValueError(f"lmda must be strictly positive, got {lmda_}")
 
-        self.log_k = torch.log(self.k)
-        self.log_lmda = torch.log(self.lmda)
+        self.log_k = nn.Parameter(torch.log(k_), requires_grad=False)
+        self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
 
-    def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the Weibull base hazard.
 
         Args:
@@ -179,8 +193,26 @@ class Weibull:
         log_t = torch.log(t)
         return self.log_k - self.log_lmda + (self.k - 1) * (log_t - self.log_lmda)
 
+    @property
+    def k(self) -> torch.Tensor:
+        """Gets the shape parameter.
 
-class Gompertz:
+        Returns:
+            torch.Tensor: The shape parameter.
+        """
+        return self.log_k.exp()
+
+    @property
+    def lmda(self) -> torch.Tensor:
+        """Gets the scale parameter.
+
+        Returns:
+            torch.Tensor: The scale parameter.
+        """
+        return self.log_lmda.exp()
+
+
+class Gompertz(BaseHazardFn):
     r"""Implements the Gompertz base hazard.
 
     Gompertz base hazard is time dependent.
@@ -192,14 +224,14 @@ class Gompertz:
     This returns the base hazard in log scale.
 
     Attributes:
-        a (torch.Tensor) : The baseline hazard.
-        b (int | float): The shape parameter.
+        b (nn.Parameter): The shape parameter.
         clock_method (ClockMethod): The ClockMethod transformation.
+        log_a (nn.Parameter): The baseline hazard parameter.
     """
 
-    a: torch.Tensor
-    b: int | float
+    b: nn.Parameter
     clock_method: ClockMethod
+    log_a: nn.Parameter
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
@@ -219,14 +251,18 @@ class Gompertz:
             clock_method (ClockMethod, optional): The ClockMethod transformation.
                 Defaults to clock_reset.
         """
-        self.a = torch.tensor(a, dtype=torch.get_default_dtype())
-        self.b = b
+        super().__init__()  # type: ignore
+
+        a_ = torch.tensor(a, dtype=torch.get_default_dtype())
+        self.b = nn.Parameter(
+            torch.tensor(b, dtype=torch.get_default_dtype()), requires_grad=False
+        )
         self.clock_method = clock_method
 
-        if self.a <= 0:
-            raise ValueError(f"a must be strictly positive, got {self.a}")
+        if a_ <= 0:
+            raise ValueError(f"a must be strictly positive, got {a_}")
 
-        self.log_a = torch.log(self.a)
+        self.log_a = nn.Parameter(torch.log(a_), requires_grad=False)
 
     def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the Gompertz base hazard.
@@ -241,8 +277,17 @@ class Gompertz:
         t = self.clock_method(t0, t1)
         return self.log_a + self.b * t
 
+    @property
+    def a(self) -> torch.Tensor:
+        """Gets the baseline hazard.
 
-class LogNormal:
+        Returns:
+            torch.Tensor: The baseline hazard.
+        """
+        return self.log_a.exp()
+
+
+class LogNormal(BaseHazardFn):
     r"""Implements the log normal base hazard.
 
     Log normal base hazard is time dependent.
@@ -250,28 +295,26 @@ class LogNormal:
 
     .. math::
         \lambda(t) = \frac{\phi\left( \frac{\log t - \mu}{\sigma} \right)}{t \sigma
-        \Phi\left( -\frac{\log t - \mu}{\sigma} \right)},
+        \, \Phi\left( -\frac{\log t - \mu}{\sigma} \right)},
         \quad t > 0,
 
     where:
 
     .. math::
         \phi(z) = \frac{1}{\sqrt{2\pi}} e^{-z^2/2}, \quad
-        \Phi(z) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^z e^{-t^2/2} \, dt
+        \Phi(z) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^z e^{-t^2/2} \, dt.
 
     This returns the base hazard in log scale.
 
     Attributes:
-        mu (int | float): The log time mean.
-        scale (torch.Tensor): The log time scale.
+        mu (nn.Parameter): The log time mean.
         clock_method (ClockMethod): The ClockMethod transformation.
-        log_scale (torch.Tensor): The log of scale.
+        log_scale (nn.Parameter): The log of scale.
     """
 
-    mu: int | float
-    scale: torch.Tensor
+    mu: nn.Parameter
     clock_method: ClockMethod
-    log_scale: torch.Tensor
+    log_scale: nn.Parameter
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
@@ -294,16 +337,20 @@ class LogNormal:
         Returns:
             BaseHazardFn: Returns the log normal base hazard function.
         """
-        self.mu = mu
-        self.scale = torch.tensor(scale, dtype=torch.get_default_dtype())
+        super().__init__()  # type: ignore
+
+        self.mu = nn.Parameter(
+            torch.tensor(mu, dtype=torch.get_default_dtype()), requires_grad=False
+        )
+        scale_ = torch.tensor(scale, dtype=torch.get_default_dtype())
         self.clock_method = clock_method
 
-        if self.scale <= 0:
-            raise ValueError(f"scale must be strictly positive, got {self.scale}")
+        if scale_ <= 0:
+            raise ValueError(f"scale must be strictly positive, got {scale_}")
 
-        self.log_scale = torch.log(self.scale)
+        self.log_scale = nn.Parameter(torch.log(scale_), requires_grad=False)
 
-    def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the log normal base hazard.
 
         Args:
@@ -319,3 +366,12 @@ class LogNormal:
         log_pdf = -log_t - self.log_scale - 0.5 * LOGTWOPI - 0.5 * z**2
         log_sf = cast(torch.Tensor, torch.special.log_ndtr(-z))  # type: ignore
         return log_pdf - log_sf
+
+    @property
+    def scale(self) -> torch.Tensor:
+        """Gets the scale.
+
+        Returns:
+            torch.Tensor: The scale.
+        """
+        return self.log_scale.exp()

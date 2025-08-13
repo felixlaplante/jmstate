@@ -10,12 +10,14 @@ from typing import (
     Final,
     NamedTuple,
     Protocol,
+    Self,
     TypeAlias,
     runtime_checkable,
 )
 
 import torch
 from pydantic import AfterValidator
+from torch import nn
 
 from ._validators import is_col, is_ndim, is_non_neg, is_prob, is_strict_pos
 
@@ -141,18 +143,6 @@ class LinkFn(Protocol):
 
 
 @runtime_checkable
-class BaseHazardFn(Protocol):
-    """The base hazard protocol.
-
-    Note the base hazard function is in log scale, and expects a former transition time
-    column vector `t0` as well as other times points at which the base hazard is to be
-    computed. `t1` is a matrix with the same number of rows as `tO`.
-    """
-
-    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
-
-
-@runtime_checkable
 class ClockMethod(Protocol):
     r"""The clock method protocol.
 
@@ -191,7 +181,7 @@ class MatRepr(NamedTuple):
     is given by:
 
     .. math::
-        \tilde{L}_{ij} = L_{ij}, i > j,
+        \tilde{L}_{ij} = L_{ij}, \, i > j,
 
     and:
 
@@ -333,12 +323,50 @@ class Metrics(SimpleNamespace):
 
 
 # Abstract classes
+class BaseHazardFn(nn.Module, ABC):
+    """The base hazard base class.
+
+    This is not a protocol because caching is done, and therefore a key is required.
+    Making this a `nn.Module`, one can check the value of the parameters and store their
+    hashed values at the same time as the
+
+    Note the base hazard function is in log scale, and expects a former transition time
+    column vector `t0` as well as other times points at which the base hazard is to be
+    computed. `t1` is a matrix with the same number of rows as `t0`.
+
+    Implement a `forward` and do not forget the `super().__init__()` when declaring your
+    own class.
+
+    Pass the parameters you want to optimize in the `ModelParams.extra` attribute as a
+    list. If you do not want them to be optimized, then by default they do not require
+    gradients for the given implementations.
+    """
+
+    @property
+    def key(self) -> tuple[int, ...]:
+        """Returns a hash containing the class type and parameters if there are any.
+
+        Returns:
+            tuple[int, ...]: A key used in caching operations.
+        """
+        ident = id(self)
+        parameters = list(self.parameters())
+        if parameters == []:
+            return (ident,)
+
+        params_flat = nn.utils.parameters_to_vector(self.parameters())
+        return (ident, hash(params_flat.detach().numpy().tobytes()))
+
+    @abstractmethod
+    def forward(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
+
+
 class _Job:
-    def __new__(cls, *args: Any, **kwargs: Any) -> _Job | Callable[[Info], _Job]:
+    def __new__(cls, *args: Any, **kwargs: Any) -> Callable[[Info], Self]:
         """Creates a partial in order to be initialized later.
 
         Returns:
-            _Job | Callable[[Info], _Job]: The object or a partial.
+            Callable[[Info], Self]: The object or a partial.
         """
 
         def _job_factory(info: Info):
@@ -349,11 +377,11 @@ class _Job:
         return _job_factory
 
     @classmethod
-    def _create_obj(cls, *args: Any, **kwargs: Any) -> _Job:
+    def _create_obj(cls, *args: Any, **kwargs: Any) -> Self:
         """Creates a factory to wrap the creation.
 
         Returns:
-            Job: The initialized job.
+            Self: The initialized job.
         """
         obj = super().__new__(cls)
         obj.__init__(*args, **kwargs)
@@ -364,11 +392,19 @@ class Job(_Job, ABC):
     """This is the public base class for any Job.
 
     Please note the behaviour of this class is quite special and inherited from the
-    private class `_Job`. When `__new__` is called, the class will return a function
+    private class `_Job`. When `__new__` is called, the class will return a factory
     that is a `Callable[[Info], Job]`, and the `__init__` is not run until the main MCMC
     loop calls it. You can pass `info` keyword to use your custom information instead of
     the default information container, but this is very discouraged.
     """
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Callable[[Info], Job]:
+        """Returns the Job factory needed by the `do` method.
+
+        Returns:
+            Callable[[Info], Job]: The job factory.
+        """
+        return super().__new__(cls, *args, **kwargs)
 
     @abstractmethod
     def run(self, info: Info) -> bool | None:

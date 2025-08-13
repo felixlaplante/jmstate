@@ -117,10 +117,12 @@ class ModelData:
         if self.skip_validation:
             return
 
-        self.x = None if self.x is None else self.x.to(torch.get_default_dtype())
-        self.t = self.t.to(torch.get_default_dtype())
-        self.y = self.y.to(torch.get_default_dtype())
-        self.c = self.c.to(torch.get_default_dtype())
+        dtype = torch.get_default_dtype()
+
+        self.x = None if self.x is None else self.x.to(dtype)
+        self.t = self.t.to(dtype)
+        self.y = self.y.to(dtype)
+        self.c = self.c.to(dtype)
 
         check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
         check_consistent_size(
@@ -239,9 +241,11 @@ class SampleData:
         if self.skip_validation:
             return
 
-        self.x = None if self.x is None else self.x.to(torch.get_default_dtype())
-        self.psi = self.psi.to(torch.get_default_dtype())
-        self.c = None if self.c is None else self.c.to(torch.get_default_dtype())
+        dtype = torch.get_default_dtype()
+
+        self.x = None if self.x is None else self.x.to(dtype)
+        self.psi = self.psi.to(dtype)
+        self.c = None if self.c is None else self.c.to(dtype)
 
         check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
         check_consistent_size(

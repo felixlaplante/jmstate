@@ -107,7 +107,7 @@ def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
     is given by:
 
     .. math::
-        \tilde{L}_{ij} = L_{ij}, i > j,
+        \tilde{L}_{ij} = L_{ij}, \, i > j,
 
     and:
 
@@ -177,7 +177,7 @@ def repr_from_cov(V: Tensor2D, method: str = "full") -> MatRepr:
     is given by:
 
     .. math::
-        \tilde{L}_{ij} = L_{ij}, i > j,
+        \tilde{L}_{ij} = L_{ij}, \, i > j,
 
     and:
 

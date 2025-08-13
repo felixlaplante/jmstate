@@ -41,7 +41,7 @@ DEFAULT_HYPERPARAMETERS_FIELDS: Final[tuple[str, ...]] = (
 class MultiStateJointModel(LongitudinalMixin, HazardMixin):
     r"""A class of the nonlinear multistate joint model.
 
-    It features possibility to simulate data, fit based on stochastic gradient with any
+    It features methods to simulate data, fit based on stochastic gradient with any
     `torch.optim.Optimizer` of choice.
 
     It leverages the Fisher identity and stochastic gradient algorithm coupled
@@ -230,7 +230,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         sample_data: SampleData,
         c_max: torch.Tensor,
         *,
-        max_length: IntNonNegative = 10,
+        max_length: IntStrictlyPositive = 10,
     ) -> list[Trajectory]:
         """Sample future trajectories from the fitted joint model.
 
@@ -331,7 +331,8 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
         If `new_data` is not given, then previous data will be used if it has been
         passed during a fitting step. If not, this will raise an error. The metrics
-        are completed when reusing the fitting data.
+        are appended when reusing the fitting data, when the passed object is None or if
+        the passed object is the same object as the fitting data.
 
         Args:
             new_data (ModelData): The dataset to learn from.

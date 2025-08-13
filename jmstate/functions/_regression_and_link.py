@@ -50,7 +50,7 @@ class Net(nn.Module):
     def __init__(self, net: nn.Module):
         super().__init__()  # type: ignore
         self.net = net
-        self.net.requires_grad_(False)
+        self.requires_grad_(False)
 
     def forward(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
         """Implements the neural transformation.

@@ -29,7 +29,7 @@ class LogParamsHistory(Job):
         Args:
             info (Info): The job information object.
         """
-        self.params_history.append(info.model.params_.clone())
+        self.params_history.append(info.model.params_.clone().detach())
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         """Adds by concatenation or erases the metrics history.

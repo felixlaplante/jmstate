@@ -4,13 +4,7 @@ from typing import Any, Final
 import torch
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
-from ..typedefs._defs import (
-    HazardInfo,
-    IntStrictlyPositive,
-    Tensor2D,
-    TensorCol,
-    Trajectory,
-)
+from ..typedefs._defs import HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._misc import legendre_quad
 from ..utils._surv import build_traj_repr
@@ -81,9 +75,9 @@ class HazardMixin:
         if enable_cache:
             try:
                 key = (
-                    id(hazard_info.base_hazard_fn),
-                    hash(t0.detach().numpy().tobytes()),  # type: ignore
-                    hash(t1.detach().numpy().tobytes()),  # type: ignore
+                    *hazard_info.base_hazard_fn.key,
+                    hash(t0.detach().numpy().tobytes()),
+                    hash(t1.detach().numpy().tobytes()),
                 )
                 base = self._cache.get_cache("base", key, _base_create)
             except RuntimeError:
@@ -103,14 +97,14 @@ class HazardMixin:
     def _cum_hazard(
         self,
         hazard_info: HazardInfo,
-        c: TensorCol | None,
+        c: torch.Tensor | None,
         enable_cache: bool,
     ) -> torch.Tensor:
         """Computes cumulative hazard.
 
         Args:
             hazard_info (HazardInfo): All necessary information for computation.
-            c (TensorCol | None): Integration start or censoring time, t0 if None.
+            c (torch.Tensor | None): Integration start or censoring time, t0 if None.
             enable_cache (bool): Enables caching.
 
         Returns:
@@ -130,8 +124,8 @@ class HazardMixin:
         if enable_cache:
             try:
                 key = (
-                    hash(c.detach().numpy().tobytes()),  # type: ignore
-                    hash(t1.detach().numpy().tobytes()),  # type: ignore
+                    hash(c.detach().numpy().tobytes()),
+                    hash(t1.detach().numpy().tobytes()),
                 )
 
                 half = self._cache.get_cache("half", key, _half_create)
@@ -179,8 +173,8 @@ class HazardMixin:
         if enable_cache:
             try:
                 key = (
-                    hash(t0.detach().numpy().tobytes()),  # type: ignore
-                    hash(t1.detach().numpy().tobytes()),  # type: ignore
+                    hash(t0.detach().numpy().tobytes()),
+                    hash(t1.detach().numpy().tobytes()),
                 )
 
                 half = self._cache.get_cache("half", key, _half_create)
@@ -201,13 +195,13 @@ class HazardMixin:
     def _sample_transition(
         self,
         hazard_info: HazardInfo,
-        c: TensorCol | None,
-    ) -> TensorCol:
+        c: torch.Tensor | None,
+    ) -> torch.Tensor:
         """Sample survival times using inverse transform sampling.
 
         Args:
             hazard_info (HazardInfo): All necessary information for computation.
-            c (TensorCol | None): Conditionning time.
+            c (torch.Tensor | None): Conditionning time.
 
         Returns:
             torch.Tensor: The computed pre transition times.
@@ -239,13 +233,13 @@ class HazardMixin:
         return t_right
 
     def _sample_trajectory_step(
-        self, sample_data: SampleData, c_max: TensorCol
+        self, sample_data: SampleData, c_max: torch.Tensor
     ) -> bool:
         """Appends the next simulated transition.
 
         Args:
             sample_data (SampleData): Sampling data
-            c_max (TensorCol): Max sampling time.
+            c_max (torch.Tensor): Max sampling time.
 
         Returns:
             bool: If the sampling is done.
@@ -267,17 +261,14 @@ class HazardMixin:
         t_candidates = torch.full((sample_data.size, n_transitions), torch.inf)
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
-            idx, t0, t1, _ = bucket
-            t1 = torch.nextafter(
-                t1, torch.tensor(torch.inf, dtype=torch.get_default_dtype())
-            )
+            idxs, t0, t1, _ = bucket
 
             # Create info
             hazard_info = HazardInfo(
                 t0,
                 t1,
-                None if x is None else x.index_select(0, idx),
-                psi.index_select(-2, idx),
+                None if x is None else x.index_select(-2, idxs),
+                psi.index_select(-2, idxs),
                 self.params_.alphas[key],
                 None if self.params_.betas is None else self.params_.betas[key],
                 *self.model_design.surv[key],
@@ -286,10 +277,10 @@ class HazardMixin:
             # Sample transition times
             t_sample = self._sample_transition(
                 hazard_info,
-                None if c is None else c.index_select(0, idx),
+                None if c is None else c.index_select(0, idxs),
             )
 
-            t_candidates[idx, j] = t_sample.view(-1)
+            t_candidates[idxs, j] = t_sample.view(-1)
 
         # Find earliest transition
         min_times, argmin_idxs = torch.min(t_candidates, dim=1)
@@ -306,17 +297,15 @@ class HazardMixin:
     def _sample_trajectories(
         self,
         sample_data: SampleData,
-        c_max: TensorCol,
-        *,
-        max_length: IntStrictlyPositive = 10,
+        c_max: torch.Tensor,
+        max_length: int,
     ) -> list[Trajectory]:
         """Sample future trajectories from the fitted joint model.
 
         Args:
             sample_data (SampleData): Prediction data.
-            c_max (TensorCol): The maximum trajectory censoring times.
-            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling.
-                Defaults to 10.
+            c_max (torch.Tensor): The maximum trajectory censoring times.
+            max_length (int): Maximum iterations or sampling.
 
         Returns:
             list[Trajectory]: The sampled trajectories.
@@ -332,16 +321,18 @@ class HazardMixin:
                 break
 
         return [
-            trajectory[:-1] if trajectory[-1][0] > c_max[i] else trajectory
+            trajectory if trajectory[-1][0] < c_max[i] else trajectory[:-1]
             for i, trajectory in enumerate(sample_data_copied.trajectories)
         ]
 
-    def _compute_surv_logps(self, sample_data: SampleData, u: Tensor2D) -> torch.Tensor:
+    def _compute_surv_logps(
+        self, sample_data: SampleData, u: torch.Tensor
+    ) -> torch.Tensor:
         """Computes log probabilites of remaining event free up to time u.
 
         Args:
             sample_data (SampleData): The data on which to compute the probabilities.
-            u (Tensor2D): The time at which to evaluate the probabilities.
+            u (torch.Tensor): The time at which to evaluate the probabilities.
 
         Returns:
             torch.Tensor: The computed survival log probabilities.
@@ -364,14 +355,14 @@ class HazardMixin:
         # Compute the log probabilities summing over transitions
         for key, bucket in buckets.items():
             for k in range(u.size(1)):
-                idx, t0, _, _ = bucket
+                idxs, t0, _, _ = bucket
 
                 # Create info
                 hazard_info = HazardInfo(
                     t0,
                     u[:, k].view(-1, 1),
-                    None if x is None else x.index_select(0, idx),
-                    psi.index_select(-2, idx),
+                    None if x is None else x.index_select(-2, idxs),
+                    psi.index_select(-2, idxs),
                     self.params_.alphas[key],
                     None if self.params_.betas is None else self.params_.betas[key],
                     *self.model_design.surv[key],
@@ -384,7 +375,7 @@ class HazardMixin:
                     self.cache_limit != 0,
                 )
 
-                nlogps[..., k].index_add_(-1, idx, alts_logliks)
+                nlogps[..., k].index_add_(-1, idxs, alts_logliks)
 
         return -nlogps.clamp(min=0.0)
 
@@ -405,14 +396,14 @@ class HazardMixin:
         logliks = torch.zeros(psi.shape[:-1])
 
         for key, bucket in data.buckets.items():
-            idx, t0, t1, obs = bucket
+            idxs, t0, t1, obs = bucket
 
             # Create info
             hazard_info = HazardInfo(
                 t0,
                 t1,
-                None if data.x is None else data.x.index_select(0, idx),
-                psi.index_select(-2, idx),
+                None if data.x is None else data.x.index_select(-2, idxs),
+                psi.index_select(-2, idxs),
                 params.alphas[key],
                 None if params.betas is None else params.betas[key],
                 *self.model_design.surv[key],
@@ -424,6 +415,6 @@ class HazardMixin:
             )
 
             vals = obs * obs_logliks - alts_logliks
-            logliks = logliks.index_add(-1, idx, vals)
+            logliks.index_add_(-1, idxs, vals)
 
         return logliks

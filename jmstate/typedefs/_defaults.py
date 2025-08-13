@@ -21,7 +21,7 @@ DEFAULT_HYPERPARAMETERS: Final[dict[type[Job], dict[str, Any]]] = {
         "warmup": 0,
         "n_steps": 0,
     },
-    RandomFit: {"max_iterations": 500, "n_chains": 5, "warmup": 200, "n_steps": 5},
+    RandomFit: {"max_iterations": 200, "n_chains": 10, "warmup": 200, "n_steps": 10},
     PredictSurvLogps: {
         "max_iterations": 100,
         "n_chains": 10,

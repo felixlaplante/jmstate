@@ -10,8 +10,10 @@ from ..typedefs._defs import Info, Job, Metrics
 
 # Constants
 NO_GROUPS_OPT: Final[tuple[type[torch.optim.Optimizer], ...]] = (torch.optim.LBFGS,)
-DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
-DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
+DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = (
+    torch.optim.Rprop
+)
+DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Rprop
 
 
 class _BaseFit(Job, ABC):
@@ -126,7 +128,7 @@ class DeterministicFit(_BaseFit):
     initial values for the parameters.
 
     It can be used with any optimizer factory built on the base class
-    `torch.optim.Optimizer`. If None, it defaults to Adam.
+    `torch.optim.Optimizer`. If None, it defaults to Rprop.
 
     Use kwargs to pass defaults to the optimizer factory.
 
@@ -175,7 +177,7 @@ class RandomFit(_BaseFit):
     This is a random fitting job and it does set the `fit_` attribute when finished.
 
     It can be used with any optimizer factory built on the base class
-    `torch.optim.Optimizer`. If None, it defaults to Adam.
+    `torch.optim.Optimizer`. If None, it defaults to Rprop.
 
     Use kwargs to pass defaults to the optimizer factory.
 
