@@ -5,9 +5,7 @@ from typing import Any, cast
 import torch
 from pydantic import ConfigDict, validate_call
 
-from jmstate.typedefs._data import SampleData
-
-from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
+from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
 from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS
 from ..typedefs._defs import (
     LOGTWOPI,
