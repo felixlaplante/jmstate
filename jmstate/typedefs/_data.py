@@ -176,7 +176,6 @@ class CompleteModelData(ModelData):
         """Sets the missing representation.
 
         Raises:
-            ValueError: If the survival keys are missing from the survival dict.
             ValueError: If y and R are not compatible in shape.
 
         Args:

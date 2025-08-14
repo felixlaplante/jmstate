@@ -62,7 +62,7 @@ class PredictY(Job):
         Args:
             info (Info): The job information object.
         """
-        y = info.model.model_design.regression_fn(self.u, info.psi.detach())
+        y = info.model.model_design.regression_fn(self.u, info.psi)
         self.pred_y += [y[i] for i in range(y.size(0))]
 
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
@@ -134,7 +134,7 @@ class PredictSurvLogps(Job):
         sample_data = SampleData(
             info.data.x,
             info.data.trajectories,
-            info.psi.detach(),
+            info.psi,
             info.data.c,
             skip_validation=True,
         )
@@ -203,7 +203,7 @@ class PredictTrajectories(Job):
             sample_data = SampleData(
                 info.data.x,
                 info.data.trajectories,
-                info.psi.detach()[i],
+                info.psi[i],
                 info.data.c,
                 skip_validation=True,
             )
