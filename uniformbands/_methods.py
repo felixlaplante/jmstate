@@ -18,10 +18,12 @@ def uniform(
         alpha (float): The level of supplementary risk.
 
     Returns:
-        dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha of supplementary risk.
+        dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha
+            of supplementary risk.
     """
-    rank_lo, rank_hi = rankdata(F_lo, method="max", axis=-2), rankdata(
-        F_hi, method="min", axis=-2
+    rank_lo, rank_hi = (
+        rankdata(F_lo, method="max", axis=-2),
+        rankdata(F_hi, method="min", axis=-2),
     )
     infZ, supZ = rank_lo.min(axis=-1) - 1, rank_hi.max(axis=-1) - 1
 
@@ -56,7 +58,8 @@ def student(
         max_val (float): The maximum accepted values of the functions.
 
     Returns:
-        dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha of supplementary risk.
+        dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha
+            of supplementary risk.
     """
     mean_lo, mean_hi = F_lo.mean(axis=-2), F_hi.mean(axis=-2)
     std_lo, std_hi = F_lo.std(axis=-2) + eps, F_hi.std(axis=-2) + eps

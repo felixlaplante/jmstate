@@ -18,12 +18,17 @@ def get_bands(
 
     Args:
         F_lo (NDArray[np.float32  |  np.float64]): The lower high probability bounds.
-        F_hi (NDArray[np.float32  |  np.float64]):  The upper high probability bounds. Defaults to None.
+        F_hi (NDArray[np.float32  |  np.float64]):  The upper high probability bounds.
+            Defaults to None.
         alpha (float, optional): The level of supplementary risk. Defaults to 0.05.
-        eps (float, optional): The regularization parameter to ensure a well defined division.. Defaults to 1e-8.
-        method (str, optional): Either "uniform" or "student", the method used to compute uniform bands. Defaults to "uniform".
-        min_val (float, optional): The minimum accepted values of the functions.. Defaults to 0.0.
-        max_val (float, optional): The maximum accepted values of the functions.. Defaults to 1.0.
+        eps (float, optional): The regularization parameter to ensure a well defined
+            division. Defaults to 1e-8.
+        method (str, optional): Either "uniform" or "student", the method used to
+            compute uniform bands. Defaults to "uniform".
+        min_val (float, optional): The minimum accepted values of the functions.
+            Defaults to 0.0.
+        max_val (float, optional): The maximum accepted values of the functions.
+            Defaults to 1.0.
 
     Raises:
         ValueError: If the shapes of F_lo and F_hi don't match.
@@ -42,7 +47,7 @@ def get_bands(
             f"F_lo and F_hi shapes must be the same, got {F_lo.shape} != {F_hi.shape}"
         )
 
-    if F_lo.ndim < 2:
+    if F_lo.ndim < 2:  # noqa: PLR2004
         raise ValueError(
             f"F_lo and F_hi must have at least two dimensions, got shape {F_lo.shape}"
         )
