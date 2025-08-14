@@ -117,8 +117,8 @@ class ComputeCriteria(Job):
     where :math:`n` is the number of effective data measurements. Note this is computed
     as the sum of the lengths of the trajectories added to the sum of longitudinal data
     measurements. If the residuals are assumed to be independent, then the longitudinal
-    contribution is equal to the number of all non NaN values given in `data.y`. Else,
-    it is equal to the number of measurement vectors provided.
+    contribution is equal to the number of all non NaN values given in `data.y`.
+    Otherwise, it is equal to the number of measurement vectors provided.
 
     Please note that this is a stochastic approximation.
 
