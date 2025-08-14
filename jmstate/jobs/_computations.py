@@ -2,6 +2,7 @@ import warnings
 from collections.abc import Callable
 
 import torch
+from pydantic import ConfigDict, validate_call
 
 from ..typedefs._defs import Info, Job, Metrics
 
@@ -35,6 +36,7 @@ class ComputeFIM(Job):
     grad_m2: torch.Tensor
     jac_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
+    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, bias: bool = True, *, info: Info):
         """Initializes the moment estimates to 0.
 
