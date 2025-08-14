@@ -194,23 +194,17 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             target_accept_rate,
         )
 
-    def _setup_jobs(
-        self, job_factories: Callable[[Info], Job] | list[Callable[[Info], Job]]
-    ) -> tuple[list[Callable[[Info], Job]], dict[str, Any] | None]:
-        """Sets up jobs, and gets default hyper-parameters.
+    def _get_hyperparameters(
+        self, job_factories: list[Callable[[Info], Job]]
+    ) -> dict[str, Any] | None:
+        """Gets default hyper-parameters.
 
         Args:
-            job_factories (Callable[[Info], Job] | list[Callable[[Info], Job]]): The
-            job factories.
+            job_factories (list[Callable[[Info], Job]]): The job factories.
 
         Returns:
-            tupl[list[Callable[[Info], Job]], dict[str, Any] | None]: The job factories
-                and default hyper-parameters associated.
+            dict[str, Any] | None: The default hyper-parameters associated.
         """
-        # Initialize jobs
-        if callable(job_factories):
-            job_factories = [job_factories]
-
         for job_factory in reversed(job_factories):
             key = getattr(job_factory, "cls", None)
             if not (isinstance(key, type) and issubclass(key, Job)):
@@ -218,9 +212,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
 
             hyperparameters = DEFAULT_HYPERPARAMETERS.get(key)
             if hyperparameters is not None:
-                return job_factories, hyperparameters
+                return hyperparameters
 
-        return job_factories, None
+        return None
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def sample_trajectories(
@@ -372,7 +366,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         complete_data.prepare(self.model_design, self.params_)
 
         # Set up jobs and hyper-parameters.
-        job_factories, hyperparameters = self._setup_jobs(job_factories)
+        job_factories = [job_factories] if callable(job_factories) else job_factories
+
+        hyperparameters = self._get_hyperparameters(job_factories)
         if hyperparameters is not None:
             max_iterations = (
                 hyperparameters["max_iterations"]
