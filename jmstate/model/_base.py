@@ -418,6 +418,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
             iteration=-1,
             model=self,
             sampler=sampler,
+            b=sampler.state,
+            logliks=sampler.aux[0],
+            psi=sampler.aux[1],
         )
 
         jobs = [job_factory(info) for job_factory in job_factories]
