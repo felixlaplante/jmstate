@@ -87,7 +87,7 @@ class GradStop(Job):
         \vert \hat{m}_1^{(t)} \vert \leq \text{atol} + \text{rtol} \odot
         \sqrt{\hat{m}_2^{(t)} - \bigl(\hat{m}_1^{(t)}\bigr)^2}.
 
-    Please note the tolerances must both be positive and can represent element-wise
+    Please note the tolerances must both be non-negative and can represent element-wise
     tolerances or global tolerance common to all parameters.
 
     Attributes:
@@ -222,7 +222,7 @@ class ValueStop(Job):
         \vert \hat{m}_1^{(t)} \vert \leq \text{atol} + \text{rtol}
         \sqrt{\hat{m}_2^{(t)} - \bigl(\hat{m}_1^{(t)}\bigr)^2}.
 
-    Please note the tolerance must be positive.
+    Please note the tolerances must be non-negative.
 
     Attributes:
         atol (int | float): Absolute tolerance.
