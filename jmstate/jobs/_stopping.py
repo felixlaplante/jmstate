@@ -74,20 +74,21 @@ class GradStop(Job):
     All stopping jobs have to agree and return True for the process to stop. Other
     jobs return None.
 
-    Mathematically, an estimate of the first and second moments of the gradient are
+    Mathematically, estimates of the first and second moments of the gradient are
     stochastically computed, using exponential moving averages with the formula:
 
     .. math::
-        m_i^{(t)} \gets \beta_i m_i^{(t-1)} + (1 - \beta_i) \nabla^{(t)}, \quad
-        \hat{m}_i^{(t)} = \frac{m_i^{(t)}}{1 - \beta_i^t}.
+        m_i^{(t)} \gets \beta_i m_i^{(t-1)} + (1 - \beta_i) \bigl(\nabla \log
+        \mathcal{L}(\theta^{(t)})\bigr)^i, \quad \hat{m}_i^{(t)} = \frac{m_i^{(t)}}
+        {1 - \beta_i^t}.
 
     The `run` method returns true when for `min_consecutive` iterations:
 
     .. math::
-        \hat{m}_1^{(t)} \leq \text{atol} + \text{rtol} \odot
-        \sqrt{\hat{m}_2^{(t)}}.
+        \vert \hat{m}_1^{(t)} \vert \leq \text{atol} + \text{rtol} \odot
+        \sqrt{\hat{m}_2^{(t)} - \bigl(\hat{m}_1^{(t)}\bigr)^2}.
 
-    Please note the tolerance must both be positive and can represent element-wise
+    Please note the tolerances must both be positive and can represent element-wise
     tolerances or global tolerance common to all parameters.
 
     Attributes:
@@ -116,7 +117,7 @@ class GradStop(Job):
         atol: NumNonNegative | Tensor1DPositive = 0.01,
         rtol: NumNonNegative | Tensor1DPositive = 0.01,
         min_consecutive: IntStrictlyPositive = 50,
-        betas: tuple[NumProbability, NumProbability] = (0.9, 0.999),
+        betas: tuple[NumProbability, NumProbability] = (0.99, 0.99),
         *,
         info: Info,
     ):
@@ -130,7 +131,7 @@ class GradStop(Job):
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 50.
             betas (tuple[NumProbability, NumProbability], optional): Exponential moving
-                averages forget parameters. Defaults to (0.9, 0.999).
+                averages forget parameters. Defaults to (0.99, 0.99).
             info (Info): The job information object.
         """
         self.atol = atol
@@ -174,7 +175,7 @@ class GradStop(Job):
         v_hat = self.v / (1 - self.betas[1] ** (info.iteration + 1))
 
         # Check convergence
-        if (m_hat.abs() <= self.atol + self.rtol * v_hat.sqrt()).all():
+        if (m_hat.abs() <= self.atol + self.rtol * (v_hat - m_hat**2).sqrt()).all():
             self.n_consecutive += 1
             if self.n_consecutive >= self.min_consecutive:
                 self.stopped = True
@@ -206,36 +207,30 @@ class ValueStop(Job):
     All stopping jobs have to agree and return True for the process to stop. Other
     jobs return None.
 
-    Mathematically, an estimate of the first moment of the log likelihood and its
-    difference is stochastically computed, using exponential moving averages with the
-    formulae:
+    Mathematically, estimates of the first and the second moments of the log likelihood
+    difference are stochastically computed, using exponential moving averages with the
+    formula:
 
     .. math::
-        l^{(t)} \gets \beta_1 l^{(t-1)} + (1 - \beta_1)
-        \frac{\text{log likelihood}^{(t)}}{n}, \quad \hat{l}^{(t)} =
-        \frac{l^{(t)}}{1 - \beta_1^t}.
-
-    .. math::
-        d^{(t)} \gets \beta_2 d^{(t-1)} + (1 - \beta_2)
-        \frac{\text{log likelihood}^{(t)} - \text{log likelihood}^{(t - 1)}}{n},
-        \quad \hat{d}^{(t)} = \frac{m^{(t)}}{1 - \beta_2^t}.
+        m_i^{(t)} \gets \beta_i m_i^{(t-1)} + (1 - \beta_i) \Bigl(
+        \frac{\log \mathcal{L}(\theta^{(t)}) - \log \mathcal{L}(\theta^{(t-1)})}{n}
+        \Bigr)^i, \quad \hat{m}_i^{(t)} = \frac{m_i^{(t)}}{1 - \beta_i^t}.
 
     The `run` method returns true when for `min_consecutive` iterations:
 
     .. math::
-        \vert \hat{d}^{(t)} \vert \leq \text{atol} + \text{rtol} \odot n^{-1}
-        \vert l^{(t)} \vert.
+        \vert \hat{m}_1^{(t)} \vert \leq \text{atol} + \text{rtol}
+        \sqrt{\hat{m}_2^{(t)} - \bigl(\hat{m}_1^{(t)}\bigr)^2}.
 
-    Please note the tolerance must both be positive.
+    Please note the tolerance must be positive.
 
     Attributes:
         atol (int | float): Absolute tolerance.
-        rtol (int | float): Relative tolerance.
         min_consecutive (int): Minimum consecutive iterations to declare convergence.
         betas (tuple[int | float, int | float]): The forget parameters.
-        l (float): The first moment estimate of the log likelihood.
-        d (float): The first moment estimate of the log likelihood difference.
-        prev_loglik (float): The previous log likelihood value.
+        m (torch.Tensor): The first moment estimate of the log likelihood gain.
+        v (torch.Tensor): The second moment estimate of the log likelihood gain.
+        prev_loglik (torch.Tensor): The previous log likelihood value.
         n_consecutive (int): The number of iterations with convergence criterion met.
         stopped (bool): Indicator whether or not convergence has happened.
     """
@@ -244,17 +239,17 @@ class ValueStop(Job):
     rtol: int | float
     min_consecutive: int
     betas: tuple[int | float, int | float]
-    m: float
-    v: float
-    prev_loglik: float
+    m: torch.Tensor
+    v: torch.Tensor
+    prev_loglik: torch.Tensor
     n_consecutive: int
     stopped: bool
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
-        atol: NumNonNegative = 0.001,
-        rtol: NumNonNegative = 0.001,
+        atol: NumNonNegative = 0.01,
+        rtol: NumNonNegative = 0.01,
         min_consecutive: IntStrictlyPositive = 50,
         betas: tuple[NumProbability, NumProbability] = (0.99, 0.99),
         *,
@@ -263,8 +258,8 @@ class ValueStop(Job):
         """Initializes the `ValueStop` class.
 
         Args:
-            atol (NumNonNegative, optional): Absolute tolerance. Defaults to 0.001.
-            rtol (NumNonNegative, optional): Relative tolerance. Defaults to 0.001.
+            atol (NumNonNegative, optional): Absolute tolerance. Defaults to 0.01.
+            rtol (NumNonNegative, optional): Relative tolerance. Defaults to 0.01.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 50.
             betas (tuple[NumProbability, NumProbability], optional): Exponential moving
@@ -279,12 +274,12 @@ class ValueStop(Job):
         self.n_consecutive = 0
         self.stopped = False
 
-        self.l = 0.0
-        self.d = 0.0
-        self.prev_loglik = info.logliks.mean().item()
+        self.m = torch.zeros(1)
+        self.v = torch.zeros(1)
+        self.prev_loglik = info.logliks.mean()
 
     def run(self, info: Info) -> bool:
-        """Updates the moment estimates stochastically and checks for convergence.
+        """Updates the moment estimate stochastically and checks for convergence.
 
         Args:
             info (Info): The job information object.
@@ -292,18 +287,18 @@ class ValueStop(Job):
         Returns:
             bool: True if parameters have convergence, else False.
         """
-        loglik = info.logliks.mean().item()
+        loglik = info.logliks.mean()
         diff = loglik - self.prev_loglik
         self.prev_loglik = loglik
 
-        self.l = self.betas[0] * self.l + (1 - self.betas[0]) * loglik
-        self.d = self.betas[1] * self.d + (1 - self.betas[1]) * diff
+        self.m = self.betas[0] * self.m + (1 - self.betas[0]) * diff
+        self.v = self.betas[1] * self.v + (1 - self.betas[1]) * diff**2
 
-        l_hat = self.l / (1 - self.betas[0] ** (info.iteration + 1))
-        d_hat = self.d / (1 - self.betas[1] ** (info.iteration + 1))
+        m_hat = self.m / (1 - self.betas[0] ** (info.iteration + 1))
+        v_hat = self.v / (1 - self.betas[1] ** (info.iteration + 1))
 
         # Check convergence
-        if abs(d_hat) <= self.atol + self.rtol * abs(l_hat):
+        if m_hat.abs() <= self.atol + self.rtol * (v_hat - m_hat**2).sqrt():
             self.n_consecutive += 1
             if self.n_consecutive >= self.min_consecutive:
                 self.stopped = True
