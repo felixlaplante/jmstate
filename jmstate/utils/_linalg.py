@@ -68,7 +68,9 @@ def _log_cholesky_from_flat(
         case "ball":
             return flat * torch.eye(dim)
         case _:
-            raise ValueError(f"Got method {method} unknown")
+            raise ValueError(
+                f"Method must be be either 'full', 'diag' or 'ball', got {method}"
+            )
 
 
 def _flat_from_log_cholesky(L: torch.Tensor, method: str = "full") -> torch.Tensor:

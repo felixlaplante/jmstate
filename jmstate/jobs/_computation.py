@@ -114,7 +114,11 @@ class ComputeCriteria(Job):
     .. math::
         \text{BIC} = -2 \log \mathcal{L}(x) + 2 \log n,
 
-    where :math:`n` is the number of data measurements.
+    where :math:`n` is the number of effective data measurements. Note this is computed
+    as the sum of the lengths of the trajectories added to the sum of longitudinal data
+    measurements. If the residuals are assumed to be independent, then the longitudinal
+    contribution is equal to the number of all non NaN values given in `data.y`. Else,
+    it is equal to the number of measurement vectors provided.
 
     Please note that this is a stochastic approximation.
 
@@ -154,9 +158,12 @@ class ComputeCriteria(Job):
             else -metrics.loglik
         )
 
+        # Compute penalties; if the residuals are assumed to be independent, the
+        # effective sample size changes
         d = info.model.params_.numel
+        n = info.data.effective_size(info.model.params_.R_repr.method != "full")
         aic_pen = 2 * d
-        bic_pen = d * torch.log(torch.tensor(info.data.effective_size)).item()
+        bic_pen = d * torch.log(torch.tensor(n)).item()
 
         metrics.aic = 2 * metrics.nloglik_pen + aic_pen
         metrics.bic = 2 * metrics.nloglik_pen + bic_pen
