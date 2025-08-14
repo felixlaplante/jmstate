@@ -108,7 +108,9 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         # Store model components
         self.model_design = model_design
         memo = (
-            None if init_params.extra is None else {id(p): p for p in init_params.extra}
+            None
+            if init_params.extra is None
+            else {id(p): p for p in init_params.extra.values()}
         )
         self.params_ = copy.deepcopy(init_params, memo)
 

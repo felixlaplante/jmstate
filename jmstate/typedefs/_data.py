@@ -29,7 +29,7 @@ from ._params import ModelParams
 
 
 # Dataclasses
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
 class ModelDesign:
     """Class containing model design.
 
@@ -72,7 +72,7 @@ class ModelDesign:
     ]
 
 
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
 class ModelData:
     r"""Dataclass containing learnable multistate joint model data.
 
@@ -119,10 +119,10 @@ class ModelData:
 
         dtype = torch.get_default_dtype()
 
-        self.x = None if self.x is None else self.x.to(dtype)
-        self.t = self.t.to(dtype)
-        self.y = self.y.to(dtype)
-        self.c = self.c.to(dtype)
+        object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
+        object.__setattr__(self, "t", self.t.to(dtype))
+        object.__setattr__(self, "y", self.y.to(dtype))
+        object.__setattr__(self, "c", self.c.to(dtype))
 
         check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
         check_consistent_size(
@@ -205,7 +205,7 @@ class CompleteModelData(ModelData):
             )
 
 
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
 class SampleData:
     """Dataclass for data used in sampling.
 
@@ -243,9 +243,9 @@ class SampleData:
 
         dtype = torch.get_default_dtype()
 
-        self.x = None if self.x is None else self.x.to(dtype)
-        self.psi = self.psi.to(dtype)
-        self.c = None if self.c is None else self.c.to(dtype)
+        object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
+        object.__setattr__(self, "psi", self.psi.to(dtype))
+        object.__setattr__(self, "c", None if self.c is None else self.c.to(dtype))
 
         check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
         check_consistent_size(

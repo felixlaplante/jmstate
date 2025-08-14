@@ -11,7 +11,7 @@ from ..utils._linalg import cov_from_repr
 from ._defs import MatRepr, Tensor1D
 
 
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True))
+@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
 class ModelParams:
     r"""Dataclass containing model parameters.
 
@@ -50,7 +50,7 @@ class ModelParams:
         R_repr (MatRepr): The residuals precision matrix representation.
         alphas (dict[tuple[Any, Any], Tensor1D]) The link linear parameters.
         betas (dict[tuple[Any, Any], Tensor1D] | None): The covariates parameters.
-        extra (list[torch.Tensor] | None): A list of parameters that can be passed in
+        extra (dict[str, torch.Tensor] | None): A dict of parameters that is passed in
             addition to other mandatory parameters.
         skip_validation (bool): A boolean value to skip validation.
     """
@@ -60,7 +60,7 @@ class ModelParams:
     R_repr: MatRepr
     alphas: dict[tuple[Any, Any], Tensor1D]
     betas: dict[tuple[Any, Any], Tensor1D] | None
-    extra: list[torch.Tensor] | None = field(default=None, repr=False)
+    extra: dict[str, torch.Tensor] | None = field(default=None, repr=False)
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
@@ -71,40 +71,48 @@ class ModelParams:
         for t in self.as_list:
             t.data = t.to(torch.get_default_dtype())
         if self.extra is not None:
-            for t in self.extra:
+            for t in self.extra.values():
                 t.data = t.to(torch.get_default_dtype())
 
         check_matrix_dim(self.Q_repr, "Q")
         check_matrix_dim(self.R_repr, "R")
-        for key, val in self.as_groups.items():
-            check_inf(tuple((t, key) for t in val))
+        for key, val in self.as_dict.items():
+            if isinstance(val, dict):
+                check_inf(tuple((t, key) for t in val.values()))
+            else:
+                check_inf(((val, key),))
 
-    @property
-    def as_groups(self) -> dict[str, list[torch.Tensor]]:
+    @cached_property
+    def as_dict(self) -> dict[str, torch.Tensor | dict[tuple[Any, Any], torch.Tensor]]:
         """Get a grouped dict of all the parameters.
 
         Returns:
-            dict[str, list[torch.Tensor]]: The dict of the parameters.
+            dict[str, torch.Tensor | dict[tuple[Any, Any], torch.Tensor]]: The dict of
+                the parameters.
         """
         groups = {
-            "gamma": None if self.gamma is None else [self.gamma],
-            "Q": [self.Q_repr.flat],
-            "R": [self.R_repr.flat],
-            "alphas": list(self.alphas.values()),
-            "betas": None if self.betas is None else list(self.betas.values()),
+            "gamma": self.gamma,
+            "Q": self.Q_repr.flat,
+            "R": self.R_repr.flat,
+            "alphas": self.alphas,
+            "betas": self.betas,
         }
         return {key: val for key, val in groups.items() if val is not None}
 
-    @property
+    @cached_property
     def as_list(self) -> list[torch.Tensor]:
         """Get a list of all the parameters.
 
         Returns:
             list[torch.Tensor]: The list of the parameters.
         """
-        return [t for val in self.as_groups.values() for t in val]
+        return [
+            t
+            for val in self.as_dict.values()
+            for t in (val.values() if isinstance(val, dict) else [val])
+        ]
 
-    @property
+    @cached_property
     def as_flat_tensor(self) -> Tensor1D:
         """Get the flattened parameters.
 
@@ -139,7 +147,7 @@ class ModelParams:
         """
         if self.extra is None:
             return
-        for t in self.extra:
+        for t in self.extra.values():
             t.requires_grad_(req)
 
     def get_cov(self, matrix: str) -> torch.Tensor:

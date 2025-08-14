@@ -53,13 +53,16 @@ class _BaseFit(Job, ABC):
             info.model.params_.extra_requires_grad_(True)
 
         param_groups = [
-            {"params": params, "group": name}
-            for name, params in info.model.params_.as_groups.items()
+            {
+                "params": list(p.values()) if isinstance(p, dict) else [p],
+                "group": name,
+            }
+            for name, p in info.model.params_.as_dict.items()
         ]
 
         extra = info.model.params_.extra
         if extra is not None and self.fit_extra:
-            param_groups.append({"params": extra, "group": "extra"})
+            param_groups.append({"params": list(extra.values()), "group": "extra"})
 
         param_list = list(
             itertools.chain.from_iterable(
