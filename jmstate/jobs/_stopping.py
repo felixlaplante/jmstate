@@ -170,8 +170,9 @@ class GradStop(Job):
         self.m = self.beta * self.m + (1 - self.beta) * grads
         self.v = self.beta * self.v + (1 - self.beta) * grads**2
 
-        m_hat = self.m / (1 - self.beta ** (info.iteration + 1))
-        v_hat = self.v / (1 - self.beta ** (info.iteration + 1))
+        scale = 1 - self.beta ** (info.iteration + 1)
+        m_hat = self.m / scale
+        v_hat = self.v / scale
 
         # Check convergence
         if (m_hat.abs() <= self.atol + self.rtol * (v_hat - m_hat**2).sqrt()).all():
@@ -261,7 +262,7 @@ class ValueStop(Job):
             rtol (NumNonNegative, optional): Relative tolerance. Defaults to 0.01.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 50.
-            beta (NumProbability, optional): Exponential moving averages forget
+            beta (NumProbability, optional): Exponential moving averages' forget
                 parameter. Defaults to 0.99.
             info (Info): The job information object.
         """
@@ -293,8 +294,9 @@ class ValueStop(Job):
         self.m = self.beta * self.m + (1 - self.beta) * diff
         self.v = self.beta * self.v + (1 - self.beta) * diff**2
 
-        m_hat = self.m / (1 - self.beta ** (info.iteration + 1))
-        v_hat = self.v / (1 - self.beta ** (info.iteration + 1))
+        scale = 1 - self.beta ** (info.iteration + 1)
+        m_hat = self.m / scale
+        v_hat = self.v / scale
 
         # Check convergence
         if m_hat.abs() <= self.atol + self.rtol * (v_hat - m_hat**2).sqrt():
