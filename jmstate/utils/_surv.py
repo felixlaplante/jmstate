@@ -1,6 +1,6 @@
 import itertools
 from collections import defaultdict
-from typing import Any, cast
+from typing import Any
 
 import torch
 
@@ -63,17 +63,12 @@ def build_traj_repr(
         c (torch.Tensor): Censoring times.
         surv (dict[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]) : The survival dict.
 
-    Raises:
-        ValueError: If some keys are not in surv.
-
     Returns:
         dict[tuple[Any, Any], TrajRepr]: The vectorizable buckets representation.
     """
-    # Get survival transitions defined in the model
-    trans = set(surv.keys())
-
     # Build alternative state mapping
-    alt_map: defaultdict[int, list[int]] = defaultdict(list)
+    trans = set(surv.keys())
+    alt_map: defaultdict[Any, list[Any]] = defaultdict(list)
     for from_state, to_state in trans:
         alt_map[from_state].append(to_state)
 
@@ -91,13 +86,8 @@ def build_traj_repr(
             if t0 >= t1:
                 continue
 
-            if s1 is not None and (s0, s1) not in trans:
-                raise ValueError(
-                    f"Transition {(s0, s1)} must be in model_design.surv keys"
-                )
-
-            for alt_state in alt_map[cast(int, s0)]:
-                key = (cast(int, s0), alt_state)
+            for alt_state in alt_map[s0]:
+                key = (s0, alt_state)
                 buckets[key][0].append(i)
                 buckets[key][1].append(t0)
                 buckets[key][2].append(t1)
