@@ -51,8 +51,8 @@ class MetropolisHastingsSampler:
         self.target_accept_rate = target_accept_rate
 
         # Initialize state
-        self.init_state = init_state.clone()
-        self.state = init_state
+        self.init_state = init_state
+        self.state = init_state.clone()
 
         # Compute initial log logpdf
         self.logpdf, self.aux = self.logpdf_aux_fn(self.state)
@@ -61,11 +61,11 @@ class MetropolisHastingsSampler:
         self._noise = torch.empty_like(self.state)
 
         # Steps initialization
-        self.step_sizes = torch.full((init_state.size(-2),), init_step_size)
+        self.step_sizes = torch.full((1, self.state.size(-2)), init_step_size)
 
         # Statistics tracking
         self.n_samples = torch.tensor(0, dtype=torch.int64)
-        self.n_accepted = torch.zeros(init_state.shape[-2])
+        self.n_accepted = torch.zeros(self.state.size(-2))
 
     @torch.no_grad()  # type: ignore
     def step(self) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
@@ -78,7 +78,7 @@ class MetropolisHastingsSampler:
         self._noise.uniform_(-1.0, 1.0)
 
         # Get the proposal
-        proposed_state = self.state + self._noise * self.step_sizes.view(1, -1, 1)
+        proposed_state = self.state + self._noise * self.step_sizes.unsqueeze(-1)
         proposed_logpdf, proposed_aux = self.logpdf_aux_fn(proposed_state)
         logpdf_diff = proposed_logpdf - self.logpdf
 
