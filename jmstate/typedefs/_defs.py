@@ -258,11 +258,11 @@ class Info(SimpleNamespace):
 
     Attributes:
         data (ModelData): Learnable model data passed to `do` method.
-        logpdfs_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log probability
-            function. Used in random optimization steps.
         logliks_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log likelihood
             function. Used in deterministic optimization steps and when computing
             criteria.
+        logpdfs_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log probability
+            function. Used in random optimization steps.
         iteration (int): The current iteration value. -1 at init and max at end.
         max_iterations (int): The maximum number of iterations allowed.
         model (MultiStateJointModel): The multistate joint model.
@@ -275,8 +275,8 @@ class Info(SimpleNamespace):
     """
 
     data: ModelData
-    logpdfs_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
     logliks_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
+    logpdfs_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
     iteration: int
     max_iterations: int
     model: MultiStateJointModel

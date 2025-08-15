@@ -34,14 +34,12 @@ class HazardMixin:
         *args: Any,
         **kwargs: Any,
     ):
-        """Initializes the class.
+        """Initializes the hazard mixin.
 
         Args:
             n_quad (int): Number of quadrature nodes.
             n_bisect (int): The number of bisection steps.
             cache_limit (int | None): Max length of cache.
-            args (Any): Additional args.
-            kwargs (Any): Additional kwargs.
         """
         self.n_quad = n_quad
         self.n_bisect = n_bisect
@@ -382,7 +380,7 @@ class HazardMixin:
     def _hazard_logliks(
         self, params: ModelParams, psi: torch.Tensor, data: CompleteModelData
     ) -> torch.Tensor:
-        """Computes the hazard log likelihood.
+        """Computes the hazard log likelihoods.
 
         Args:
             params (ModelParams): The model parameters.
@@ -391,7 +389,7 @@ class HazardMixin:
             enable_cache (bool): Enable caching
 
         Returns:
-            torch.Tensor: The computed log likelihood.
+            torch.Tensor: The computed log likelihoods.
         """
         logliks = torch.zeros(psi.shape[:-1])
 

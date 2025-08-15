@@ -8,7 +8,7 @@ from tqdm import trange
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
-    logpdf_aux_fn: Callable[
+    logpdfs_aux_fn: Callable[
         [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]
     ]
     init_state: torch.Tensor
@@ -16,7 +16,7 @@ class MetropolisHastingsSampler:
     adapt_rate: int | float
     target_accept_rate: int | float
     state: torch.Tensor
-    logpdf: torch.Tensor
+    logpdfs: torch.Tensor
     aux: tuple[torch.Tensor, ...]
     step_sizes: torch.Tensor
     n_samples: torch.Tensor
@@ -24,7 +24,7 @@ class MetropolisHastingsSampler:
 
     def __init__(
         self,
-        logpdf_aux_fn: Callable[
+        logpdfs_aux_fn: Callable[
             [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]
         ],
         init_state: torch.Tensor,
@@ -36,36 +36,36 @@ class MetropolisHastingsSampler:
         """Initializes the Metropolis-Hastings sampler kernel.
 
         Args:
-            logpdf_aux_fn (
+            logpdfs_aux_fn (
                 Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]
-                ): logpdf function.
+                ): logpdfs function.
             init_state (torch.Tensor): Starting state for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (int | float): Kernel step in Metropolis Hastings.
             adapt_rate (int | float): Adaptation rate for the step_size.
             target_accept_rate (int | float): Mean acceptance target.
         """
-        self.logpdf_aux_fn = logpdf_aux_fn
+        self.logpdfs_aux_fn = logpdfs_aux_fn
         self.n_chains = n_chains
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
 
         # Initialize state
-        self.init_state = init_state
-        self.state = init_state.clone()
+        self.init_state = init_state.clone()
+        self.state = init_state
 
-        # Compute initial log logpdf
-        self.logpdf, self.aux = self.logpdf_aux_fn(self.state)
+        # Compute initial log logpdfs
+        self.logpdfs, self.aux = self.logpdfs_aux_fn(self.state)
 
         # Proposal noise initialization
         self._noise = torch.empty_like(self.state)
 
         # Steps initialization
-        self.step_sizes = torch.full((1, self.state.size(-2)), init_step_size)
+        self.step_sizes = torch.full((init_state.size(-2),), init_step_size)
 
         # Statistics tracking
         self.n_samples = torch.tensor(0, dtype=torch.int64)
-        self.n_accepted = torch.zeros(self.state.size(-2))
+        self.n_accepted = torch.zeros(init_state.shape[-2])
 
     @torch.no_grad()  # type: ignore
     def step(self) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
@@ -78,16 +78,16 @@ class MetropolisHastingsSampler:
         self._noise.uniform_(-1.0, 1.0)
 
         # Get the proposal
-        proposed_state = self.state + self._noise * self.step_sizes.unsqueeze(-1)
-        proposed_logpdf, proposed_aux = self.logpdf_aux_fn(proposed_state)
-        logpdf_diff = proposed_logpdf - self.logpdf
+        proposed_state = self.state + self._noise * self.step_sizes.view(1, -1, 1)
+        proposed_logpdfs, proposed_aux = self.logpdfs_aux_fn(proposed_state)
+        logpdfs_diff = proposed_logpdfs - self.logpdfs
 
         # Vectorized acceptance decision
-        log_uniform = torch.log(torch.rand_like(logpdf_diff))
-        accept_mask = log_uniform < logpdf_diff
+        log_uniform = torch.log(torch.rand_like(logpdfs_diff))
+        accept_mask = log_uniform < logpdfs_diff
 
         self.state[accept_mask] = proposed_state[accept_mask]
-        self.logpdf[accept_mask] = proposed_logpdf[accept_mask]
+        self.logpdfs[accept_mask] = proposed_logpdfs[accept_mask]
         for i, _ in enumerate(self.aux):
             self.aux[i][accept_mask] = proposed_aux[i][accept_mask]
 

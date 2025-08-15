@@ -151,23 +151,16 @@ class ModelData:
         """
         return len(self.trajectories)
 
-    def effective_size(self, indep_residuals: bool) -> int:
+    @cached_property
+    def effective_size(self) -> int:
         """Gets the effective size of the dataset, used for BIC.
-
-        Args:
-            indep_residuals (bool): Whether or not to assume the independence of the
-                residuals.
 
         Returns:
             int: The effective size.
         """
-        n_long = (
-            int((~torch.isnan(self.y)).sum())
-            if indep_residuals
-            else int((~torch.isnan(self.y)).any(dim=-1).sum())
+        return int((~torch.isnan(self.y)).any(dim=-1).sum()) + sum(
+            len(trajectory) for trajectory in self.trajectories
         )
-
-        return n_long + sum(len(trajectory) for trajectory in self.trajectories)
 
 
 class CompleteModelData(ModelData):

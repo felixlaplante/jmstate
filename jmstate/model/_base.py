@@ -1,15 +1,14 @@
 import copy
 from collections.abc import Callable
+from functools import partial
 from typing import Any, cast
 
 import torch
 from pydantic import ConfigDict, validate_call
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
-from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS
+from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS, DEFAULT_HYPERPARAMETERS_FIELDS
 from ..typedefs._defs import (
-    LOGTWOPI,
-    Final,
     Info,
     IntNonNegative,
     IntStrictlyPositive,
@@ -21,22 +20,14 @@ from ..typedefs._defs import (
 )
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_consistent_size
-from ..utils._linalg import get_cholesky_and_log_eigvals
 from ..utils._misc import run_jobs
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
+from ._prior import PriorMixin
 from ._sampler import MetropolisHastingsSampler
 
-# Constants
-DEFAULT_HYPERPARAMETERS_FIELDS: Final[tuple[str, ...]] = (
-    "max_iterations",
-    "n_chains",
-    "warmup",
-    "n_steps",
-)
 
-
-class MultiStateJointModel(LongitudinalMixin, HazardMixin):
+class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
     r"""A class of the nonlinear multistate joint model.
 
     It features methods to simulate data, fit based on stochastic gradient with any
@@ -129,40 +120,58 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         self.metrics_ = None
         self.fit_ = False
 
-    def _logpdfs_and_aux_fn(
+    def _logliks_fn(
         self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        """Computes the total log likelihood up to a constant.
+    ) -> torch.Tensor:
+        """Gets the log likelihoods without prior.
 
         Args:
             params (ModelParams): The model parameters.
-            b (torch.Tensor): The individual random effects.
-            data (CompleteModelData): Dataset on which the likelihood is computed.
+            b (torch.Tensor): The random effects.
+            data (CompleteModelData): Dataset on which likelihood is computed.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The computed quantities.
+            torch.Tensor: The log likelihoods.
         """
-
-        def _prior_logliks(b: torch.Tensor) -> torch.Tensor:
-            Q_inv_cholesky, Q_nlog_eigvals = get_cholesky_and_log_eigvals(params, "Q")
-            Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
-            Q_norm_factor = (Q_nlog_eigvals - LOGTWOPI).sum()
-
-            return 0.5 * (Q_norm_factor - Q_quad_form)
-
-        # Transform random effects to individual-specific parameters
         psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
+        return super()._long_logliks(params, psi, data) + super()._hazard_logliks(
+            params, psi, data
+        )
 
-        # Compute individual likelihood components
-        long_logliks = super()._long_logliks(params, psi, data)
-        hazard_logliks = super()._hazard_logliks(params, psi, data)
-        prior_logliks = _prior_logliks(b)
+    def _logpdfs_fn(
+        self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
+    ) -> torch.Tensor:
+        """Gets the log pdfs with prior.
 
-        # Sum all likelihood components
-        logliks = long_logliks + hazard_logliks
-        logpdfs = logliks + prior_logliks
+        Args:
+            params (ModelParams): The model parameters.
+            b (torch.Tensor): The random effects.
+            data (CompleteModelData): Dataset on which likelihood is computed.
 
-        return logpdfs, (logliks, psi)
+        Returns:
+            torch.Tensor: The log pdfs.
+        """
+        return self._logliks_fn(params, b, data) + super()._prior_logliks(params, b)
+
+    def _logpdfs_aux_fn(
+        self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
+        """Gets the log pdfs with aux data.
+
+        Args:
+            params (ModelParams): The model parameters.
+            b (torch.Tensor): The random effects.
+            data (CompleteModelData): Dataset on which likelihood is computed.
+
+        Returns:
+           tuple[torch.Tensor, tuple[torch.Tensor, ...]]: The log pdfs and aux.
+        """
+        psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
+        logliks = super()._long_logliks(params, psi, data) + super()._hazard_logliks(
+            params, psi, data
+        )
+        logpdfs = logliks + super()._prior_logliks(params, b)
+        return (logpdfs, (psi, logliks))
 
     def _setup_mcmc(
         self,
@@ -188,7 +197,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         init_b = torch.zeros(n_chains, data.size, self.params_.Q_repr.dim)
 
         return MetropolisHastingsSampler(
-            lambda b: self._logpdfs_and_aux_fn(self.params_, b, data),
+            partial(self._logpdfs_aux_fn, self.params_, data=data),
             init_b,
             n_chains,
             init_step_size,
@@ -396,25 +405,11 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         )
         sampler.run(cast(int, warmup))
 
-        def _logpdfs_fn(params: ModelParams, b: torch.Tensor) -> torch.Tensor:
-            logpdfs, _ = self._logpdfs_and_aux_fn(params, b, complete_data)
-            return logpdfs
-
-        def _logliks_fn(params: ModelParams, b: torch.Tensor) -> torch.Tensor:
-            psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
-            long_logliks = super(type(self), self)._long_logliks(
-                params, psi, complete_data
-            )
-            hazard_logliks = super(type(self), self)._hazard_logliks(
-                params, psi, complete_data
-            )
-            return long_logliks + hazard_logliks
-
         # Initialize info
         info = Info(
             data=data,
-            logpdfs_fn=_logpdfs_fn,
-            logliks_fn=_logliks_fn,
+            logliks_fn=partial(self._logliks_fn, data=complete_data),
+            logpdfs_fn=partial(self._logpdfs_fn, data=complete_data),
             iteration=-1,
             model=self,
             sampler=sampler,
@@ -428,7 +423,7 @@ class MultiStateJointModel(LongitudinalMixin, HazardMixin):
         def _do(state: torch.Tensor, aux: tuple[torch.Tensor, ...]):
             nonlocal info
 
-            info.b, (info.logliks, info.psi) = state, aux
+            info.b, (info.psi, info.logliks) = state, aux
             info.iteration += 1
 
             return run_jobs(jobs, info)

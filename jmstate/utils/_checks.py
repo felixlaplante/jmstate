@@ -100,7 +100,6 @@ def check_matrix_dim(mat_repr: MatRepr, name: str):
         ValueError: If the number of elements is incompatible with method "full".
         ValueError: If the number of elements is incompatible with method "diag".
         ValueError: If the number of elements is not one and the method is "ball".
-        ValueError: If the method is not in ("full", "diag", "ball").
     """
     flat, dim, method = mat_repr
 
@@ -128,6 +127,4 @@ def check_matrix_dim(mat_repr: MatRepr, name: str):
                     f"Expected 1 element for flat, got {flat.numel()} for matrix {name}"
                 )
         case _:
-            raise ValueError(
-                f"Method must be be either 'full', 'diag' or 'ball', got {method}"
-            )
+            pass

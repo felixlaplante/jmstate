@@ -6,6 +6,15 @@ from ..jobs._prediction import PredictSurvLogps, PredictTrajectories, PredictY
 from ._defs import Job
 
 # Constants
+# Constants
+DEFAULT_HYPERPARAMETERS_FIELDS: Final[tuple[str, ...]] = (
+    "max_iterations",
+    "n_chains",
+    "warmup",
+    "n_steps",
+)
+
+
 DEFAULT_HYPERPARAMETERS: Final[dict[type[Job], dict[str, Any]]] = {
     ComputeCriteria: {
         "max_iterations": 100,
