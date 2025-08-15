@@ -1,4 +1,4 @@
-from ._interface import get_bands  # noqa: D104
+from ._base import get_bands  # noqa: D104
 
 __author__ = "Félix Laplante"
 __email__ = "felixlaplante0@gmail.com"
