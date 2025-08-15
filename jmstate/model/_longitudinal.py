@@ -14,12 +14,7 @@ class LongitudinalMixin:
     model_design: ModelDesign
 
     def __init__(self, *args: Any, **kwargs: Any):
-        """Initializes the class.
-
-        Args:
-            args (Any): Additional args.
-            kwargs (Any): Additional kwargs.
-        """
+        """Initializes the longitudinal mixin."""
         super().__init__(*args, **kwargs)
 
     def _long_logliks(
@@ -44,3 +39,4 @@ class LongitudinalMixin:
         R_norm_factor = data.n_valid @ (R_nlog_eigvals - LOGTWOPI)
 
         return 0.5 * (R_norm_factor - R_quad_forms)
+
