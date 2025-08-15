@@ -39,9 +39,7 @@ def _flat_from_tril(L: torch.Tensor) -> torch.Tensor:
         torch.Tensor: Flattened 1D tensor containing the lower triangular entries.
     """
     dim = L.size(0)
-    i, j = torch.tril_indices(dim, dim)
-
-    return L[i, j]
+    return L[tuple(torch.tril_indices(dim, dim))]
 
 
 def _log_cholesky_from_flat(
@@ -94,7 +92,9 @@ def _flat_from_log_cholesky(L: torch.Tensor, method: str = "full") -> torch.Tens
         case "ball":
             return L[0, 0].view(1)
         case _:
-            raise ValueError(f"Got method {method} unknown")
+            raise ValueError(
+                f"Method must be be either 'full', 'diag' or 'ball', got {method}"
+            )
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
@@ -155,16 +155,7 @@ def cov_from_repr(mat_repr: MatRepr) -> Tensor2D:
     L = _log_cholesky_from_flat(flat, dim, method)
     L.diagonal().exp_()
 
-    L_inv = cast(
-        torch.Tensor,
-        torch.linalg.solve_triangular(  # type: ignore
-            L,
-            torch.eye(dim),
-            upper=False,
-        ),
-    )
-
-    return L_inv.T @ L_inv
+    return torch.cholesky_inverse(L)
 
 
 @validate_call(config=ConfigDict(arbitrary_types_allowed=True))

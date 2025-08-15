@@ -99,7 +99,7 @@ class ModelParams:
         }
         return {key: val for key, val in groups.items() if val is not None}
 
-    @property
+    @cached_property
     def as_list(self) -> list[torch.Tensor]:
         """Get a list of all the parameters.
 
@@ -112,7 +112,7 @@ class ModelParams:
             for t in (val.values() if isinstance(val, dict) else [val])
         ]
 
-    @cached_property
+    @property
     def as_flat_tensor(self) -> Tensor1D:
         """Get the flattened parameters.
 

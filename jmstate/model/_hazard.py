@@ -49,16 +49,11 @@ class HazardMixin:
 
         super().__init__(*args, **kwargs)
 
-    def _log_hazard(
-        self,
-        hazard_info: HazardInfo,
-        enable_cache: bool,
-    ) -> torch.Tensor:
+    def _log_hazard(self, hazard_info: HazardInfo) -> torch.Tensor:
         """Computes log hazard.
 
         Args:
             hazard_info (HazardInfo): All necessary information for computation.
-            enable_cache (bool): Enables caching.
 
         Returns:
             torch.Tensor: The computed log hazard.
@@ -70,7 +65,7 @@ class HazardMixin:
         def _base_create():
             return base_hazard_fn(t0, t1)
 
-        if enable_cache:
+        if self.cache_limit != 0:
             try:
                 key = (
                     *hazard_info.base_hazard_fn.key,
@@ -90,20 +85,16 @@ class HazardMixin:
         if x is None or beta is None:
             return base + mod
 
-        return base + mod + x @ beta.unsqueeze(1)
+        return base + mod + x @ beta.unsqueeze(-1)
 
     def _cum_hazard(
-        self,
-        hazard_info: HazardInfo,
-        c: torch.Tensor | None,
-        enable_cache: bool,
+        self, hazard_info: HazardInfo, c: torch.Tensor | None
     ) -> torch.Tensor:
         """Computes cumulative hazard.
 
         Args:
             hazard_info (HazardInfo): All necessary information for computation.
             c (torch.Tensor | None): Integration start or censoring time, t0 if None.
-            enable_cache (bool): Enables caching.
 
         Returns:
             torch.Tensor: The computed cumulative hazard.
@@ -117,15 +108,14 @@ class HazardMixin:
             return 0.5 * (t1 - c)
 
         def _quad_c_create():
-            return 0.5 * (c + t1) + half * self._std_nodes
+            return (c + t1).addmm(half, self._std_nodes, beta=0.5)
 
-        if enable_cache:
+        if self.cache_limit != 0:
             try:
                 key = (
                     hash(c.detach().numpy().tobytes()),
                     hash(t1.detach().numpy().tobytes()),
                 )
-
                 half = self._cache.get_cache("half", key, _half_create)
                 quad_c = self._cache.get_cache("quad_c", key, _quad_c_create)
             except RuntimeError:
@@ -136,7 +126,7 @@ class HazardMixin:
             quad_c = _quad_c_create()
 
         # Compute hazard at quadrature points
-        vals = self._log_hazard(hazard_info._replace(t1=quad_c), enable_cache)
+        vals = self._log_hazard(hazard_info._replace(t1=quad_c))
         vals.clamp_(min=-50.0, max=50.0).exp_()
 
         return half.view(-1) * (vals @ self._std_weights)
@@ -166,7 +156,9 @@ class HazardMixin:
             return 0.5 * (t1 - t0)
 
         def _quad_lc_create():
-            return torch.cat([t1, 0.5 * (t0 + t1) + half * self._std_nodes], dim=-1)
+            return torch.cat(
+                [t1, (t0 + t1).addmm(half, self._std_nodes, beta=0.5)], dim=-1
+            )
 
         if enable_cache:
             try:
@@ -174,7 +166,6 @@ class HazardMixin:
                     hash(t0.detach().numpy().tobytes()),
                     hash(t1.detach().numpy().tobytes()),
                 )
-
                 half = self._cache.get_cache("half", key, _half_create)
                 quad_lc = self._cache.get_cache("quad_c", key, _quad_lc_create)
             except RuntimeError:
@@ -185,7 +176,7 @@ class HazardMixin:
             quad_lc = _quad_lc_create()
 
         # Compute log hazard at all points
-        all_vals = self._log_hazard(hazard_info._replace(t1=quad_lc), enable_cache)
+        all_vals = self._log_hazard(hazard_info._replace(t1=quad_lc))
         all_vals[..., 1:].clamp_(min=-50.0, max=50.0).exp_()
 
         return all_vals[..., 0], half.view(-1) * (all_vals[..., 1:] @ self._std_weights)
@@ -217,11 +208,7 @@ class HazardMixin:
         for _ in range(self.n_bisect):
             t_mid = 0.5 * (t_left + t_right)
 
-            surv_logps = self._cum_hazard(
-                hazard_info._replace(t1=t_mid),
-                c,
-                self.cache_limit != 0,
-            )
+            surv_logps = self._cum_hazard(hazard_info._replace(t1=t_mid), c)
 
             # Update search bounds
             accept_mask = surv_logps.view(target.shape) < target
@@ -275,7 +262,7 @@ class HazardMixin:
             # Sample transition times
             t_sample = self._sample_transition(
                 hazard_info,
-                None if c is None else c.index_select(0, idxs),
+                None if c is None else c.index_select(-2, idxs),
             )
 
             t_candidates[idxs, j] = t_sample.view(-1)
@@ -367,11 +354,7 @@ class HazardMixin:
                 )
 
                 # Compute negative log survival
-                alts_logliks = self._cum_hazard(
-                    hazard_info,
-                    c,
-                    self.cache_limit != 0,
-                )
+                alts_logliks = self._cum_hazard(hazard_info, c)
 
                 nlogps[..., k].index_add_(-1, idxs, alts_logliks)
 
@@ -412,7 +395,7 @@ class HazardMixin:
                 self.cache_limit != 0,
             )
 
-            vals = obs * obs_logliks - alts_logliks
+            vals = (-alts_logliks).addcmul(obs, obs_logliks)
             logliks.index_add_(-1, idxs, vals)
 
         return logliks

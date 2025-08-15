@@ -32,11 +32,10 @@ class LongitudinalMixin:
         """
         # Careful with NaNs
         predicted = self.model_design.regression_fn(data.valid_t, psi)
-        diffs = data.valid_y - predicted * data.valid_mask
+        diffs = data.valid_y.addcmul(predicted, data.valid_mask, value=-1.0)
 
         R_inv_cholesky, R_nlog_eigvals = get_cholesky_and_log_eigvals(params, "R")
         R_quad_forms = (diffs @ R_inv_cholesky).pow(2).sum(dim=(-2, -1))
         R_norm_factor = data.n_valid @ (R_nlog_eigvals - LOGTWOPI)
 
         return 0.5 * (R_norm_factor - R_quad_forms)
-
