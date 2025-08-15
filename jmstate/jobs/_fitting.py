@@ -60,7 +60,7 @@ class _BaseFit(Job, ABC):
 
         extra = info.model.params_.extra
         if extra is not None and self.fit_extra:
-            param_groups.append({"params": list(extra.values()), "group": "extra"})
+            param_groups.append({"params": extra, "group": "extra"})
 
         param_list = list(
             itertools.chain.from_iterable(

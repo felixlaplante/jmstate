@@ -99,9 +99,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         # Store model components
         self.model_design = model_design
         memo = (
-            None
-            if init_params.extra is None
-            else {id(p): p for p in init_params.extra.values()}
+            None if init_params.extra is None else {id(p): p for p in init_params.extra}
         )
         self.params_ = copy.deepcopy(init_params, memo)
 
@@ -134,7 +132,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             torch.Tensor: The log likelihoods.
         """
         psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
-        
+
         return super()._long_logliks(params, psi, data) + super()._hazard_logliks(
             params, psi, data
         )

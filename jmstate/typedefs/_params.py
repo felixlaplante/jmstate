@@ -50,7 +50,7 @@ class ModelParams:
         R_repr (MatRepr): The residuals precision matrix representation.
         alphas (dict[tuple[Any, Any], Tensor1D]) The link linear parameters.
         betas (dict[tuple[Any, Any], Tensor1D] | None): The covariates parameters.
-        extra (dict[str, torch.Tensor] | None): A dict of parameters that is passed in
+        extra (list[torch.Tensor] | None): A list of parameters that is passed in
             addition to other mandatory parameters.
         skip_validation (bool): A boolean value to skip validation.
     """
@@ -60,7 +60,7 @@ class ModelParams:
     R_repr: MatRepr
     alphas: dict[tuple[Any, Any], Tensor1D]
     betas: dict[tuple[Any, Any], Tensor1D] | None
-    extra: dict[str, torch.Tensor] | None = field(default=None, repr=False)
+    extra: list[torch.Tensor] | None = field(default=None, repr=False)
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
@@ -71,7 +71,7 @@ class ModelParams:
         for t in self.as_list:
             t.data = t.to(torch.get_default_dtype())
         if self.extra is not None:
-            for t in self.extra.values():
+            for t in self.extra:
                 t.data = t.to(torch.get_default_dtype())
 
         check_matrix_dim(self.Q_repr, "Q")
@@ -147,7 +147,7 @@ class ModelParams:
         """
         if self.extra is None:
             return
-        for t in self.extra.values():
+        for t in self.extra:
             t.requires_grad_(req)
 
     def get_cov(self, matrix: str) -> torch.Tensor:
