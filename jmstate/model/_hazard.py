@@ -34,14 +34,12 @@ class HazardMixin:
         *args: Any,
         **kwargs: Any,
     ):
-        """Initializes the class.
+        """Initializes the hazard mixin.
 
         Args:
             n_quad (int): Number of quadrature nodes.
             n_bisect (int): The number of bisection steps.
             cache_limit (int | None): Max length of cache.
-            args (Any): Additional args.
-            kwargs (Any): Additional kwargs.
         """
         self.n_quad = n_quad
         self.n_bisect = n_bisect
