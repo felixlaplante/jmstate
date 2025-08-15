@@ -99,7 +99,7 @@ class ModelParams:
         }
         return {key: val for key, val in groups.items() if val is not None}
 
-    @cached_property
+    @property
     def as_list(self) -> list[torch.Tensor]:
         """Get a list of all the parameters.
 
