@@ -75,7 +75,7 @@ class ComputeFIM(Job):
         """
         jac = self.jac_fn(info.model.params_.as_flat_tensor, info.b).detach()
 
-        self.grad_m2.addmm_(jac.T, jac, beta=1.0 / info.sampler.n_chains)
+        self.grad_m2.addmm_(jac.T, jac, alpha=1.0 / info.sampler.n_chains)
         if hasattr(self, "grad_m1"):
             self.grad_m1 += jac.mean(dim=0)
 
