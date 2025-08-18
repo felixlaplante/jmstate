@@ -42,7 +42,7 @@ class ModelDesign:
     `torch.no_grad()` decorator. If needs be, use `torch.enable_grad()` if one of the
     model design functions always require gradient computation regardless of setting.
 
-    Ensure all function all well defined on a closed interval and are differentiable
+    Ensure all functions all well defined on a closed interval and are differentiable
     almost everywhere.
 
     Attributes:
