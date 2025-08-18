@@ -191,7 +191,7 @@ class CompleteModelData(ModelData):
         """
         check_consistent_size(((params.R_repr.dim, None, "R"), (self.y, -1, "y")))
 
-        nan_mask = torch.isnan(self.y)
+        nan_mask = self.y.isnan()
         valid_mask = ~nan_mask
         self.valid_mask = valid_mask.to(torch.get_default_dtype())
         self.n_valid = self.valid_mask.sum(dim=-2)

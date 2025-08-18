@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, Final
 
 import torch
@@ -19,7 +20,19 @@ class _BaseL1Proximal(Job, ABC):
     param_groups: list[dict[str, Any]]
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, lmda: NumNonNegative, group: str = "betas", *, info: Info):
+    def __new__(
+        cls, lmda: NumNonNegative, group: str = "betas"
+    ) -> Callable[[Info], Job]:
+        """Creates the proximal operator.
+
+        Args:
+            lmda (NumNonNegative): The penalty.
+            group (str, optional): The group to penalize, either the link or covariate
+                parameters. Defaults to "betas".
+        """
+        return super().__new__(cls, lmda, group)
+
+    def __init__(self, lmda: NumNonNegative, group: str = "betas", *, info: Info):  # type: ignore
         """Initialize the proximal operator.
 
         Args:

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 from ..typedefs._defs import Info, Job, Metrics
@@ -15,7 +16,11 @@ class LogParamsHistory(Job):
 
     params_history: list[ModelParams]
 
-    def __init__(self, info: Info):  # noqa: ARG002
+    def __new__(cls) -> Callable[[Info], Job]:
+        """Creates the parameter logging job."""
+        return super().__new__(cls)
+
+    def __init__(self, info: Info):  # type: ignore # noqa: ARG002
         """Initializes the history to an empty list.
 
         Args:
@@ -56,7 +61,11 @@ class MCMCDiagnostics(Job):
 
     mcmc_diagnostics: list[dict[str, Any]]
 
-    def __init__(self, info: Info):  # noqa: ARG002
+    def __new__(cls) -> Callable[[Info], Job]:
+        """Creates the MCMC diagnostics logging job."""
+        return super().__new__(cls)
+
+    def __init__(self, info: Info):  # type: ignore # noqa: ARG002
         """Initializes the diagnostics to an empty list.
 
         Args:

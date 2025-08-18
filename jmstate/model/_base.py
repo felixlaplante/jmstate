@@ -154,7 +154,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
     def _logpdfs_aux_fn(
         self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """Gets the log pdfs with aux data.
 
         Args:
@@ -163,7 +163,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             data (CompleteModelData): Dataset on which likelihood is computed.
 
         Returns:
-           tuple[torch.Tensor, tuple[torch.Tensor, ...]]: The log pdfs and aux.
+           tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]: The log pdfs and aux.
         """
         psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
         logliks = super()._long_logliks(params, psi, data) + super()._hazard_logliks(
@@ -410,6 +410,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             data=data,
             logliks_fn=partial(self._logliks_fn, data=complete_data),
             logpdfs_fn=partial(self._logpdfs_fn, data=complete_data),
+            logpdfs_aux_fn=partial(self._logpdfs_aux_fn, data=complete_data),
             iteration=-1,
             model=self,
             sampler=sampler,
@@ -511,4 +512,4 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         Returns:
             ModelParams: The standard error in the same format as the parameters.
         """
-        return self.params_.from_flat_tensor(self.fim.inverse().diagonal().sqrt())
+        return self.params_.from_flat_tensor(self.fim.inverse().diag().sqrt())

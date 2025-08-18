@@ -41,7 +41,15 @@ class PredictY(Job):
     pred_y: list[torch.Tensor]
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, u: Tensor2D, info: Info):
+    def __new__(cls, u: Tensor2D):
+        """Creates the predicting job.
+
+        Args:
+            u (Tensor2D): The matrix containing prediction times.
+        """
+        return super().__new__(cls, u)
+
+    def __init__(self, u: Tensor2D, info: Info):  # type: ignore
         """Initializes the predicting job.
 
         Args:
@@ -110,7 +118,15 @@ class PredictSurvLogps(Job):
     pred_surv_logps: list[torch.Tensor]
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, u: Tensor2D, info: Info):
+    def __new__(cls, u: Tensor2D):
+        """Creates the predicting job.
+
+        Args:
+            u (Tensor2D): The matrix containing prediction times.
+        """
+        super().__new__(cls, u)
+
+    def __init__(self, u: Tensor2D, info: Info):  # type: ignore
         """Inits the predicting job.
 
         Args:
@@ -170,7 +186,21 @@ class PredictTrajectories(Job):
     pred_trajectories: list[Trajectory]
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(
+    def __new__(
+        cls,
+        c_max: TensorCol,
+        max_length: IntStrictlyPositive = 10,
+    ):
+        """Creates the sampling predicting job.
+
+        Args:
+            c_max (TensorCol): The maximum sampling (censoring) times.
+            max_length (IntStrictlyPositive, optional): The max length of the
+                trajectories. Defaults to 10.
+        """
+        return super().__new__(cls, c_max, max_length)
+
+    def __init__(  # type: ignore
         self,
         c_max: TensorCol,
         max_length: IntStrictlyPositive = 10,
@@ -225,7 +255,17 @@ class PredictTrajectories(Job):
 
 
 class SwitchParams(Job):
-    """Job to simulate different parameter values."""
+    """Job to simulate different parameter values.
+
+    This is useful when using the double Monte Carlo scheme of prediction.
+
+    You can use this in conjunction with the `sample_params` method exposed in the
+    `MultiStateJointModel` class.
+
+    Examples:
+        >>> params_list = my_model.sample_params(100)
+        >>> my_model.do(pred_data, jobs=[PredictY(), SwitchParams(params_list)])
+    """
 
     param_list: list[ModelParams]
     n_iterations_per_param: int
@@ -233,28 +273,31 @@ class SwitchParams(Job):
     init_params: ModelParams
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(
+    def __new__(
+        cls, param_list: list[ModelParams], n_iterations_per_param: IntStrictlyPositive
+    ):
+        """Creates the job to switch between multiple parameters.
+
+        Args:
+            param_list (list[ModelParams]): The list of parameters.
+            n_iterations_per_param (IntStrictlyPositive): The number of iterations to
+                execute before switching.
+        """
+        return super().__new__(cls, param_list, n_iterations_per_param)
+
+    def __init__(  # type: ignore
         self,
         param_list: list[ModelParams],
         n_iterations_per_param: IntStrictlyPositive,
         info: Info,
     ):
-        """A job to switch between multiple parameters.
-
-        This is useful when using the double Monte Carlo scheme of prediction.
-
-        You can use this in conjunction with the `sample_params` method exposed in the
-        `MultiStateJointModel` class.
+        """Initializes the job to switch between multiple parameters.
 
         Args:
             param_list (list[ModelParams]): The list of parameters.
             n_iterations_per_param (IntStrictlyPositive): The number of iterations to
                 execute before switching.
             info (Info): The job information object.
-
-        Examples:
-            >>> params_list = my_model.sample_params(100)
-            >>> my_model.do(pred_data, jobs=[PredictY(), SwitchParams(params_list)])
         """
         self.param_list = param_list
         self.n_iterations_per_param = n_iterations_per_param

@@ -260,9 +260,11 @@ class Info(SimpleNamespace):
         data (ModelData): Learnable model data passed to `do` method.
         logpdfs_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log probability
             function. Used in random optimization steps.
-        logliks_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log likelihood
-            function. Used in deterministic optimization steps and when computing
-            criteria.
+        logliks_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log likelihoods
+            function. Used in deterministic optimization steps.
+        logpdfs_aux_fn (Callable[[ModelParams, Tensor3D], tuple[Tensor2D,
+            tuple[Tensor3D, Tensor2D]]]): The lod probability function with some aux
+            containing individual effects as well as the log likelihoods.
         iteration (int): The current iteration value. -1 at init and max at end.
         max_iterations (int): The maximum number of iterations allowed.
         model (MultiStateJointModel): The multistate joint model.
@@ -277,6 +279,9 @@ class Info(SimpleNamespace):
     data: ModelData
     logpdfs_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
     logliks_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
+    logpdfs_aux_fn: Callable[
+        [ModelParams, Tensor3D], tuple[Tensor2D, tuple[Tensor3D, Tensor2D]]
+    ]
     iteration: int
     max_iterations: int
     model: MultiStateJointModel
@@ -361,7 +366,7 @@ class BaseHazardFn(nn.Module, ABC):
     def forward(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
 
 
-class _Job:
+class _Base_Job:
     def __new__(cls, *args: Any, **kwargs: Any) -> Callable[[Info], Self]:
         """Creates a partial in order to be initialized later.
 
@@ -388,11 +393,11 @@ class _Job:
         return obj
 
 
-class Job(_Job, ABC):
+class Job(_Base_Job, ABC):
     """This is the public base class for any Job.
 
     Please note the behaviour of this class is quite special and inherited from the
-    private class `_Job`. When `__new__` is called, the class will return a factory
+    private class `_Base_Job`. When `__new__` is called, the class will return a factory
     that is a `Callable[[Info], Job]`, and the `__init__` is not run until the main MCMC
     loop calls it. You can pass `info` keyword to use your custom information instead of
     the default information container, but this is very discouraged.
@@ -430,4 +435,4 @@ class Job(_Job, ABC):
 
 
 # Constants
-LOGTWOPI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi))
+LOG_TWO_PI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi))

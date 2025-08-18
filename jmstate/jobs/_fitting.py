@@ -1,6 +1,7 @@
 import itertools
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, Final, cast
 
 import torch
@@ -22,9 +23,28 @@ class _BaseFit(Job, ABC):
 
     default_opt_factory: type[torch.optim.Optimizer]
     is_fitting: bool
+    update_sampler: bool
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(
+    def __new__(
+        cls,
+        opt_factory: type[torch.optim.Optimizer] | None = None,
+        fit_extra: bool = True,
+        **kwargs: Any,
+    ) -> Callable[[Info], Job]:
+        """Creates the fitting base class.
+
+        Args:
+            opt_factory (type[torch.optim.Optimizer] | None, optional): The optimizer
+                factory, if None, it defaults to the current default set by a file
+                constant. Defaults to None.
+            fit_extra (bool, optional): An option to fit extra parameters or not.
+                Defaults to True.
+            kwargs (Any): Additional kwargs passed to the optimizer factory, such as lr.
+        """
+        return super().__new__(cls, opt_factory, fit_extra, **kwargs)
+
+    def __init__(  # type: ignore
         self,
         opt_factory: type[torch.optim.Optimizer] | None = None,
         fit_extra: bool = True,
@@ -86,6 +106,11 @@ class _BaseFit(Job, ABC):
         """
         self.opt.step(lambda: self.closure(info))  # type: ignore
 
+        if self.update_sampler:
+            info.sampler.logpdfs, info.sampler.aux = info.logpdfs_aux_fn(
+                info.model.params_, info.b
+            )
+
     def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
         """Ends fitting cycle.
 
@@ -142,7 +167,9 @@ class DeterministicFit(_BaseFit):
     Attributes:
         fit_extra (bool): Whether to set the model `fit` attribute or not.
         opt (torch.optim.Optimizer): The optimizer object.
-        is_fitting (bool): False.
+        is_fitting (bool): Whether or not to consider this proper fitting. Here, False.
+        update_sampler (bool): Whether or not it is necessary to update_sampler after
+            update. Here, False.
 
     Examples:
         >>> DeterministicFit(torch.optim.Adam, lr=0.01)
@@ -150,6 +177,7 @@ class DeterministicFit(_BaseFit):
 
     default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_DETERMINISTIC_OPT_FACTORY
     is_fitting: bool = False
+    update_sampler: bool = False
 
     def closure(self, info: Info) -> torch.Tensor:
         """Closure of the loss.
@@ -190,7 +218,9 @@ class RandomFit(_BaseFit):
     Attributes:
         fit_extra (bool): Whether to set the model `fit` attribute or not.
         opt (torch.optim.Optimizer): The optimizer object.
-        is_fitting (bool): False.
+        is_fitting (bool): Whether or not to consider this proper fitting. Here, True.
+        update_sampler (bool): Whether or not it is necessary to update_sampler after
+            update. Here, True.
 
     Examples:
         >>> RandomFit(torch.optim.Adam, lr=0.01)
@@ -198,6 +228,7 @@ class RandomFit(_BaseFit):
 
     default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_RANDOM_OPT_FACTORY
     is_fitting: bool = True
+    update_sampler: bool = True
 
     def closure(self, info: Info) -> torch.Tensor:
         """Closure of the loss.
@@ -235,6 +266,20 @@ class Scheduling(Job):
     sched: torch.optim.lr_scheduler.LRScheduler
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
+    def __new__(
+        cls,
+        sched_factory: type[torch.optim.lr_scheduler.LRScheduler],
+        **kwargs: Any,
+    ) -> Callable[[Info], Job]:
+        """Creates the scheduler.
+
+        Args:
+            sched_factory (type[torch.optim.lr_scheduler.LRScheduler]): The scheduler
+                factory.
+            kwargs (Any): Additional kwargs passed to the scheduler factory.
+        """
+        return super().__new__(cls, sched_factory, **kwargs)
+
     def __init__(
         self,
         sched_factory: type[torch.optim.lr_scheduler.LRScheduler],

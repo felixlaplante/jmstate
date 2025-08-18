@@ -50,7 +50,7 @@ def _log_cholesky_from_flat(
     Args:
         flat (torch.Tensor): The flat tensor parameter.
         dim (int): The dimension of the matrix.
-        method (str, optional): The method, full, diagonal or ball. Defaults to "full".
+        method (str, optional): The method, full, diag or ball. Defaults to "full".
 
     Raises:
         ValueError: If the method is not in ("full", "diag", "ball").
@@ -76,7 +76,7 @@ def _flat_from_log_cholesky(L: torch.Tensor, method: str = "full") -> torch.Tens
 
     Args:
         L (torch.Tensor): The square lower triangular matrix parameter.
-        method (str, optional): The method, full, diagonal or ball. Defaults to "full".
+        method (str, optional): The method, full, diag or ball. Defaults to "full".
 
     Raises:
         ValueError: If the method is not in ("full", "diag", "ball").
@@ -189,7 +189,7 @@ def repr_from_cov(V: Tensor2D, method: str = "full") -> MatRepr:
 
     Args:
         V (Tensor2D): The square covariance matrix parameter.
-        method (str, optional): The method, full, diagonal or ball. Defaults to "full".
+        method (str, optional): The method, full, diag or ball. Defaults to "full".
 
     Returns:
         MatRepr: The flat representation.
@@ -215,7 +215,7 @@ def get_cholesky_and_log_eigvals(
     flat, dim, method = getattr(params, matrix + "_repr")
 
     L = _log_cholesky_from_flat(flat, dim, method)
-    log_eigvals = 2 * L.diagonal()
+    log_eigvals = 2 * L.diag()
     L.diagonal().exp_()
 
     return L, log_eigvals

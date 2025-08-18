@@ -5,7 +5,7 @@ from pydantic import ConfigDict, validate_call
 from torch import nn
 
 from ..typedefs._defs import (
-    LOGTWOPI,
+    LOG_TWO_PI,
     BaseHazardFn,
     ClockMethod,
     Num,
@@ -345,7 +345,7 @@ class LogNormal(BaseHazardFn):
         t = self.clock_method(t0, t1)
         log_t = torch.log(t)
         z = (log_t - self.mu) / self.scale
-        log_pdf = -log_t - self.log_scale - 0.5 * LOGTWOPI - 0.5 * z**2
+        log_pdf = -log_t - self.log_scale - 0.5 * LOG_TWO_PI - 0.5 * z**2
         log_sf = cast(torch.Tensor, torch.special.log_ndtr(-z))  # type: ignore
         return log_pdf - log_sf
 

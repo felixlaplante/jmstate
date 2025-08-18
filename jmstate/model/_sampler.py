@@ -9,7 +9,7 @@ class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
     logpdfs_aux_fn: Callable[
-        [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]
+        [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]
     ]
     init_state: torch.Tensor
     n_chains: int
@@ -17,7 +17,7 @@ class MetropolisHastingsSampler:
     target_accept_rate: int | float
     state: torch.Tensor
     logpdfs: torch.Tensor
-    aux: tuple[torch.Tensor, ...]
+    aux: tuple[torch.Tensor, torch.Tensor]
     step_sizes: torch.Tensor
     n_samples: torch.Tensor
     n_accepted: torch.Tensor
@@ -25,7 +25,7 @@ class MetropolisHastingsSampler:
     def __init__(
         self,
         logpdfs_aux_fn: Callable[
-            [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]
+            [torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]
         ],
         init_state: torch.Tensor,
         n_chains: int,
@@ -36,9 +36,8 @@ class MetropolisHastingsSampler:
         """Initializes the Metropolis-Hastings sampler kernel.
 
         Args:
-            logpdfs_aux_fn (
-                Callable[[torch.Tensor], tuple[torch.Tensor, tuple[torch.Tensor, ...]]]
-                ): logp dfs function.
+            logpdfs_aux_fn (Callable[[torch.Tensor], tuple[torch.Tensor,
+                tuple[torch.Tensor, torch.Tensor]]]): logp dfs function.
             init_state (torch.Tensor): Starting state for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (int | float): Kernel step in Metropolis Hastings.
@@ -75,35 +74,43 @@ class MetropolisHastingsSampler:
             tuple[torch.Tensor, tuple[torch.Tensor, ...]]: Current state and aux.
         """
         # Generate proposal noise
-        self._noise.uniform_(-1.0, 1.0)
+        self._noise.normal_()
 
         # Get the proposal
         proposed_state = self.state + self._noise * self.step_sizes.unsqueeze(-1)
-        proposed_logpdf, proposed_aux = self.logpdfs_aux_fn(proposed_state)
-        logpdf_diff = proposed_logpdf - self.logpdfs
+        proposed_logpdfs, proposed_aux = self.logpdfs_aux_fn(proposed_state)
+        logpdf_diff = proposed_logpdfs - self.logpdfs
 
         # Vectorized acceptance decision
         log_uniform = torch.log(torch.rand_like(logpdf_diff))
         accept_mask = log_uniform < logpdf_diff
 
-        self.state[accept_mask] = proposed_state[accept_mask]
-        self.logpdfs[accept_mask] = proposed_logpdf[accept_mask]
-        for i, _ in enumerate(self.aux):
-            self.aux[i][accept_mask] = proposed_aux[i][accept_mask]
+        torch.where(
+            accept_mask.unsqueeze(-1), proposed_state, self.state, out=self.state
+        )
+        torch.where(accept_mask, proposed_logpdfs, self.logpdfs, out=self.logpdfs)
+
+        (psi, logliks), (proposed_psi, proposed_logliks) = self.aux, proposed_aux
+        torch.where(accept_mask.unsqueeze(-1), proposed_psi, psi, out=psi)
+        torch.where(accept_mask, proposed_logliks, logliks, out=logliks)
 
         # Update statistics
         self.n_samples += 1
-        self.n_accepted += accept_mask.to(torch.get_default_dtype()).mean(dim=0)
+        mean_accept_mask = accept_mask.to(torch.get_default_dtype()).mean(dim=0)
+        self.n_accepted += mean_accept_mask
 
-        self._adapt_step_sizes(accept_mask)
+        # Update step sizes
+        self._adapt_step_sizes(mean_accept_mask)
 
         return self.state, self.aux
 
-    def _adapt_step_sizes(self, accept_mask: torch.Tensor):
-        adaptation = (
-            accept_mask.to(torch.get_default_dtype()).mean(dim=0)
-            - self.target_accept_rate
-        ) * self.adapt_rate
+    def _adapt_step_sizes(self, mean_accept_mask: torch.Tensor):
+        """Adapts the step sizes based on the mean acceptances.
+
+        Args:
+            mean_accept_mask (torch.Tensor): The mean acceptances.
+        """
+        adaptation = (mean_accept_mask - self.target_accept_rate) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 
     def run(self, n_steps: int) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:

@@ -37,14 +37,22 @@ class ComputeFIM(Job):
     jac_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, bias: bool = True, *, info: Info):
+    def __new__(cls, bias: bool = True) -> Callable[[Info], Job]:
+        """Creates the Fisher information Job.
+
+        Args:
+            bias (bool): Whether or not to substract the bias term. Defaults to True.
+        """
+        return super().__new__(cls, bias)
+
+    def __init__(self, bias: bool, *, info: Info):  # type: ignore
         """Initializes the moment estimates to 0.
 
         Warns the user if the model has not yet been fitted through the `fit`
         attribute.
 
         Args:
-            bias (bool): Whether or not to substract the bias term. Default to True.
+            bias (bool): Whether or not to substract the bias term. Defaults to True.
             info (Info): The job information object.
         """
         if not info.model.fit_:
@@ -128,7 +136,11 @@ class ComputeCriteria(Job):
 
     loglik: float
 
-    def __init__(self, info: Info):  # noqa: ARG002
+    def __new__(cls) -> Callable[[Info], Job]:
+        """Creates the criteria computation job."""
+        return super().__new__(cls)
+
+    def __init__(self, info: Info):  # type: ignore # noqa: ARG002
         """Initializes the log likelihood to 0.
 
         Args:
@@ -185,7 +197,11 @@ class ComputeEBEs(Job):
 
     ebes: torch.Tensor
 
-    def __init__(self, info: Info):
+    def __new__(cls) -> Callable[[Info], Job]:
+        """Creates the EBEs computation job."""
+        return super().__new__(cls)
+
+    def __init__(self, info: Info):  # type: ignore
         """Initializes the EBEs to 0.
 
         Args:
