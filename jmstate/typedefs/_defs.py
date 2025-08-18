@@ -91,18 +91,18 @@ class RegressionFn(Protocol):
         It is identical to LinkFn.
 
     Args:
-            t (Tensor1D | Tensor2D): The evaluation times.
-            psi (Tensor2D | Tensor3D): The individual parameters.
+        t (Tensor1D | Tensor2D): The evaluation times.
+        psi (Tensor2D | Tensor3D): The individual parameters.
 
     Returns:
-            Tensor3D | Tensor4D: The response variable values.
+        Tensor3D | Tensor4D: The response variable values.
 
     Examples:
-            >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-            >>>     scale, offset, slope = psi.chunk(3, dim=-1)
-            >>>     # Fully broadcasted
-            >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
-            >>> regression_fn = sigmoid
+        >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
+        >>>     scale, offset, slope = psi.chunk(3, dim=-1)
+        >>>     # Fully broadcasted
+        >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
+        >>> regression_fn = sigmoid
     """
 
     def __call__(
@@ -123,18 +123,18 @@ class LinkFn(Protocol):
         It is identical to RegressionFn.
 
     Args:
-            t (Tensor1D | Tensor2D): The evaluation times.
-            psi (Tensor2D | Tensor3D): The individual parameters.
+        t (Tensor1D | Tensor2D): The evaluation times.
+        psi (Tensor2D | Tensor3D): The individual parameters.
 
     Returns:
-            Tensor3D | Tensor4D: The response variable values.
+        Tensor3D | Tensor4D: The response variable values.
 
     Examples:
-            >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-            >>>     scale, offset, slope = psi.chunk(3, dim=-1)
-            >>>     # Fully broadcasted
-            >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
-            >>> link_fn = sigmoid
+        >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
+        >>>     scale, offset, slope = psi.chunk(3, dim=-1)
+        >>>     # Fully broadcasted
+        >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
+        >>> link_fn = sigmoid
     """
 
     def __call__(

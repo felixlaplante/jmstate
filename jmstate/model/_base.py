@@ -152,10 +152,11 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         """
         return self._logliks_fn(params, b, data) + super()._prior_logliks(params, b)
 
+    @torch.no_grad()  # type: ignore
     def _logpdfs_aux_fn(
         self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        """Gets the log pdfs with aux data.
+        """Gets the log pdfs with aux data without gradient computation.
 
         Args:
             params (ModelParams): The model parameters.
@@ -324,6 +325,11 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         conflicting defaults are passed, only the last default will be kept and used.
 
         To do parallel MCMC sampling, which is enabled by default, use `n_chains`.
+
+        Also, note that the function passed to the MCMC sampler will be built using the
+        `torch.no_grad()` decorator. If needs be, use `torch.enable_grad()` if one of
+        the model design functions always require gradient computation regardless of
+        setting.
 
         To enable caching, please refer to the argument `cache_limit` to see the
         behaviour.

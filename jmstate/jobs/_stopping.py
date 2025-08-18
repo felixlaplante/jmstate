@@ -124,8 +124,8 @@ class GradStop(Job):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __new__(
         cls,
-        atol: NumNonNegative | Tensor1DPositive = 0.01,
-        rtol: NumNonNegative | Tensor1DPositive = 0.01,
+        atol: NumNonNegative | Tensor1DPositive = 0.001,
+        rtol: NumNonNegative | Tensor1DPositive = 0.001,
         min_consecutive: IntStrictlyPositive = 50,
         *,
         betas: tuple[NumProbability, NumProbability] = (0.99, 0.99),
@@ -134,9 +134,9 @@ class GradStop(Job):
 
         Args:
             atol (NumNonNegative | Tensor1DPositive, optional): Absolute tolerance,
-            either scalar or element-wise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.001.
             rtol (NumNonNegative | Tensor1DPositive, optional): Relative tolerance,
-            either scalar or element-wise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.001.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 50.
             betas (tuple[NumProbability, NumProbability], optional): Exponential moving
@@ -146,8 +146,8 @@ class GradStop(Job):
 
     def __init__(  # type: ignore
         self,
-        atol: NumNonNegative | Tensor1DPositive = 0.01,
-        rtol: NumNonNegative | Tensor1DPositive = 0.01,
+        atol: NumNonNegative | Tensor1DPositive = 0.001,
+        rtol: NumNonNegative | Tensor1DPositive = 0.001,
         min_consecutive: IntStrictlyPositive = 50,
         *,
         betas: tuple[NumProbability, NumProbability] = (0.99, 0.99),
@@ -157,9 +157,9 @@ class GradStop(Job):
 
         Args:
             atol (NumNonNegative | Tensor1DPositive, optional): Absolute tolerance,
-            either scalar or element-wise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.001.
             rtol (NumNonNegative | Tensor1DPositive, optional): Relative tolerance,
-            either scalar or element-wise. Defaults to 0.01.
+            either scalar or element-wise. Defaults to 0.001.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 50.
             betas (tuple[NumProbability, NumProbability], optional): Exponential moving
@@ -280,8 +280,8 @@ class ValueStop(Job):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __new__(
         cls,
-        atol: NumNonNegative = 0.01,
-        rtol: NumNonNegative = 0.01,
+        atol: NumNonNegative = 0.001,
+        rtol: NumNonNegative = 0.001,
         min_consecutive: IntStrictlyPositive = 50,
         *,
         betas: tuple[NumProbability, NumProbability] = (0.99, 0.99),
@@ -289,8 +289,8 @@ class ValueStop(Job):
         """Creates the `ValueStop` class.
 
         Args:
-            atol (NumNonNegative, optional): Absolute tolerance. Defaults to 0.01.
-            rtol (NumNonNegative, optional): Relative tolerance. Defaults to 0.01.
+            atol (NumNonNegative, optional): Absolute tolerance. Defaults to 0.001.
+            rtol (NumNonNegative, optional): Relative tolerance. Defaults to 0.001.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 50.
             betas (tuple[NumProbability, NumProbability], optional): Exponential moving
@@ -301,8 +301,8 @@ class ValueStop(Job):
 
     def __init__(  # type: ignore
         self,
-        atol: NumNonNegative = 0.01,
-        rtol: NumNonNegative = 0.01,
+        atol: NumNonNegative = 0.001,
+        rtol: NumNonNegative = 0.001,
         min_consecutive: IntStrictlyPositive = 50,
         *,
         betas: tuple[NumProbability, NumProbability] = (0.99, 0.99),
@@ -311,8 +311,8 @@ class ValueStop(Job):
         """Initializes the `ValueStop` class.
 
         Args:
-            atol (NumNonNegative, optional): Absolute tolerance. Defaults to 0.01.
-            rtol (NumNonNegative, optional): Relative tolerance. Defaults to 0.01.
+            atol (NumNonNegative, optional): Absolute tolerance. Defaults to 0.001.
+            rtol (NumNonNegative, optional): Relative tolerance. Defaults to 0.001.
             min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
                 iterations with grad difference less than tolerance. Defaults to 50.
             betas (tuple[NumProbability, NumProbability], optional): Exponential moving

@@ -66,7 +66,6 @@ class MetropolisHastingsSampler:
         self.n_samples = torch.tensor(0, dtype=torch.int64)
         self.n_accepted = torch.zeros(self.state.size(-2))
 
-    @torch.no_grad()  # type: ignore
     def step(self) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
         """Performs a single kernel step.
 

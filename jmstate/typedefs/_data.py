@@ -37,6 +37,10 @@ class ModelDesign:
     possible to broadcast parameters to vectorize efficiently the operations. If you
     copy, beware of a heavy performance hit. If unable, please use vmap.
 
+    Also, note that the function passed to the MCMC sampler will be built using the
+    `torch.no_grad()` decorator. If needs be, use `torch.enable_grad()` if one of the
+    model design functions always require gradient computation regardless of setting.
+
     Attributes:
         individual_effects_fn (IndividualEffectsFn): The individual effects function. It
             must be able to yield 2D or 3D tensors given inputs of `gamma` (population

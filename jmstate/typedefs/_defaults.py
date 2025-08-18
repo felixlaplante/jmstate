@@ -24,12 +24,12 @@ DEFAULT_HYPERPARAMETERS: Final[dict[type[Job], dict[str, Any]]] = {
     ComputeEBEs: {"max_iterations": 100, "n_chains": 10, "warmup": 200, "n_steps": 10},
     ComputeFIM: {"max_iterations": 100, "n_chains": 10, "warmup": 200, "n_steps": 10},
     DeterministicFit: {
-        "max_iterations": 200,
+        "max_iterations": 500,
         "n_chains": 1,
         "warmup": 0,
         "n_steps": 0,
     },
-    RandomFit: {"max_iterations": 200, "n_chains": 10, "warmup": 200, "n_steps": 10},
+    RandomFit: {"max_iterations": 500, "n_chains": 10, "warmup": 200, "n_steps": 10},
     PredictSurvLogps: {
         "max_iterations": 100,
         "n_chains": 10,
