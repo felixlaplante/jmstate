@@ -199,8 +199,8 @@ class CompleteModelData(ModelData):
         valid_mask = ~nan_mask
         self.valid_mask = valid_mask.to(torch.get_default_dtype())
         self.n_valid = self.valid_mask.sum(dim=-2)
-        self.valid_t = torch.nan_to_num(self.t)
-        self.valid_y = torch.nan_to_num(self.y)
+        self.valid_t = self.t.nan_to_num()
+        self.valid_y = self.y.nan_to_num()
         self.buckets = build_traj_repr(self.trajectories, self.c, model_design.surv)
 
         if (
