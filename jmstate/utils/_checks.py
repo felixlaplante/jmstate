@@ -84,8 +84,8 @@ def check_trajectory_sorting(trajectories: list[Trajectory]):
         for trajectory in trajectories
     ):
         raise ValueError(
-            "Trajectories must be sorted by time, in ascending order. Also check no "
-            "NaN values as this will trigger the check"
+            "Trajectories must be sorted by time, in ascending order. Also ensure "
+            "there are no NaN values as this will trigger the check"
         )
 
 
