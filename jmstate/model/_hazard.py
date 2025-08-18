@@ -127,7 +127,7 @@ class HazardMixin:
 
         # Compute hazard at quadrature points
         vals = self._log_hazard(hazard_info._replace(t1=quad_c))
-        vals.clamp_(min=-50.0, max=50.0).exp_()
+        vals.clamp_(max=50.0).exp_()
 
         return half.view(-1) * (vals @ self._std_weights)
 
@@ -177,7 +177,7 @@ class HazardMixin:
 
         # Compute log hazard at all points
         all_vals = self._log_hazard(hazard_info._replace(t1=quad_lc))
-        all_vals[..., 1:].clamp_(min=-50.0, max=50.0).exp_()
+        all_vals[..., 1:].clamp_(max=50.0).exp_()
 
         return all_vals[..., 0], half.view(-1) * (all_vals[..., 1:] @ self._std_weights)
 
