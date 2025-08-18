@@ -86,16 +86,17 @@ class Net(nn.Module):
             x = torch.cat([t_ext, psi_ext], dim=-1)
             y = self.net(x)
 
+            needs_grad = y.requires_grad
             ones = torch.ones_like(y)
-            out_list: list[torch.Tensor] = []
-            for i in range(max_deg + 1):
+            out_list = [y] if 0 in degs else []
+            for i in range(1, max_deg + 1):
+                y = torch.autograd.grad(
+                    y, t_ext, ones, create_graph=i < max_deg or needs_grad
+                )[0]
                 if i in degs:
                     out_list.append(y)
-                if i < max_deg:
-                    y = torch.autograd.grad(y, t_ext, ones, create_graph=True)[0]
 
             out = torch.cat(out_list, dim=-1)
-            needs_grad = any(p.requires_grad for p in (*self.net.parameters(), t, psi))
             return out if needs_grad else out.detach()
 
         return _derivatives
