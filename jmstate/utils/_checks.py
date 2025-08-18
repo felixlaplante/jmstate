@@ -80,7 +80,7 @@ def check_trajectory_sorting(trajectories: list[Trajectory]):
         ValueError: If some trajectory is not sorted.
     """
     if any(
-        any(t0 > t1 for t0, t1 in itertools.pairwise(t for t, _ in trajectory))
+        not all(t0 <= t1 for t0, t1 in itertools.pairwise(t for t, _ in trajectory))
         for trajectory in trajectories
     ):
         raise ValueError(
