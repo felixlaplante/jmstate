@@ -42,6 +42,9 @@ class ModelDesign:
     `torch.no_grad()` decorator. If needs be, use `torch.enable_grad()` if one of the
     model design functions always require gradient computation regardless of setting.
 
+    Ensure all function all well defined on a closed interval and are differentiable
+    almost everywhere.
+
     Attributes:
         individual_effects_fn (IndividualEffectsFn): The individual effects function. It
             must be able to yield 2D or 3D tensors given inputs of `gamma` (population
@@ -80,6 +83,10 @@ class ModelDesign:
 @dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
 class ModelData:
     r"""Dataclass containing learnable multistate joint model data.
+
+    Not `y` is expected to be a 3D tensor of dimension :math:`(n, m, d)` if there are
+    :math:`n` individual, with a maximum number of :math:`m` measurements in
+    :math:`\mathbb{R}^d`. Its values should not be all NaNs.
 
     Raises:
         ValueError: If any of the tensors contains inf values.
