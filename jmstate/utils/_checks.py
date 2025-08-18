@@ -6,17 +6,31 @@ from ..typedefs._defs import MatRepr, Trajectory
 
 
 def check_inf(tensors: tuple[tuple[torch.Tensor | None, str], ...]):
-    """Check if any of the tensors contains infinity.
+    """Check if any of the tensors contain infinity.
 
     Args:
-        tensors (tuple[tuple[torch.Tensor | None, str] ,...]): The tensors to check.
+        tensors (tuple[tuple[torch.Tensor | None, str] ,...]): The tuples to check.
 
     Raises:
-        ValueError: If one tensor contains infinity.
+        ValueError: If any of the tensors contain infinity.
     """
     for t, name in tensors:
         if t is not None and t.isinf().any():
             raise ValueError(f"Tensor {name} cannot contain inf values")
+
+
+def check_nan(tensors: tuple[tuple[torch.Tensor | None, str], ...]):
+    """Check if any of the tensors contain NaNs.
+
+    Args:
+        tensors (tuple[tuple[torch.Tensor | None, str] ,...]): The tuples to check.
+
+    Raises:
+        ValueError: If any of the tensors contain NaNs.
+    """
+    for t, name in tensors:
+        if t is not None and t.isnan().any():
+            raise ValueError(f"Tensor {name} cannot contain NaN values")
 
 
 def check_consistent_size(

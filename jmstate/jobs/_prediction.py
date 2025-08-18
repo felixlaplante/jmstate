@@ -14,7 +14,7 @@ from ..typedefs._defs import (
     Trajectory,
 )
 from ..typedefs._params import ModelParams
-from ..utils._checks import check_consistent_size
+from ..utils._checks import check_consistent_size, check_inf, check_nan
 
 
 class PredictY(Job):
@@ -28,9 +28,6 @@ class PredictY(Job):
 
     The variable `u` is expected to be a matrix with the same number of rows as
     individuals, and the same number of columns as prediction times.
-
-    Raises:
-        ValueError: If u has incompatible shape.
 
     Attributes:
         u (torch.Tensor): The matrix containing prediction times.
@@ -57,11 +54,15 @@ class PredictY(Job):
             info (Info): The job information object.
 
         Raises:
+            ValueError: If u contains inf values.
+            ValueError: If u contains NaN values.
             ValueError: If u has incompatible shape.
         """
         self.u = u.to(torch.get_default_dtype())
         self.pred_y = []
 
+        check_inf(((self.u, "u"),))
+        check_nan(((self.u, "u"),))
         check_consistent_size(((self.u, 0, "u"), (info.data.size, None, "data.size")))
 
     def run(self, info: Info):
@@ -106,9 +107,6 @@ class PredictSurvLogps(Job):
     The variable `u` is expected to be a matrix with the same number of rows as
     individuals, and the same number of columns as prediction times.
 
-    Raises:
-        ValueError: If u has incompatible shape.
-
     Attributes:
         u (torch.Tensor): The matrix containing prediction times.
         pred_surv_logps (torch.Tensor): The predicted survival log probabilities.
@@ -134,15 +132,19 @@ class PredictSurvLogps(Job):
             info (Info): The job information object.
 
         Raises:
+            ValueError: If u contains inf values.
+            ValueError: If u contains NaN values.
             ValueError: If u has incompatible shape.
         """
         self.u = u.to(torch.get_default_dtype())
         self.pred_surv_logps = []
 
+        check_inf(((self.u, "u"),))
+        check_nan(((self.u, "u"),))
         check_consistent_size(((self.u, 0, "u"), (info.data.size, None, "data.size")))
 
     def run(self, info: Info):
-        """Computes and appends the survival lof probabilities.
+        """Computes and appends the survival log probabilities.
 
         Args:
             info (Info): The job information object.
@@ -177,8 +179,10 @@ class PredictTrajectories(Job):
     The variable `c_max` is expected to be a column vector with the same number of rows
     as individuals.
 
-    Raises:
-        ValueError: If c_max has incompatible shape.
+    Attributes:
+        c_max (torch.Tensor): The maximum sampling (censoring) times.
+        max_length (int): The max length of the trajectories.
+        pred_trajectories (list[Trajectory]): The predicted (sampled) trajectories.
     """
 
     c_max: torch.Tensor
@@ -214,11 +218,18 @@ class PredictTrajectories(Job):
             max_length (IntStrictlyPositive, optional): The max length of the
                 trajectories. Defaults to 10.
             info (Info): The job information object.
+
+        Raises:
+            ValueError: If c_max contains inf values.
+            ValueError: If c_max contains NaN values.
+            ValueError: If c_max has incompatible shape.
         """
         self.c_max = c_max.to(torch.get_default_dtype())
         self.max_length = max_length
         self.pred_trajectories = []
 
+        check_inf(((self.c_max, "c_max"),))
+        check_nan(((self.c_max, "c_max"),))
         check_consistent_size(
             ((self.c_max, 0, "c_max"), (info.data.size, None, "data.size"))
         )

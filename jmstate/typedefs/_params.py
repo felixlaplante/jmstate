@@ -6,7 +6,7 @@ from typing import Any, Self
 import torch
 from pydantic import ConfigDict, dataclasses, validate_call
 
-from ..utils._checks import check_inf, check_matrix_dim
+from ..utils._checks import check_inf, check_matrix_dim, check_nan
 from ..utils._linalg import cov_from_repr
 from ._defs import MatRepr, Tensor1D
 
@@ -64,7 +64,12 @@ class ModelParams:
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
-        """Validate and put to dtype all tensors."""
+        """Validate and put to dtype all tensors.
+
+        Raises:
+            ValueError: If any of the tensors contains inf values.
+            ValueError: If any of the tensors contains NaN values.
+        """
         if self.skip_validation:
             return
 
@@ -78,9 +83,12 @@ class ModelParams:
         check_matrix_dim(self.R_repr, "R")
         for key, val in self.as_dict.items():
             if isinstance(val, dict):
-                check_inf(tuple((t, key) for t in val.values()))
+                tensor_tuple = tuple((t, key) for t in val.values())
+                check_inf(tensor_tuple)
+                check_nan(tensor_tuple)
             else:
                 check_inf(((val, key),))
+                check_nan(((val, key),))
 
     @cached_property
     def as_dict(self) -> dict[str, torch.Tensor | dict[tuple[Any, Any], torch.Tensor]]:

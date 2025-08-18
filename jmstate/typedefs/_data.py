@@ -9,6 +9,7 @@ from pydantic import ConfigDict, dataclasses
 from ..utils._checks import (
     check_consistent_size,
     check_inf,
+    check_nan,
     check_trajectory_c,
     check_trajectory_empty,
     check_trajectory_sorting,
@@ -81,7 +82,8 @@ class ModelData:
     r"""Dataclass containing learnable multistate joint model data.
 
     Raises:
-        ValueError: If the tensors contain inf.
+        ValueError: If any of the tensors contains inf values.
+        ValueError: If any of the tensors contains NaN values except `y`.
         ValueError: If the size is not consistent between tensors.
         ValueError: If the trajectories are not sorted by time.
         ValueError: If the censoring time is lower than the maximum transition time.
@@ -113,7 +115,8 @@ class ModelData:
         """Runs the post init conversions.
 
         Raises:
-            ValueError: If the tensors contain inf.
+            ValueError: If any of the tensors contains inf values.
+            ValueError: If any of the tensors contains NaN values.
             ValueError: If the size is not consistent between tensors.
             ValueError: If the trajectories are not sorted by time.
             ValueError: If the censoring time is lower than the maximum transition time.
@@ -129,6 +132,7 @@ class ModelData:
         object.__setattr__(self, "c", self.c.to(dtype))
 
         check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
+        check_nan(((self.x, "x"), (self.c, "c")))
         check_consistent_size(
             (
                 (self.x, 0, "x"),
@@ -142,7 +146,7 @@ class ModelData:
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
 
-        # Check NaNs
+        # Check NaNs between t and y
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
             raise ValueError("NaN time values on non NaN y values")
 
@@ -199,7 +203,7 @@ class CompleteModelData(ModelData):
         valid_mask = ~nan_mask
         self.valid_mask = valid_mask.to(torch.get_default_dtype())
         self.n_valid = self.valid_mask.sum(dim=-2)
-        self.valid_t = self.t.nan_to_num()
+        self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_traj_repr(self.trajectories, self.c, model_design.surv)
 
@@ -259,6 +263,7 @@ class SampleData:
         object.__setattr__(self, "c", None if self.c is None else self.c.to(dtype))
 
         check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
+        check_nan(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
         check_consistent_size(
             (
                 (self.x, -2, "x"),

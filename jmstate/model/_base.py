@@ -19,7 +19,7 @@ from ..typedefs._defs import (
     Trajectory,
 )
 from ..typedefs._params import ModelParams
-from ..utils._checks import check_consistent_size
+from ..utils._checks import check_consistent_size, check_inf, check_nan
 from ..utils._misc import run_jobs
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
@@ -236,7 +236,13 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         *,
         max_length: IntStrictlyPositive = 10,
     ) -> list[Trajectory]:
-        """Sample future trajectories from the fitted joint model.
+        """Sample trajectories from the joint model.
+
+        The sampling is done usign a bisection algorithm by inversing the log cdf of the
+        transitions inside a Gillespie-like algorithm.
+
+        Checks are run only if the `skip_validation` attribute of `sample_date` is not
+        set to `True`.
 
         Args:
             sample_data (SampleData): Prediction data.
@@ -245,15 +251,21 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
                 Defaults to 10.
 
         Raises:
+            ValueError: If c_max contains inf values.
+            ValueError: If c_max contains NaN values.
             ValueError: If c_max has incorrect shape.
 
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
         c_max = c_max.to(torch.get_default_dtype())
-        check_consistent_size(
-            ((c_max, 0, "c_max"), (sample_data.size, None, "sample_data.size"))
-        )
+
+        if not sample_data.skip_validation:
+            check_inf(((c_max, "c_max"),))
+            check_nan(((c_max, "c_max"),))
+            check_consistent_size(
+                ((c_max, 0, "c_max"), (sample_data.size, None, "sample_data.size"))
+            )
 
         return super()._sample_trajectories(sample_data, c_max, max_length=max_length)
 
@@ -283,20 +295,29 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         The variable `u` is expected to be a matrix with the same number of rows as
         individuals, and the same number of columns as prediction times.
 
+        Checks are run only if the `skip_validation` attribute of `sample_date` is not
+        set to `True`.
+
         Args:
             sample_data (SampleData): The data on which to compute the probabilities.
             u (Tensor2D): The time at which to evaluate the probabilities.
 
         Raises:
-            ValueError: If u is of incorrect shape.
+            ValueError: If u contains inf values.
+            ValueError: If u contains NaN values.
+            ValueError: If u has incorrect shape.
 
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
         u = u.to(torch.get_default_dtype())
-        check_consistent_size(
-            ((u, 0, "u"), (sample_data.size, None, "sample_data.size"))
-        )
+
+        if not sample_data.skip_validation:
+            check_inf(((u, "u"),))
+            check_nan(((u, "u"),))
+            check_consistent_size(
+                ((u, 0, "u"), (sample_data.size, None, "sample_data.size"))
+            )
 
         return super()._compute_surv_logps(sample_data, u)
 
