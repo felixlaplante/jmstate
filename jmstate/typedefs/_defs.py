@@ -310,7 +310,7 @@ class Metrics(SimpleNamespace):
             each drawing of random effects.
         pred_trajectories (list[Trajectory]): The predicted (sampled) trajectories for
             each drawing of random effects.
-        params_history (list[ModelParams]): The parameters evolution list.
+        params_history (list[ModelParams]): The parameters' evolution list.
         mcmc_diagnostics (list[dict[str, Any]]): The list of MCMC diagnostic dicts.
     """
 
