@@ -83,7 +83,10 @@ def check_trajectory_sorting(trajectories: list[Trajectory]):
         any(t0 > t1 for t0, t1 in itertools.pairwise(t for t, _ in trajectory))
         for trajectory in trajectories
     ):
-        raise ValueError("Trajectories must be sorted by time")
+        raise ValueError(
+            "Trajectories must be sorted by time, in ascending order. Also check no "
+            "NaN values as this will trigger the check"
+        )
 
 
 def check_trajectory_c(trajectories: list[Trajectory], c: torch.Tensor | None):

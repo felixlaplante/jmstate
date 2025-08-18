@@ -265,7 +265,7 @@ class Info(SimpleNamespace):
         logpdfs_aux_fn (Callable[[ModelParams, Tensor3D], tuple[Tensor2D,
             tuple[Tensor3D, Tensor2D]]]): The lod probability function with some aux
             containing individual effects as well as the log likelihoods.
-        iteration (int): The current iteration value. -1 at init and max at end.
+        iteration (int): The current iteration value. -1 at start and max at end.
         max_iterations (int): The maximum number of iterations allowed.
         model (MultiStateJointModel): The multistate joint model.
         sampler (MetropolisHastingsSampler): The current MCMC sampler.

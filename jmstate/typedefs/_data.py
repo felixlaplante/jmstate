@@ -88,12 +88,14 @@ class ModelData:
     :math:`n` individual, with a maximum number of :math:`m` measurements in
     :math:`\mathbb{R}^d`. Its values should not be all NaNs.
 
+    Bypass checks by activating the `skip_validation` flag.
+
     Raises:
-        ValueError: If any of the tensors contains inf values.
-        ValueError: If any of the tensors contains NaN values except `y`.
-        ValueError: If the size is not consistent between tensors.
         ValueError: If the trajectories are not sorted by time.
         ValueError: If the censoring time is lower than the maximum transition time.
+        ValueError: If any of the inputs contain inf values.
+        ValueError: If any of the inputs contain NaN values except `t` and y`.
+        ValueError: If the size is not consistent between inputs.
 
     Attributes:
         x (Tensor2D | None): The fixed covariates.
@@ -122,11 +124,11 @@ class ModelData:
         """Runs the post init conversions.
 
         Raises:
-            ValueError: If any of the tensors contains inf values.
-            ValueError: If any of the tensors contains NaN values.
-            ValueError: If the size is not consistent between tensors.
             ValueError: If the trajectories are not sorted by time.
             ValueError: If the censoring time is lower than the maximum transition time.
+            ValueError: If any of the inputs contain inf values.
+            ValueError: If any of the inputs contain NaN values.
+            ValueError: If the size is not consistent between inputs.
         """
         if self.skip_validation:
             return
@@ -138,7 +140,24 @@ class ModelData:
         object.__setattr__(self, "y", self.y.to(dtype))
         object.__setattr__(self, "c", self.c.to(dtype))
 
-        check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
+        check_consistent_size(((self.t, -1, "t"), (self.y, -2, "y")))
+        check_trajectory_empty(self.trajectories)
+        check_trajectory_sorting(self.trajectories)
+        check_trajectory_c(self.trajectories, self.c)
+
+        last_times = torch.tensor(
+            [trajectory[-1][0] for trajectory in self.trajectories], dtype=dtype
+        )
+
+        check_inf(
+            (
+                (self.x, "x"),
+                (self.t, "t"),
+                (self.y, "y"),
+                (self.c, "c"),
+                (last_times, "trajectories"),
+            )
+        )
         check_nan(((self.x, "x"), (self.c, "c")))
         check_consistent_size(
             (
@@ -148,10 +167,6 @@ class ModelData:
                 (self.size, None, "trajectories"),
             )
         )
-        check_consistent_size(((self.t, -1, "t"), (self.y, -2, "y")))
-        check_trajectory_empty(self.trajectories)
-        check_trajectory_sorting(self.trajectories)
-        check_trajectory_c(self.trajectories, self.c)
 
         # Check NaNs between t and y
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
@@ -231,11 +246,14 @@ class CompleteModelData(ModelData):
 class SampleData:
     """Dataclass for data used in sampling.
 
+    Bypass checks by activating the `skip_validation` flag.
+
     Raises:
-        ValueError: If the tensors contain inf.
-        ValueError: If the size is not consistent between tensors.
         ValueError: If the trajectories are not sorted by time.
         ValueError: If the censoring time is lower than the maximum transition time.
+        ValueError: If any of the inputs contain inf values.
+        ValueError: If any of the inputs contain NaN values.
+        ValueError: If the size is not consistent between inputs.
 
     Attributes:
         x (Tensor2D | None): The fixed covariates.
@@ -269,7 +287,22 @@ class SampleData:
         object.__setattr__(self, "psi", self.psi.to(dtype))
         object.__setattr__(self, "c", None if self.c is None else self.c.to(dtype))
 
-        check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
+        check_trajectory_empty(self.trajectories)
+        check_trajectory_sorting(self.trajectories)
+        check_trajectory_c(self.trajectories, self.c)
+
+        last_times = torch.tensor(
+            [trajectory[-1][0] for trajectory in self.trajectories], dtype=dtype
+        )
+
+        check_inf(
+            (
+                (self.x, "x"),
+                (self.psi, "psi"),
+                (self.c, "c"),
+                (last_times, "trajectories"),
+            )
+        )
         check_nan(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
         check_consistent_size(
             (
@@ -279,9 +312,6 @@ class SampleData:
                 (self.size, None, "trajectories"),
             )
         )
-        check_trajectory_empty(self.trajectories)
-        check_trajectory_sorting(self.trajectories)
-        check_trajectory_c(self.trajectories, self.c)
 
     @cached_property
     def size(self) -> int:

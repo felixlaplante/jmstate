@@ -44,6 +44,8 @@ class ModelParams:
     parametrization for the residuals, as is this case the components must be
     independent.
 
+    Bypass checks by activating the `skip_validation` flag.
+
     Attributes:
         gamma (torch.Tensor | None): The population level parameters.
         Q_repr (MatRepr): The random effects precision matrix representation.
