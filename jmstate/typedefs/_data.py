@@ -94,7 +94,7 @@ class ModelData:
         ValueError: If the trajectories are not sorted by time.
         ValueError: If the censoring time is lower than the maximum transition time.
         ValueError: If any of the inputs contain inf values.
-        ValueError: If any of the inputs contain NaN values except `t` and y`.
+        ValueError: If any of the inputs contain NaN values except `y`.
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
@@ -140,7 +140,6 @@ class ModelData:
         object.__setattr__(self, "y", self.y.to(dtype))
         object.__setattr__(self, "c", self.c.to(dtype))
 
-        check_consistent_size(((self.t, -1, "t"), (self.y, -2, "y")))
         check_trajectory_empty(self.trajectories)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
@@ -167,6 +166,7 @@ class ModelData:
                 (self.size, None, "trajectories"),
             )
         )
+        check_consistent_size(((self.t, -1, "t"), (self.y, -2, "y")))
 
         # Check NaNs between t and y
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
