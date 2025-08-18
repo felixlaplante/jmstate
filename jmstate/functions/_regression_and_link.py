@@ -89,13 +89,14 @@ class Net(nn.Module):
             needs_grad = y.requires_grad
             ones = torch.ones_like(y)
             out_list = [y] if 0 in degs else []
-            for i in range(1, max_deg + 1):
-                y = torch.autograd.grad(
-                    y, t_ext, ones, create_graph=i < max_deg or needs_grad
-                )[0]
+            for i in range(1, max_deg):
+                y = torch.autograd.grad(y, t_ext, ones, create_graph=True)[0]
                 if i in degs:
                     out_list.append(y)
 
+            out_list.append(
+                torch.autograd.grad(y, t_ext, ones, create_graph=needs_grad)[0]
+            )
             out = torch.cat(out_list, dim=-1)
             return out if needs_grad else out.detach()
 
