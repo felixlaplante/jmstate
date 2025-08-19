@@ -1,29 +1,42 @@
 import itertools
 import warnings
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, Final, cast
 
 import torch
 from pydantic import ConfigDict, validate_call
 
-from ..typedefs._defs import Info, Job, Metrics
+from ..typedefs._defs import Info, Job
 
 # Constants
 NO_GROUPS_OPT: Final[tuple[type[torch.optim.Optimizer], ...]] = (torch.optim.LBFGS,)
-DEFAULT_DETERMINISTIC_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
-DEFAULT_RANDOM_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
+DEFAULT_OPT_FACTORY: Final[type[torch.optim.Optimizer]] = torch.optim.Adam
 
 
-class _BaseFit(Job, ABC):
-    """Base job to fit the model."""
+class Fit(Job):
+    """Job to fit the model with random effects.
+
+    This is a fitting job. It sets the `fit_` attribute when finished.
+
+    It can be used with any optimizer factory built on the base class
+    `torch.optim.Optimizer`. If None, it defaults to Adam.
+
+    Use kwargs to pass defaults to the optimizer factory.
+
+    Change the value of `fit_extra` if you do not want to fit extra parameters.
+
+    It warns the user if the parameters contain infinite or NaN values.
+
+    Attributes:
+        fit_extra (bool): Whether to set the model `fit` attribute or not.
+        opt (torch.optim.Optimizer): The optimizer object.
+
+    Examples:
+        >>> Fit(torch.optim.Adam, lr=0.01)
+    """
 
     fit_extra: bool
     opt: torch.optim.Optimizer
-
-    default_opt_factory: type[torch.optim.Optimizer]
-    is_fitting: bool
-    update_sampler: bool
 
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __new__(
@@ -32,7 +45,7 @@ class _BaseFit(Job, ABC):
         fit_extra: bool = True,
         **kwargs: Any,
     ) -> Callable[[Info], Job]:
-        """Creates the fitting base class.
+        """Creates the fitting class.
 
         Args:
             opt_factory (type[torch.optim.Optimizer] | None, optional): The optimizer
@@ -52,7 +65,7 @@ class _BaseFit(Job, ABC):
         info: Info,
         **kwargs: Any,
     ):
-        """Initializes the fitting base class.
+        """Initializes the fitting class.
 
         Args:
             opt_factory (type[torch.optim.Optimizer] | None, optional): The optimizer
@@ -88,7 +101,7 @@ class _BaseFit(Job, ABC):
             )
         )
 
-        opt_factory = opt_factory or self.default_opt_factory
+        opt_factory = opt_factory or DEFAULT_OPT_FACTORY
         self.opt = opt_factory(
             param_list if opt_factory in NO_GROUPS_OPT else param_groups,
             **kwargs,
@@ -104,22 +117,33 @@ class _BaseFit(Job, ABC):
         Args:
             info (Info): The job information object.
         """
-        self.opt.step(lambda: self.closure(info))  # type: ignore
 
-        if self.update_sampler:
+        def _closure():
+            self.opt.zero_grad()  # type: ignore
+            logpdfs, _ = info.logpdfs_aux_fn(info.model.params_, info.sampler.b)
+            loss = (
+                -logpdfs.mean()
+                if info.model.pen is None
+                else -logpdfs.mean() + info.model.pen(info.model.params_)
+            )
+            loss.backward()  # type: ignore
+            return loss.detach()
+
+        self.opt.step(_closure)  # type: ignore
+
+        with torch.no_grad():
             info.sampler.logpdfs, info.sampler.aux = info.logpdfs_aux_fn(
-                info.model.params_, info.b
+                info.model.params_, info.sampler.b
             )
 
-    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def end(self, info: Info, **_kwargs: Any):
         """Ends fitting cycle.
 
         This resets the parameters gradient and sets the `fit_` model attribute to
-        the default attribute value.
+        True.
 
         Args:
             info (Info): The job information object.
-            metrics (Metrics): The job metrics object.
         """
         params_flat_tensor = info.model.params_.as_flat_tensor
         if (
@@ -132,123 +156,7 @@ class _BaseFit(Job, ABC):
         if self.fit_extra:
             info.model.params_.extra_requires_grad_(False)
 
-        info.model.fit_ = info.model.fit_ or self.is_fitting
-
-    @abstractmethod
-    def closure(self, info: Info) -> torch.Tensor:
-        """Implements closure for the optimizer.
-
-        Args:
-            info (Info): The job information object.
-
-        Returns:
-            torch.Tensor: The loss value.
-        """
-
-
-class DeterministicFit(_BaseFit):
-    """Job to fit the model without random effects.
-
-    This is a deterministic fitting job, but it does not set the `fit_` attribute as it
-    does not take random effects into account. This job helps to find probably good
-    initial values for the parameters.
-
-    It can be used with any optimizer factory built on the base class
-    `torch.optim.Optimizer`. If None, it defaults to Adam.
-
-    Use kwargs to pass defaults to the optimizer factory.
-
-    Change the value of `fit_extra` if you do not want to fit extra parameters.
-
-    It warns the user if the parameters contain infinite or NaN values.
-
-    Please not its use is discouraged when using in conjunction with a neural network.
-
-    Attributes:
-        fit_extra (bool): Whether to set the model `fit` attribute or not.
-        opt (torch.optim.Optimizer): The optimizer object.
-        is_fitting (bool): Whether or not to consider this proper fitting. Here, False.
-        update_sampler (bool): Whether or not it is necessary to update_sampler after
-            update. Here, False.
-
-    Examples:
-        >>> DeterministicFit(torch.optim.Adam, lr=0.01)
-    """
-
-    default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_DETERMINISTIC_OPT_FACTORY
-    is_fitting: bool = False
-    update_sampler: bool = False
-
-    def closure(self, info: Info) -> torch.Tensor:
-        """Closure of the loss.
-
-        Args:
-            info (Info): The job information object.
-
-        Returns:
-            torch.Tensor: The loss equal to the penalized negative log likeliihod
-            without random effects.
-        """
-        self.opt.zero_grad()  # type: ignore
-        logliks = info.logliks_fn(info.model.params_, info.b)
-        loss = (
-            -logliks.mean() + info.model.pen(info.model.params_)
-            if info.model.pen is not None
-            else -logliks.mean()
-        )
-        loss.backward()  # type: ignore
-        return loss
-
-
-class RandomFit(_BaseFit):
-    """Job to fit the model with random effects.
-
-    This is a random fitting job and it does set the `fit_` attribute when finished.
-
-    It can be used with any optimizer factory built on the base class
-    `torch.optim.Optimizer`. If None, it defaults to Adam.
-
-    Use kwargs to pass defaults to the optimizer factory.
-
-    Change the value of `fit_extra` if you do not want to fit extra parameters.
-
-    It warns the user if the parameters contain infinite or NaN values.
-
-
-    Attributes:
-        fit_extra (bool): Whether to set the model `fit` attribute or not.
-        opt (torch.optim.Optimizer): The optimizer object.
-        is_fitting (bool): Whether or not to consider this proper fitting. Here, True.
-        update_sampler (bool): Whether or not it is necessary to update_sampler after
-            update. Here, True.
-
-    Examples:
-        >>> RandomFit(torch.optim.Adam, lr=0.01)
-    """
-
-    default_opt_factory: type[torch.optim.Optimizer] = DEFAULT_RANDOM_OPT_FACTORY
-    is_fitting: bool = True
-    update_sampler: bool = True
-
-    def closure(self, info: Info) -> torch.Tensor:
-        """Closure of the loss.
-
-        Args:
-            info (Info): The job information object.
-
-        Returns:
-            torch.Tensor: The loss equal to the penalized negative log likeliihod with
-            random effects.
-        """
-        self.opt.zero_grad()  # type: ignore
-        logpdfs = info.logpdfs_fn(info.model.params_, info.b)
-        loss = (
-            -logpdfs.mean() + info.model.pen(info.model.params_)
-            if info.model.pen is not None
-            else -logpdfs.mean()
-        )
-        loss.backward()  # type: ignore
-        return loss
+        info.model.fit_ = True
 
 
 class Scheduling(Job):
@@ -303,18 +211,6 @@ class Scheduling(Job):
 
         self.sched = sched_factory(info.opt, **kwargs)
 
-    def run(self, info: Info):  # noqa: ARG002
-        """Performs a single scheduling step using the optimizer.
-
-        Args:
-            info (Info): The job information object.
-        """
+    def run(self, **_kwargs: Any):
+        """Performs a single scheduling step using the optimizer."""
         self.sched.step()
-
-    def end(self, info: Info, metrics: Metrics):
-        """Empty method.
-
-        Args:
-            info (Info): The job information object.
-            metrics (Metrics): The job metrics object.
-        """

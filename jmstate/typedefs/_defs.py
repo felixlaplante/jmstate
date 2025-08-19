@@ -228,6 +228,13 @@ class BucketData(NamedTuple):
     t1: TensorCol
 
 
+class AuxData(NamedTuple):
+    """A simple internal `NamedTuple` for auxiliary data in sampling."""
+
+    psi: Tensor3D
+    logliks: Tensor2D
+
+
 class TrajRepr(NamedTuple):
     """A simple internal `NamedTuple` for vectorizable operations."""
 
@@ -258,13 +265,9 @@ class Info(SimpleNamespace):
 
     Attributes:
         data (ModelData): Learnable model data passed to `do` method.
-        logpdfs_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log probability
-            function. Used in random optimization steps.
-        logliks_fn (Callable[[ModelParams, Tensor3D], Tensor2D]): The log likelihoods
-            function. Used in deterministic optimization steps.
-        logpdfs_aux_fn (Callable[[ModelParams, Tensor3D], tuple[Tensor2D,
-            tuple[Tensor3D, Tensor2D]]]): The lod probability function with some aux
-            containing individual effects as well as the log likelihoods.
+        logpdfs_aux_fn (Callable[[ModelParams, Tensor3D], tuple[Tensor2D, AuxData]]):
+            The log probability function with some aux containing individual effects as
+            well as the log likelihoods. Used in optimization steps.
         iteration (int): The current iteration value. -1 at start and max at end.
         max_iterations (int): The maximum number of iterations allowed.
         model (MultiStateJointModel): The multistate joint model.
@@ -277,19 +280,12 @@ class Info(SimpleNamespace):
     """
 
     data: ModelData
-    logpdfs_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
-    logliks_fn: Callable[[ModelParams, Tensor3D], Tensor2D]
-    logpdfs_aux_fn: Callable[
-        [ModelParams, Tensor3D], tuple[Tensor2D, tuple[Tensor3D, Tensor2D]]
-    ]
+    logpdfs_aux_fn: Callable[[ModelParams, Tensor3D], tuple[Tensor2D, AuxData]]
     iteration: int
     max_iterations: int
     model: MultiStateJointModel
     sampler: MetropolisHastingsSampler
     opt: torch.optim.Optimizer
-    b: Tensor3D
-    logliks: Tensor2D
-    psi: Tensor3D
 
 
 class Metrics(SimpleNamespace):
@@ -375,7 +371,7 @@ class _Base_Job:
         """
 
         def _job_factory(info: Info):
-            return cls._create_obj(*args, **{"info": info, **kwargs})
+            return cls._create_obj(*args, info=info, **kwargs)
 
         _job_factory.cls = cls  # type: ignore
 
@@ -393,14 +389,13 @@ class _Base_Job:
         return obj
 
 
-class Job(_Base_Job, ABC):
+class Job(_Base_Job):
     """This is the public base class for any Job.
 
     Please note the behaviour of this class is quite special and inherited from the
     private class `_Base_Job`. When `__new__` is called, the class will return a factory
     that is a `Callable[[Info], Job]`, and the `__init__` is not run until the main MCMC
-    loop calls it. You can pass `info` keyword to use your custom information instead of
-    the default information container, but this is very discouraged.
+    loop calls it.
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Callable[[Info], Job]:
@@ -411,12 +406,16 @@ class Job(_Base_Job, ABC):
         """
         return super().__new__(cls, *args, **kwargs)
 
-    @abstractmethod
-    def run(self, info: Info) -> bool | None:
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initializes the class.
+
+        This must accept `info` as a keyword or **kwargs.
+        """
+
+    def run(self, *args: Any, **kwargs: Any) -> bool | None:
         """Run operations.
 
-        Args:
-            info (Info): The job information object.
+        This must accept `info` as a keyword or **kwargs.
 
         Returns:
             bool | None: None or False if not requiring to stop. True to require stop.
@@ -424,13 +423,10 @@ class Job(_Base_Job, ABC):
                 will be stopped.
         """
 
-    @abstractmethod
-    def end(self, info: Info, metrics: Metrics) -> None:
+    def end(self, *args: Any, **kwargs: Any):
         """End operations.
 
-        Args:
-            info (Info): The job information object.
-            metrics (Metrics): The metrics information object.
+        This must accept `info` and `metrics` as keywords or **kwargs.
         """
 
 

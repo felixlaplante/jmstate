@@ -1,4 +1,5 @@
 import copy
+from typing import Any
 
 import torch
 from pydantic import ConfigDict, validate_call
@@ -71,14 +72,13 @@ class PredictY(Job):
         Args:
             info (Info): The job information object.
         """
-        y = info.model.model_design.regression_fn(self.u, info.psi)
+        y = info.model.model_design.regression_fn(self.u, info.sampler.aux.psi)
         self.pred_y += [y[i] for i in range(y.size(0))]
 
-    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def end(self, metrics: Metrics, **_kwargs: Any):
         """Writes the predicted longitudinal values.
 
         Args:
-            info (Info): The job nformation object.
             metrics (Metrics): The job metrics object.
         """
         metrics.pred_y = self.pred_y
@@ -152,7 +152,7 @@ class PredictSurvLogps(Job):
         sample_data = SampleData(
             info.data.x,
             info.data.trajectories,
-            info.psi,
+            info.sampler.aux.psi,
             info.data.c,
             skip_validation=True,
         )
@@ -160,11 +160,10 @@ class PredictSurvLogps(Job):
 
         self.pred_surv_logps += [surv_logps[i] for i in range(surv_logps.size(0))]
 
-    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def end(self, metrics: Metrics, **_kwargs: Any):
         """Writes the predicted log survival probabilities to metrics.
 
         Args:
-            info (Info): The job information object.
             metrics (Metrics): The job metrics object.
         """
         metrics.pred_surv_logps = self.pred_surv_logps
@@ -240,11 +239,11 @@ class PredictTrajectories(Job):
         Args:
             info (Info): The job information object.
         """
-        for i in range(info.psi.size(0)):
+        for i in range(info.sampler.aux.psi.size(0)):
             sample_data = SampleData(
                 info.data.x,
                 info.data.trajectories,
-                info.psi[i],
+                info.sampler.aux.psi[i],
                 info.data.c,
                 skip_validation=True,
             )
@@ -255,11 +254,10 @@ class PredictTrajectories(Job):
 
             self.pred_trajectories += trajectories
 
-    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def end(self, metrics: Metrics, **_kwargs: Any):
         """Writes the predicted trajectories.
 
         Args:
-            info (Info): The job information object.
             metrics (Metrics): The job metrics object.
         """
         metrics.pred_trajectories = self.pred_trajectories
@@ -327,11 +325,10 @@ class SwitchParams(Job):
                 (info.iteration // self.n_iterations_per_param) % self.n_params
             ]
 
-    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def end(self, info: Info, **_kwargs: Any):
         """Restore default parameters.
 
         Args:
             info (Info): The job information object.
-            metrics (Metrics): The job metrics object.
         """
         info.model.params_ = self.init_params

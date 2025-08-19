@@ -20,12 +20,8 @@ class LogParamsHistory(Job):
         """Creates the parameter logging job."""
         return super().__new__(cls)
 
-    def __init__(self, info: Info):  # type: ignore # noqa: ARG002
-        """Initializes the history to an empty list.
-
-        Args:
-            info (Info): The job information object.
-        """
+    def __init__(self, **_kwargs: Any):  # type: ignore
+        """Initializes the history to an empty list."""
         self.params_history = []
 
     def run(self, info: Info):
@@ -36,11 +32,10 @@ class LogParamsHistory(Job):
         """
         self.params_history.append(info.model.params_.clone().detach())
 
-    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def end(self, metrics: Metrics, **_kwargs: Any):
         """Adds by concatenation or erases the metrics history.
 
         Args:
-            info (Info): The job information object.
             metrics (Metrics): The metrics object.
         """
         if not hasattr(metrics, "params_history"):
@@ -65,12 +60,8 @@ class MCMCDiagnostics(Job):
         """Creates the MCMC diagnostics logging job."""
         return super().__new__(cls)
 
-    def __init__(self, info: Info):  # type: ignore # noqa: ARG002
-        """Initializes the diagnostics to an empty list.
-
-        Args:
-            info (Info): The job information object.
-        """
+    def __init__(self, **_kwargs: Any):  # type: ignore
+        """Initializes the diagnostics to an empty list."""
         self.mcmc_diagnostics = []
 
     def run(self, info: Info):
@@ -81,11 +72,10 @@ class MCMCDiagnostics(Job):
         """
         self.mcmc_diagnostics.append(info.sampler.diagnostics)
 
-    def end(self, info: Info, metrics: Metrics):  # noqa: ARG002
+    def end(self, metrics: Metrics, **_kwargs: Any):
         """Adds by concatenation or erases the metrics MCMC diagnostics.
 
         Args:
-            info (Info): The job information object.
             metrics (Metrics): The metrics object.
         """
         if not hasattr(metrics, "mcmc_diagnostics"):

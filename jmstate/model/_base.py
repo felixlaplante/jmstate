@@ -5,10 +5,12 @@ from typing import Any, cast
 
 import torch
 from pydantic import ConfigDict, validate_call
+from tqdm import trange
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
 from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS, DEFAULT_HYPERPARAMETERS_FIELDS
 from ..typedefs._defs import (
+    AuxData,
     Info,
     IntNonNegative,
     IntStrictlyPositive,
@@ -118,45 +120,10 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         self.metrics_ = None
         self.fit_ = False
 
-    def _logliks_fn(
-        self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
-    ) -> torch.Tensor:
-        """Gets the log likelihoods without prior.
-
-        Args:
-            params (ModelParams): The model parameters.
-            b (torch.Tensor): The random effects.
-            data (CompleteModelData): Dataset on which likelihood is computed.
-
-        Returns:
-            torch.Tensor: The log likelihoods.
-        """
-        psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
-
-        return super()._long_logliks(params, psi, data) + super()._hazard_logliks(
-            params, psi, data
-        )
-
-    def _logpdfs_fn(
-        self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
-    ) -> torch.Tensor:
-        """Gets the log pdfs with prior.
-
-        Args:
-            params (ModelParams): The model parameters.
-            b (torch.Tensor): The random effects.
-            data (CompleteModelData): Dataset on which likelihood is computed.
-
-        Returns:
-            torch.Tensor: The log pdfs.
-        """
-        return self._logliks_fn(params, b, data) + super()._prior_logliks(params, b)
-
-    @torch.no_grad()  # type: ignore
     def _logpdfs_aux_fn(
         self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        """Gets the log pdfs with aux data without gradient computation.
+    ) -> tuple[torch.Tensor, AuxData]:
+        """Gets the log pdfs with individual effects and log likelihoods.
 
         Args:
             params (ModelParams): The model parameters.
@@ -164,7 +131,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             data (CompleteModelData): Dataset on which likelihood is computed.
 
         Returns:
-           tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]: The log pdfs and aux.
+           tuple[torch.Tensor, AuxData]: The log pdfs and aux.
         """
         psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
         logliks = super()._long_logliks(params, psi, data) + super()._hazard_logliks(
@@ -172,7 +139,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         )
         logpdfs = logliks + super()._prior_logliks(params, b)
 
-        return (logpdfs, (psi, logliks))
+        return (logpdfs, AuxData(psi, logliks))
 
     def _setup_mcmc(
         self,
@@ -330,7 +297,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         max_iterations: int | None = None,
         n_chains: IntStrictlyPositive | None = None,
         warmup: IntNonNegative | None = None,
-        n_steps: IntNonNegative | None = None,
+        n_steps: IntStrictlyPositive | None = None,
         init_step_size: NumNonNegative = 0.1,
         adapt_rate: NumNonNegative = 0.1,
         accept_target: NumProbability = 0.234,
@@ -375,7 +342,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
                 to None.
             warmup (IntNonNegative | None, optional): The number of iteration steps used
             in the warmup. Defaults to None.
-            n_steps (IntNonNegative | None, optional): The steps to do at each
+            n_steps (IntStrictlyPositive | None, optional): The steps to do at each
                 iteration; this is sub-sampling. Defaults to None.
             init_step_size (NumNonNegative, optional): Initial kernel step size in
                 Metropolis Hastings. Defaults to 0.1.
@@ -430,40 +397,30 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             adapt_rate,
             accept_target,
         )
-        sampler.run(cast(int, warmup))
+        for _ in range(cast(int, warmup)):
+            sampler.step()
 
         # Initialize info
         info = Info(
             data=data,
-            logliks_fn=partial(self._logliks_fn, data=complete_data),
-            logpdfs_fn=partial(self._logpdfs_fn, data=complete_data),
             logpdfs_aux_fn=partial(self._logpdfs_aux_fn, data=complete_data),
             iteration=-1,
             model=self,
             sampler=sampler,
-            b=sampler.state,
-            logliks=sampler.aux[0],
-            psi=sampler.aux[1],
         )
 
         jobs = [job_factory(info) for job_factory in job_factories]
 
-        def _do(state: torch.Tensor, aux: tuple[torch.Tensor, ...]):
-            nonlocal info
-
-            info.b, (info.psi, info.logliks) = state, aux
-            info.iteration += 1
-
-            return run_jobs(jobs, info)
-
         # Main loop
-        sampler.loop(
-            cast(int, max_iterations),
-            cast(int, n_steps),
-            _do,
-            desc="Running joint model",
-            verbose=verbose,
-        )
+        for _ in trange(
+            cast(int, max_iterations), desc="Running joint model", disable=not verbose
+        ):
+            info.iteration += 1
+            if run_jobs(jobs, info):
+                break
+
+            for _ in range(cast(int, n_steps)):
+                sampler.step()
 
         # End things
         is_known = new_data in (self.data, None)
@@ -471,13 +428,10 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
         info.iteration += 1
         for job in jobs:
-            job.end(info, metrics)
-
-        if is_known:
-            self.metrics_ = metrics
+            job.end(info=info, metrics=metrics)
 
         self._cache.clear_cache()
-
+        self.metrics_ = metrics if is_known else self.metrics_
         match len(vars(metrics)):
             case 0:
                 return None

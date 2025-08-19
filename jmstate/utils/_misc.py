@@ -41,7 +41,7 @@ def run_jobs(jobs: list[Job], info: Info) -> bool:
     """
     stop = None
     for job in jobs:
-        result = job.run(info)
+        result = job.run(info=info)
         stop = (
             stop if result is None else (result if stop is None else (stop and result))
         )

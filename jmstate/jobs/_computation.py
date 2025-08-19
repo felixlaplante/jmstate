@@ -1,5 +1,6 @@
 import warnings
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from pydantic import ConfigDict, validate_call
@@ -71,7 +72,7 @@ class ComputeFIM(Job):
 
         def _jac_fn(params_flat_tensor: torch.Tensor, b: torch.Tensor):
             params = info.model.params_.from_flat_tensor(params_flat_tensor)
-            return info.logpdfs_fn(params, b).sum(dim=1)
+            return info.logpdfs_aux_fn(params, b)[0].sum(dim=1)
 
         self.jac_fn = torch.func.jacrev(_jac_fn)  # type: ignore
 
@@ -81,7 +82,7 @@ class ComputeFIM(Job):
         Args:
             info (Info): The job information object.
         """
-        jac = self.jac_fn(info.model.params_.as_flat_tensor, info.b).detach()
+        jac = self.jac_fn(info.model.params_.as_flat_tensor, info.sampler.b).detach()
 
         self.grad_m2.addmm_(jac.T, jac, alpha=1.0 / info.sampler.n_chains)
         if hasattr(self, "grad_m1"):
@@ -140,12 +141,8 @@ class ComputeCriteria(Job):
         """Creates the criteria computation job."""
         return super().__new__(cls)
 
-    def __init__(self, info: Info):  # type: ignore # noqa: ARG002
-        """Initializes the log likelihood to 0.
-
-        Args:
-            info (Info): The job information object.
-        """
+    def __init__(self, **_kwargs: Any):  # type: ignore
+        """Initializes the log likelihood to 0."""
         self.loglik = 0.0
 
     def run(self, info: Info):
@@ -154,7 +151,7 @@ class ComputeCriteria(Job):
         Args:
             info (Info): The job information object.
         """
-        self.loglik += info.logliks.sum().item() / info.sampler.n_chains
+        self.loglik += info.sampler.aux.logliks.sum().item() / info.sampler.n_chains
 
     def end(self, info: Info, metrics: Metrics):
         """Computes other criteria and write them into metrics.
@@ -207,7 +204,7 @@ class ComputeEBEs(Job):
         Args:
             info: The job information object.
         """
-        self.ebes = torch.zeros(info.sampler.state.shape[1:])
+        self.ebes = torch.zeros(info.sampler.b.shape[1:])
 
     def run(self, info: Info):
         """Updates the EBEs by stochastic approximation.
@@ -215,7 +212,7 @@ class ComputeEBEs(Job):
         Args:
             info (Info): The job information object.
         """
-        self.ebes += info.b.mean(dim=0)
+        self.ebes += info.sampler.b.mean(dim=0)
 
     def end(self, info: Info, metrics: Metrics):
         """Writes EBEs into metrics.

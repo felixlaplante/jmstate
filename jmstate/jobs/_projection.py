@@ -5,7 +5,7 @@ from typing import Any, Final
 import torch
 from pydantic import ConfigDict, validate_call
 
-from ..typedefs._defs import Info, Job, Metrics, NumNonNegative
+from ..typedefs._defs import Info, Job, NumNonNegative
 
 ADAM_LIKE: Final[tuple[type[torch.optim.Optimizer], ...]] = (
     torch.optim.Adam,
@@ -83,14 +83,6 @@ class _BaseL1Proximal(Job, ABC):
 
                 eff_lr = self.get_effective_lr(g, state)
                 p.data = p.sign() * torch.clamp(p.abs() - self.lmda * eff_lr, min=0.0)
-
-    def end(self, info: Info, metrics: Metrics):
-        """Empty method.
-
-        Args:
-            info (Info): The job information object.
-            metrics (Metrics): The metrics information object.
-        """
 
     @staticmethod
     @abstractmethod
