@@ -131,10 +131,9 @@ class Fit(Job):
 
         self.opt.step(_closure)  # type: ignore
 
-        with torch.no_grad():
-            info.sampler.logpdfs, info.sampler.aux = info.logpdfs_aux_fn(
-                info.model.params_, info.sampler.b
-            )
+        info.sampler.logpdfs, info.sampler.aux = info.sampler.logpdfs_aux_fn(
+            info.sampler.b
+        )
 
     def end(self, info: Info, **_kwargs: Any):
         """Ends fitting cycle.
