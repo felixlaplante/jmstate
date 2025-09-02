@@ -18,6 +18,7 @@ from typing import (
 import torch
 from pydantic import AfterValidator
 from torch import nn
+from xxhash import xxh3_64_intdigest
 
 from ._validators import is_col, is_ndim, is_non_neg, is_prob, is_strict_pos
 
@@ -356,7 +357,7 @@ class BaseHazardFn(nn.Module, ABC):
             return (ident,)
 
         params_flat = nn.utils.parameters_to_vector(self.parameters())
-        return (ident, hash(params_flat.detach().numpy().tobytes()))
+        return (ident, xxh3_64_intdigest(params_flat.detach().numpy()))  # type: ignore
 
     @abstractmethod
     def forward(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
