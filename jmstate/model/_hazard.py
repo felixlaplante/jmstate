@@ -2,6 +2,7 @@ from dataclasses import replace
 from typing import Any, Final
 
 import torch
+from xxhash import xxh3_64_intdigest
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import HazardInfo, Trajectory
@@ -69,8 +70,8 @@ class HazardMixin:
             try:
                 key = (
                     *hazard_info.base_hazard_fn.key,
-                    hash(t0.detach().numpy().tobytes()),
-                    hash(t1.detach().numpy().tobytes()),
+                    xxh3_64_intdigest(t0.detach().numpy()),  # type: ignore
+                    xxh3_64_intdigest(t1.detach().numpy()),  # type: ignore
                 )
                 base = self._cache.get_cache("base", key, _base_create)
             except RuntimeError:
@@ -113,8 +114,8 @@ class HazardMixin:
         if self.cache_limit != 0:
             try:
                 key = (
-                    hash(c.detach().numpy().tobytes()),
-                    hash(t1.detach().numpy().tobytes()),
+                    xxh3_64_intdigest(c.detach().numpy()),  # type: ignore
+                    xxh3_64_intdigest(t1.detach().numpy()),  # type: ignore
                 )
                 half = self._cache.get_cache("half", key, _half_create)
                 quad_c = self._cache.get_cache("quad_c", key, _quad_c_create)
@@ -163,8 +164,8 @@ class HazardMixin:
         if enable_cache:
             try:
                 key = (
-                    hash(t0.detach().numpy().tobytes()),
-                    hash(t1.detach().numpy().tobytes()),
+                    xxh3_64_intdigest(t0.detach().numpy()),  # type: ignore
+                    xxh3_64_intdigest(t1.detach().numpy()),  # type: ignore
                 )
                 half = self._cache.get_cache("half", key, _half_create)
                 quad_lc = self._cache.get_cache("quad_c", key, _quad_lc_create)
