@@ -122,7 +122,7 @@ class PredictSurvLogps(Job):
         Args:
             u (Tensor2D): The matrix containing prediction times.
         """
-        super().__new__(cls, u)
+        return super().__new__(cls, u)
 
     def __init__(self, u: Tensor2D, info: Info):  # type: ignore
         """Inits the predicting job.
