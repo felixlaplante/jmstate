@@ -33,7 +33,7 @@ DEFAULT_HYPERPARAMETERS: Final[dict[type[Job], dict[str, Any]]] = {
     PredictTrajectories: {
         "max_iterations": 100,
         "n_chains": 10,
-        "warmup": 300,
+        "warmup": 200,
         "n_steps": 10,
     },
     PredictY: {"max_iterations": 100, "n_chains": 10, "warmup": 200, "n_steps": 10},
