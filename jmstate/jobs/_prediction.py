@@ -136,6 +136,7 @@ class PredictSurvLogps(Job):
             ValueError: If u contains NaN values.
             ValueError: If u has incompatible shape.
         """
+        # Make sure u is contiguous
         self.u = u.to(torch.get_default_dtype()).T.contiguous().T
         self.pred_surv_logps = []
 
