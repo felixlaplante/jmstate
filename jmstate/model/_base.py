@@ -277,8 +277,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
-        # Make sure u is contiguous
-        u = u.to(torch.get_default_dtype()).T.contiguous().T
+        u = u.to(torch.get_default_dtype())
 
         if not sample_data.skip_validation:
             check_inf(((u, "u"),))
