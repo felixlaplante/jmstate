@@ -45,8 +45,7 @@ def is_non_neg(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
         x (int | float | torch.Tensor): The input number or tensor.
 
     Raises:
-        ValueError: If the tensor is not all non-negative.
-        ValueError: If the number is not non-negative.
+        ValueError: If the argument is not all non-negative.
 
     Returns:
         int | float | torch.Tensor: The output number or tensor.
@@ -63,8 +62,7 @@ def is_strict_pos(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
         x (int | float | torch.Tensor): The input number or tensor.
 
     Raises:
-        ValueError: If the tensor is not all strictly positive.
-        ValueError: If the number is not strictly positive.
+        ValueError: If the argument is not all strictly positive.
 
     Returns:
         int | float | torch.Tensor: The output number or tensor.
