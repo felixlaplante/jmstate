@@ -4,7 +4,7 @@ description = "Joint modeling with automatic differentiation"
 authors = [{ name = "Félix Laplante", email = "felixlaplante0@gmail.com" }]
 requires-python = ">=3.10"
 version = "0.1.0"
-dependencies = ["torch", "numpy", "tqdm", "pydantic"]
+dependencies = ["torch", "numpy", "tqdm", "pydantic", "xxhash"]
 
 [tool.ruff]
 lint.select = [
