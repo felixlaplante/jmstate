@@ -1,5 +1,5 @@
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 from typing import Any, cast
 
@@ -174,12 +174,12 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         )
 
     def _get_hyperparameters(
-        self, job_factories: list[Callable[[Info], Job]]
+        self, job_factories: Sequence[Callable[[Info], Job]]
     ) -> dict[str, Any] | None:
         """Gets default hyper-parameters.
 
         Args:
-            job_factories (list[Callable[[Info], Job]]): The job factories.
+            job_factories (Sequence[Callable[[Info], Job]]): The job factories.
 
         Returns:
             dict[str, Any] | None: The default hyper-parameters associated.
@@ -293,7 +293,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         self,
         new_data: ModelData | None = None,
         *,
-        job_factories: Callable[[Info], Job] | list[Callable[[Info], Job]],
+        job_factories: Callable[[Info], Job] | Sequence[Callable[[Info], Job]],
         max_iterations: int | None = None,
         n_chains: IntStrictlyPositive | None = None,
         warmup: IntNonNegative | None = None,
@@ -333,9 +333,9 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
         Args:
             new_data (ModelData): The dataset to learn from.
-            job_factories (Callable[[Info], Job] | list[Callable[[Info], Job]]): A list
-                of job factories to execute in the order in which they are given. It
-                may also be a single job factory.
+            job_factories (Callable[[Info], Job] | Sequence[Callable[[Info], Job]]): A
+                sequence of job factories to execute in the order in which they are
+                given. It may also be a single job factory.
             max_iterations (int | None, optional): Maximum number of iterations.
                 Defaults to None.
             n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
