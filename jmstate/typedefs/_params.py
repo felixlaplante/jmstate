@@ -1,13 +1,14 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import field
 from functools import cached_property
-from typing import Any, Self
+from typing import Any, Self, cast
 
 import torch
 from pydantic import ConfigDict, dataclasses, validate_call
 
 from ..utils._checks import check_inf, check_matrix_dim, check_nan
 from ..utils._linalg import cov_from_repr
+from ..utils._misc import map_fn_params
 from ._defs import MatRepr, Tensor1D
 
 
@@ -178,29 +179,6 @@ class ModelParams:
         # Get repr then covariance
         return cov_from_repr(getattr(self, matrix + "_repr"))
 
-    def _map_fn_params(self, fn: Callable[[torch.Tensor], torch.Tensor]) -> Self:
-        """Map operation and get new parameters.
-
-        Args:
-            fn (Callable[[torch.Tensor], torch.Tensor]): The operation.
-
-        Returns:
-            Self: The new parameters (it might be a view).
-        """
-
-        def _map_fn(dict: dict[tuple[Any, Any], Tensor1D]):
-            return {key: fn(val) for key, val in dict.items()}
-
-        return type(self)(
-            None if self.gamma is None else fn(self.gamma),
-            self.Q_repr._replace(flat=fn(self.Q_repr.flat)),
-            self.R_repr._replace(flat=fn(self.R_repr.flat)),
-            _map_fn(self.alphas),
-            None if self.betas is None else _map_fn(self.betas),
-            extra=self.extra,
-            skip_validation=True,
-        )
-
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def from_flat_tensor(self, flat: Tensor1D) -> Self:
         """Gets a ModelParams object based on the flat representation.
@@ -211,7 +189,7 @@ class ModelParams:
             flat (torch.Tensor): The flat representation.
 
         Returns:
-            Self: The constructed ModelParams.
+            Self The constructed ModelParams.
         """
         i = 0
 
@@ -222,20 +200,20 @@ class ModelParams:
             i += n
             return result.view(ref.shape)
 
-        return self._map_fn_params(_next)
+        return cast(Self, map_fn_params(self, _next))
 
     def detach(self) -> Self:
         """Returns a detached view of the parameters.
 
         Returns:
-            ModelParams: The detached view.
+            Self The detached view.
         """
-        return self._map_fn_params(torch.detach)
+        return cast(Self, map_fn_params(self, torch.detach))
 
     def clone(self) -> Self:
         """Returns a clone of the parameters.
 
         Returns:
-            ModelParams: The clone.
+            Self The clone.
         """
-        return self._map_fn_params(torch.clone)
+        return cast(Self, map_fn_params(self, torch.clone))

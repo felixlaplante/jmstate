@@ -1,9 +1,15 @@
-from typing import Any, cast
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
 
-from ..typedefs._defs import Info, Job
+from ..typedefs._defs import Info, Job, Tensor1D
+
+if TYPE_CHECKING:
+    from ..typedefs._params import ModelParams
 
 
 def legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -27,6 +33,34 @@ def legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:
     std_weights = torch.tensor(weights, dtype=torch.get_default_dtype())
 
     return std_nodes, std_weights
+
+
+def map_fn_params(
+    params: ModelParams, fn: Callable[[torch.Tensor], torch.Tensor]
+) -> ModelParams:
+    """Map operation and get new parameters.
+
+    Args:
+        params (ModelParams): The model parameters to use.
+        fn (Callable[[torch.Tensor], torch.Tensor]): The operation.
+
+    Returns:
+        ModelParams: The new parameters (it might be a view).
+    """
+    from ..typedefs._params import ModelParams  # noqa: PLC0415
+
+    def _map_fn(dict: dict[tuple[Any, Any], Tensor1D]):
+        return {key: fn(val) for key, val in dict.items()}
+
+    return ModelParams(
+        None if params.gamma is None else fn(params.gamma),
+        params.Q_repr._replace(flat=fn(params.Q_repr.flat)),
+        params.R_repr._replace(flat=fn(params.R_repr.flat)),
+        _map_fn(params.alphas),
+        None if params.betas is None else _map_fn(params.betas),
+        extra=params.extra,
+        skip_validation=True,
+    )
 
 
 def run_jobs(jobs: list[Job], info: Info) -> bool:
