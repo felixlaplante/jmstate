@@ -1,15 +1,11 @@
 import itertools
 from collections import defaultdict
+from collections.abc import KeysView
 from typing import Any
 
 import torch
 
-from ..typedefs._defs import (
-    BucketData,
-    HazardFns,
-    Trajectory,
-    TrajRepr,
-)
+from ..typedefs._defs import BucketData, Trajectory, TrajRepr
 
 
 def build_buckets(
@@ -54,22 +50,21 @@ def build_buckets(
 def build_traj_repr(
     trajectories: list[Trajectory],
     c: torch.Tensor,
-    surv: dict[tuple[Any, Any], HazardFns],
+    surv_keys: KeysView[tuple[Any, Any]],
 ) -> dict[tuple[Any, Any], TrajRepr]:
     """Build vectorizable bucket representation.
 
     Args:
         trajectories (list[Trajectory]): The trajectories.
         c (torch.Tensor): Censoring times.
-        surv (dict[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]) : The survival dict.
+        surv_keys (KeysView[tuple[Any, Any]]): The survival keys.
 
     Returns:
         dict[tuple[Any, Any], TrajRepr]: The vectorizable buckets representation.
     """
     # Build alternative state mapping
-    trans = set(surv.keys())
     alt_map: defaultdict[Any, list[Any]] = defaultdict(list)
-    for from_state, to_state in trans:
+    for from_state, to_state in surv_keys:
         alt_map[from_state].append(to_state)
 
     # Initialize buckets

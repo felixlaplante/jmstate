@@ -227,7 +227,9 @@ class CompleteModelData(ModelData):
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
-        self.buckets = build_traj_repr(self.trajectories, self.c, model_design.surv)
+        self.buckets = build_traj_repr(
+            self.trajectories, self.c, model_design.surv.keys()
+        )
 
         if (
             params.R_repr.method == "full"

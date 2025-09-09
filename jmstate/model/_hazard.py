@@ -237,7 +237,9 @@ class HazardMixin:
 
         # Get initial buckets from last states
         last_states = [trajectory[-1:] for trajectory in sample_data.trajectories]
-        current_buckets = build_traj_repr(last_states, c_max, self.model_design.surv)
+        current_buckets = build_traj_repr(
+            last_states, c_max, self.model_design.surv.keys()
+        )
 
         if not current_buckets:
             return False
@@ -333,7 +335,7 @@ class HazardMixin:
         buckets = build_traj_repr(
             last_states,
             torch.full((sample_data.size,), torch.inf),
-            self.model_design.surv,
+            self.model_design.surv.keys(),
         )
 
         nlogps = torch.zeros(*sample_data.psi.shape[:-1], u.size(1))
