@@ -25,16 +25,18 @@ def build_buckets(
         dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).
     """
     # Process each individual trajectory
-    buckets: defaultdict[tuple[Any, Any], list[list[Any]]] = defaultdict(
-        lambda: [[], [], []]
+    accumulator: defaultdict[tuple[Any, Any], list[tuple[int, float, float]]] = (
+        defaultdict(lambda: [])
     )
 
     for i, trajectory in enumerate(trajectories):
         for (t0, s0), (t1, s1) in itertools.pairwise(trajectory):
             key = (s0, s1)
-            buckets[key][0].append(i)
-            buckets[key][1].append(t0)
-            buckets[key][2].append(t1)
+            accumulator[key].append((i, t0, t1))
+
+    buckets = {
+        key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
+    }
 
     return {
         key: BucketData(
@@ -43,7 +45,6 @@ def build_buckets(
             torch.tensor(vals[2]).view(-1, 1),
         )
         for key, vals in buckets.items()
-        if vals != []
     }
 
 
@@ -68,8 +69,8 @@ def build_traj_repr(
         alt_map[from_state].append(to_state)
 
     # Initialize buckets
-    buckets: dict[tuple[Any, Any], list[list[Any]]] = defaultdict(
-        lambda: [[], [], [], []]
+    accumulator: dict[tuple[Any, Any], list[tuple[int, float, float, bool]]] = (
+        defaultdict(lambda: [])
     )
 
     # Process each individual trajectory
@@ -83,10 +84,11 @@ def build_traj_repr(
 
             for alt_state in alt_map[s0]:
                 key = (s0, alt_state)
-                buckets[key][0].append(i)
-                buckets[key][1].append(t0)
-                buckets[key][2].append(t1)
-                buckets[key][3].append(alt_state == s1)
+                accumulator[key].append((i, t0, t1, alt_state == s1))
+
+    buckets = {
+        key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
+    }
 
     return {
         key: TrajRepr(
@@ -96,5 +98,4 @@ def build_traj_repr(
             torch.tensor(vals[3], dtype=torch.bool),
         )
         for key, vals in buckets.items()
-        if vals != []
     }
