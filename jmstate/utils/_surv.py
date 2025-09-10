@@ -50,14 +50,14 @@ def build_buckets(
 @lru_cache
 def _build_alt_map(
     surv_keys: tuple[tuple[Any, Any], ...],
-) -> dict[Any, list[tuple[Any, Any]]]:
+) -> defaultdict[Any, list[tuple[Any, Any]]]:
     """Builds alternative state mapping.
 
     Args:
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
     Returns:
-        dict[Any, list[tuple[Any, Any]]]: The alternative state mapping.
+        defaultdict[Any, list[tuple[Any, Any]]]: The alternative state mapping.
     """
     alt_map: dict[Any, list[tuple[Any, Any]]] = defaultdict(list)
     for s0, s1 in surv_keys:
