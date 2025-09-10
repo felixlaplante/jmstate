@@ -75,9 +75,6 @@ def build_traj_repr(
     # Process each individual trajectory
     for i, trajectory in enumerate(trajectories):
         for (t0, s0), (t1, s1) in itertools.pairwise(trajectory):
-            if t0 >= t1:
-                continue
-
             for key in alt_map[s0]:
                 accumulator[key].append((i, t0, t1, key[1] == s1))
 
