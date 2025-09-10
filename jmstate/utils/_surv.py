@@ -26,13 +26,12 @@ def build_buckets(
     """
     # Process each individual trajectory
     accumulator: defaultdict[tuple[Any, Any], list[tuple[int, float, float]]] = (
-        defaultdict(lambda: [])
+        defaultdict(list)
     )
 
     for i, trajectory in enumerate(trajectories):
         for (t0, s0), (t1, s1) in itertools.pairwise(trajectory):
-            key = (s0, s1)
-            accumulator[key].append((i, t0, t1))
+            accumulator[(s0, s1)].append((i, t0, t1))
 
     buckets = {
         key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
@@ -64,27 +63,31 @@ def build_traj_repr(
         dict[tuple[Any, Any], TrajRepr]: The vectorizable buckets representation.
     """
     # Build alternative state mapping
-    alt_map: defaultdict[Any, list[Any]] = defaultdict(list)
-    for from_state, to_state in surv_keys:
-        alt_map[from_state].append(to_state)
+    alt_map: dict[Any, list[tuple[Any, Any]]] = defaultdict(list)
+    for s0, s1 in surv_keys:
+        alt_map[s0].append((s0, s1))
 
     # Initialize buckets
     accumulator: dict[tuple[Any, Any], list[tuple[int, float, float, bool]]] = (
-        defaultdict(lambda: [])
+        defaultdict(list)
     )
 
     # Process each individual trajectory
     for i, trajectory in enumerate(trajectories):
-        # Add censoring
-        ext_trajectory = [*trajectory, (c[i].item(), None)]
-
-        for (t0, s0), (t1, s1) in itertools.pairwise(ext_trajectory):
+        for (t0, s0), (t1, s1) in itertools.pairwise(trajectory):
             if t0 >= t1:
                 continue
 
-            for alt_state in alt_map[s0]:
-                key = (s0, alt_state)
-                accumulator[key].append((i, t0, t1, alt_state == s1))
+            for key in alt_map[s0]:
+                accumulator[key].append((i, t0, t1, key[1] == s1))
+
+        (last_t, last_s), c_i = trajectory[-1], c[i].item()
+
+        if last_t >= c_i:
+            continue
+
+        for key in alt_map[last_s]:
+            accumulator[key].append((i, last_t, c_i, False))
 
     buckets = {
         key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
