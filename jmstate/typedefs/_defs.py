@@ -236,15 +236,6 @@ class AuxData(NamedTuple):
     logliks: Tensor2D
 
 
-class TrajRepr(NamedTuple):
-    """A simple internal `NamedTuple` for vectorizable operations."""
-
-    idxs: Tensor1D
-    t0: TensorCol
-    t1: TensorCol
-    obs: Tensor1D
-
-
 class HazardInfo(NamedTuple):
     """A simple internal `NamedTuple` required for hazard computation."""
 

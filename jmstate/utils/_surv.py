@@ -5,7 +5,7 @@ from typing import Any
 
 import torch
 
-from ..typedefs._defs import BucketData, Trajectory, TrajRepr
+from ..typedefs._defs import BucketData, Trajectory
 
 
 def build_buckets(
@@ -66,11 +66,11 @@ def _build_alt_map(
     return alt_map
 
 
-def build_traj_repr(
+def build_all_buckets(
     trajectories: list[Trajectory],
     c: torch.Tensor,
     surv_keys: tuple[tuple[Any, Any], ...],
-) -> dict[tuple[Any, Any], TrajRepr]:
+) -> dict[tuple[Any, Any], tuple[torch.Tensor, ...]]:
     """Build vectorizable bucket representation.
 
     Args:
@@ -79,7 +79,8 @@ def build_traj_repr(
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
     Returns:
-        dict[tuple[Any, Any], TrajRepr]: The vectorizable buckets representation.
+        dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The vectorizable buckets
+            representation.
     """
     alt_map = _build_alt_map(surv_keys)
 
@@ -107,11 +108,58 @@ def build_traj_repr(
     }
 
     return {
-        key: TrajRepr(
+        key: (
             torch.tensor(vals[0], dtype=torch.int64),
             torch.tensor(vals[1]).view(-1, 1),
             torch.tensor(vals[2]).view(-1, 1),
             torch.tensor(vals[3], dtype=torch.bool),
+        )
+        for key, vals in buckets.items()
+    }
+
+
+def build_possible_buckets(
+    trajectories: list[Trajectory],
+    c: torch.Tensor,
+    surv_keys: tuple[tuple[Any, Any], ...],
+) -> dict[tuple[Any, Any], tuple[torch.Tensor, ...]]:
+    """Build possible bucket representation.
+
+    Args:
+        trajectories (list[Trajectory]): The trajectories.
+        c (torch.Tensor): Censoring times.
+        surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
+
+    Returns:
+        dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The possible buckets
+            representation.
+    """
+    alt_map = _build_alt_map(surv_keys)
+
+    # Initialize buckets
+    accumulator: dict[tuple[Any, Any], list[tuple[int, float, float]]] = defaultdict(
+        list
+    )
+
+    # Process each individual trajectory
+    for i, trajectory in enumerate(trajectories):
+        (last_t, last_s), c_i = trajectory[-1], c[i].item()
+
+        if last_t >= c_i:
+            continue
+
+        for key in alt_map[last_s]:
+            accumulator[key].append((i, last_t, c_i))
+
+    buckets = {
+        key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
+    }
+
+    return {
+        key: (
+            torch.tensor(vals[0], dtype=torch.int64),
+            torch.tensor(vals[1]).view(-1, 1),
+            torch.tensor(vals[2]).view(-1, 1),
         )
         for key, vals in buckets.items()
     }

@@ -8,7 +8,7 @@ from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._misc import legendre_quad
-from ..utils._surv import build_traj_repr
+from ..utils._surv import build_possible_buckets
 from ._cache import Cache
 
 # Constants
@@ -235,10 +235,9 @@ class HazardMixin:
         psi = sample_data.psi
         c = sample_data.c
 
-        # Get initial buckets from last states
-        last_states = [trajectory[-1:] for trajectory in sample_data.trajectories]
-        current_buckets = build_traj_repr(
-            last_states, c_max, tuple(self.model_design.surv.keys())
+        # Get buckets from last states
+        current_buckets = build_possible_buckets(
+            sample_data.trajectories, c_max, tuple(self.model_design.surv.keys())
         )
 
         if not current_buckets:
@@ -249,7 +248,7 @@ class HazardMixin:
         t_candidates = torch.full((sample_data.size, n_transitions), torch.inf)
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
-            idxs, t0, t1, _ = bucket
+            idxs, t0, t1 = bucket
 
             # Create info
             hazard_info = HazardInfo(
@@ -272,7 +271,7 @@ class HazardMixin:
 
         # Find earliest transition
         min_times, argmin_idxs = torch.min(t_candidates, dim=1)
-        bucket_keys = tuple(current_buckets.keys())
+        bucket_keys = list(current_buckets.keys())
 
         for i, (time, arg_idx) in enumerate(zip(min_times, argmin_idxs, strict=False)):
             if torch.isfinite(time):
@@ -327,13 +326,12 @@ class HazardMixin:
         """
         # Unpack data
         x = sample_data.x
-        trajectories = sample_data.trajectories
         psi = sample_data.psi
         c = sample_data.c
 
-        last_states = [trajectory[-1:] for trajectory in trajectories]
-        buckets = build_traj_repr(
-            last_states,
+        # Get buckets from last states
+        buckets = build_possible_buckets(
+            sample_data.trajectories,
             torch.full((sample_data.size,), torch.inf),
             tuple(self.model_design.surv.keys()),
         )
@@ -343,7 +341,7 @@ class HazardMixin:
         # Compute the log probabilities summing over transitions
         for key, bucket in buckets.items():
             for k in range(u.size(1)):
-                idxs, t0, _, _ = bucket
+                idxs, t0, _ = bucket
 
                 # Create info
                 hazard_info = HazardInfo(

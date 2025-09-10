@@ -14,7 +14,7 @@ from ..utils._checks import (
     check_trajectory_empty,
     check_trajectory_sorting,
 )
-from ..utils._surv import build_traj_repr
+from ..utils._surv import build_all_buckets
 from ._defs import (
     HazardFns,
     IndividualEffectsFn,
@@ -24,7 +24,6 @@ from ._defs import (
     Tensor3D,
     TensorCol,
     Trajectory,
-    TrajRepr,
 )
 from ._params import ModelParams
 
@@ -207,7 +206,7 @@ class CompleteModelData(ModelData):
     n_valid: Tensor2D = field(init=False)
     valid_t: Tensor1D | Tensor2D = field(init=False)
     valid_y: Tensor2D | Tensor3D = field(init=False)
-    buckets: dict[tuple[Any, Any], TrajRepr] = field(init=False)
+    buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
 
     def prepare(self, model_design: ModelDesign, params: ModelParams):
         """Sets the missing representation.
@@ -227,7 +226,7 @@ class CompleteModelData(ModelData):
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
-        self.buckets = build_traj_repr(
+        self.buckets = build_all_buckets(
             self.trajectories, self.c, tuple(model_design.surv.keys())
         )
 
