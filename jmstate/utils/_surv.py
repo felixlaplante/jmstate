@@ -59,7 +59,7 @@ def _build_alt_map(
     Returns:
         defaultdict[Any, list[tuple[Any, Any]]]: The alternative state mapping.
     """
-    alt_map: dict[Any, list[tuple[Any, Any]]] = defaultdict(list)
+    alt_map: defaultdict[Any, list[tuple[Any, Any]]] = defaultdict(list)
     for s0, s1 in surv_keys:
         alt_map[s0].append((s0, s1))
 
