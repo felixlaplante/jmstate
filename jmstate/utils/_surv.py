@@ -1,4 +1,5 @@
 import itertools
+from array import array
 from collections import defaultdict
 from functools import lru_cache
 from typing import Any
@@ -25,23 +26,22 @@ def build_buckets(
         dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).
     """
     # Process each individual trajectory
-    accumulator: defaultdict[tuple[Any, Any], list[tuple[int, float, float]]] = (
-        defaultdict(list)
-    )
+    buckets: defaultdict[
+        tuple[Any, Any], tuple[array[int], array[float], array[float]]
+    ] = defaultdict(lambda: (array("q"), array("d"), array("d")))
 
     for i, trajectory in enumerate(trajectories):
         for (t0, s0), (t1, s1) in itertools.pairwise(trajectory):
-            accumulator[(s0, s1)].append((i, t0, t1))
+            buckets[(s0, s1)][0].append(i)
+            buckets[(s0, s1)][1].append(t0)
+            buckets[(s0, s1)][2].append(t1)
 
-    buckets = {
-        key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
-    }
-
+    dtype = torch.get_default_dtype()
     return {
         key: BucketData(
-            torch.tensor(vals[0], dtype=torch.int64),
-            torch.tensor(vals[1]).view(-1, 1),
-            torch.tensor(vals[2]).view(-1, 1),
+            torch.frombuffer(vals[0], dtype=torch.int64),
+            torch.frombuffer(vals[1], dtype=torch.float64).to(dtype).view(-1, 1),
+            torch.frombuffer(vals[2], dtype=torch.float64).to(dtype).view(-1, 1),
         )
         for key, vals in buckets.items()
     }
@@ -85,15 +85,18 @@ def build_all_buckets(
     alt_map = _build_alt_map(surv_keys)
 
     # Initialize buckets
-    accumulator: defaultdict[tuple[Any, Any], list[tuple[int, float, float, bool]]] = (
-        defaultdict(list)
-    )
+    buckets: defaultdict[
+        tuple[Any, Any], tuple[array[int], array[float], array[float], array[bool]]
+    ] = defaultdict(lambda: (array("q"), array("d"), array("d"), array("b")))
 
     # Process each individual trajectory
     for i, trajectory in enumerate(trajectories):
         for (t0, s0), (t1, s1) in itertools.pairwise(trajectory):
             for key in alt_map[s0]:
-                accumulator[key].append((i, t0, t1, key[1] == s1))
+                buckets[key][0].append(i)
+                buckets[key][1].append(t0)
+                buckets[key][2].append(t1)
+                buckets[key][3].append(key[1] == s1)
 
         (last_t, last_s), c_i = trajectory[-1], c[i].item()
 
@@ -101,18 +104,18 @@ def build_all_buckets(
             continue
 
         for key in alt_map[last_s]:
-            accumulator[key].append((i, last_t, c_i, False))
+            buckets[key][0].append(i)
+            buckets[key][1].append(last_t)
+            buckets[key][2].append(c_i)
+            buckets[key][3].append(False)
 
-    buckets = {
-        key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
-    }
-
+    dtype = torch.get_default_dtype()
     return {
         key: (
-            torch.tensor(vals[0], dtype=torch.int64),
-            torch.tensor(vals[1]).view(-1, 1),
-            torch.tensor(vals[2]).view(-1, 1),
-            torch.tensor(vals[3], dtype=torch.bool),
+            torch.frombuffer(vals[0], dtype=torch.int64),
+            torch.frombuffer(vals[1], dtype=torch.float64).to(dtype).view(-1, 1),
+            torch.frombuffer(vals[2], dtype=torch.float64).to(dtype).view(-1, 1),
+            torch.frombuffer(vals[3], dtype=torch.bool),
         )
         for key, vals in buckets.items()
     }
@@ -137,29 +140,27 @@ def build_possible_buckets(
     alt_map = _build_alt_map(surv_keys)
 
     # Initialize buckets
-    accumulator: defaultdict[tuple[Any, Any], list[tuple[int, float, float]]] = (
-        defaultdict(list)
+    buckets: defaultdict[tuple[Any, Any], tuple[array[int], array[float]]] = (
+        defaultdict(lambda: (array("q"), array("d")))
     )
 
     # Process each individual trajectory
     for i, trajectory in enumerate(trajectories):
-        (last_t, last_s), c_i = trajectory[-1], c[i].item()
+        last_t, last_s = trajectory[-1]
 
-        if last_t >= c_i:
+        if last_t >= c[i].item():
             continue
 
         for key in alt_map[last_s]:
-            accumulator[key].append((i, last_t, c_i))
+            buckets[key][0].append(i)
+            buckets[key][1].append(last_t)
 
-    buckets = {
-        key: tuple(zip(*vals, strict=False)) for key, vals in accumulator.items()
-    }
-
+    dtype = torch.get_default_dtype()
     return {
         key: (
-            torch.tensor(vals[0], dtype=torch.int64),
-            torch.tensor(vals[1]).view(-1, 1),
-            torch.tensor(vals[2]).view(-1, 1),
+            idxs := torch.frombuffer(vals[0], dtype=torch.int64),
+            torch.frombuffer(vals[1], dtype=torch.float64).to(dtype).view(-1, 1),
+            c.index_select(0, idxs),
         )
         for key, vals in buckets.items()
     }
