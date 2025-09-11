@@ -85,7 +85,7 @@ def build_all_buckets(
     alt_map = _build_alt_map(surv_keys)
 
     # Initialize buckets
-    accumulator: dict[tuple[Any, Any], list[tuple[int, float, float, bool]]] = (
+    accumulator: defaultdict[tuple[Any, Any], list[tuple[int, float, float, bool]]] = (
         defaultdict(list)
     )
 
@@ -137,8 +137,8 @@ def build_possible_buckets(
     alt_map = _build_alt_map(surv_keys)
 
     # Initialize buckets
-    accumulator: dict[tuple[Any, Any], list[tuple[int, float, float]]] = defaultdict(
-        list
+    accumulator: defaultdict[tuple[Any, Any], list[tuple[int, float, float]]] = (
+        defaultdict(list)
     )
 
     # Process each individual trajectory
