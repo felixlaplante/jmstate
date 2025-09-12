@@ -16,6 +16,7 @@ from ..typedefs._defs import (
     Tensor1DPositive,
 )
 from ..utils._checks import check_consistent_size
+from ..utils._dtype import get_dtype
 
 # Constants
 NOT_CONVERGED_WARNING = (
@@ -244,8 +245,9 @@ class GradStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
-        self.m = torch.zeros(d)
-        self.v = torch.zeros(d)
+        dtype = get_dtype()
+        self.m = torch.zeros(d, dtype=dtype)
+        self.v = torch.zeros(d, dtype=dtype)
 
     def quantity(self, info: Info) -> torch.Tensor:
         """Gets the gradients.
@@ -312,8 +314,9 @@ class ParamStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
-        self.m = torch.zeros(d)
-        self.v = torch.zeros(d)
+        dtype = get_dtype()
+        self.m = torch.zeros(d, dtype=dtype)
+        self.v = torch.zeros(d, dtype=dtype)
 
         self.prev_params = info.model.params_.as_flat_tensor
 
@@ -377,8 +380,9 @@ class ValueStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (1, None, "1")))
 
-        self.m = torch.zeros(1)
-        self.v = torch.zeros(1)
+        dtype = get_dtype()
+        self.m = torch.zeros(1, dtype=dtype)
+        self.v = torch.zeros(1, dtype=dtype)
 
         self.prev_loglik = info.sampler.aux.logliks.mean()
 

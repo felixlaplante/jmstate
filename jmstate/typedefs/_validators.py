@@ -3,6 +3,25 @@ from collections.abc import Callable
 import torch
 
 
+def is_valid_dtype(dtype: torch.dtype) -> torch.dtype:
+    """Checks if the dtype is valid for PyTorch.
+
+    Args:
+        dtype (torch.dtype): The dtype to check.
+
+    Raises:
+        ValueError: If the dtype is not float32 or float64.
+
+    Returns:
+        torch.dtype: The dtype.
+    """
+    if dtype not in (torch.float32, torch.float64):
+        raise ValueError(
+            f"expected dtype in {(torch.float32, torch.float64)}, got {dtype}"
+        )
+    return dtype
+
+
 def is_ndim(ndim: int) -> Callable[[torch.Tensor], torch.Tensor]:
     """Checks the number of dimension of a tensor.
 
@@ -67,7 +86,9 @@ def is_strict_pos(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
     Returns:
         int | float | torch.Tensor: The output number or tensor.
     """
-    dtype = torch.get_default_dtype()
+    from jmstate.utils._dtype import get_dtype  # noqa: PLC0415
+
+    dtype = get_dtype()
     x_ = torch.as_tensor(x, dtype=dtype)
     if (x_ <= 0).any():
         raise ValueError(
@@ -88,7 +109,9 @@ def is_prob(x: int | float) -> int | float:
     Returns:
         int | float: The output number.
     """
-    dtype = torch.get_default_dtype()
+    from jmstate.utils._dtype import get_dtype  # noqa: PLC0415
+
+    dtype = get_dtype()
     x_ = torch.as_tensor(x, dtype=dtype)
     if not 0 < x_ < 1:
         raise ValueError(

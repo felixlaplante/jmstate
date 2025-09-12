@@ -7,6 +7,7 @@ from typing import Any
 import torch
 
 from ..typedefs._defs import BucketData, Trajectory
+from ..utils._dtype import get_dtype
 
 
 def build_buckets(
@@ -25,10 +26,13 @@ def build_buckets(
     Returns:
         dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).
     """
+    dtype = get_dtype()
+    typecode = "f" if dtype == torch.float32 else "d"
+
     # Process each individual trajectory
     buckets: defaultdict[
         tuple[Any, Any], tuple[array[int], array[float], array[float]]
-    ] = defaultdict(lambda: (array("q"), array("d"), array("d")))
+    ] = defaultdict(lambda: (array("q"), array(typecode), array(typecode)))
 
     for i, trajectory in enumerate(trajectories):
         for (t0, s0), (t1, s1) in itertools.pairwise(trajectory):
@@ -36,12 +40,11 @@ def build_buckets(
             buckets[(s0, s1)][1].append(t0)
             buckets[(s0, s1)][2].append(t1)
 
-    dtype = torch.get_default_dtype()
     return {
         key: BucketData(
             torch.frombuffer(vals[0], dtype=torch.int64),
-            torch.frombuffer(vals[1], dtype=torch.float64).to(dtype).view(-1, 1),
-            torch.frombuffer(vals[2], dtype=torch.float64).to(dtype).view(-1, 1),
+            torch.frombuffer(vals[1], dtype=dtype).view(-1, 1),
+            torch.frombuffer(vals[2], dtype=dtype).view(-1, 1),
         )
         for key, vals in buckets.items()
     }
@@ -83,11 +86,13 @@ def build_all_buckets(
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
+    dtype = get_dtype()
+    typecode = "f" if dtype == torch.float32 else "d"
 
     # Initialize buckets
     buckets: defaultdict[
         tuple[Any, Any], tuple[array[int], array[float], array[float], array[bool]]
-    ] = defaultdict(lambda: (array("q"), array("d"), array("d"), array("b")))
+    ] = defaultdict(lambda: (array("q"), array(typecode), array(typecode), array("b")))
 
     # Process each individual trajectory
     for i, trajectory in enumerate(trajectories):
@@ -109,12 +114,11 @@ def build_all_buckets(
             buckets[key][2].append(c_i)
             buckets[key][3].append(False)
 
-    dtype = torch.get_default_dtype()
     return {
         key: (
             torch.frombuffer(vals[0], dtype=torch.int64),
-            torch.frombuffer(vals[1], dtype=torch.float64).to(dtype).view(-1, 1),
-            torch.frombuffer(vals[2], dtype=torch.float64).to(dtype).view(-1, 1),
+            torch.frombuffer(vals[1], dtype=dtype).view(-1, 1),
+            torch.frombuffer(vals[2], dtype=dtype).view(-1, 1),
             torch.frombuffer(vals[3], dtype=torch.bool),
         )
         for key, vals in buckets.items()
@@ -138,10 +142,12 @@ def build_possible_buckets(
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
+    dtype = get_dtype()
+    typecode = "f" if dtype == torch.float32 else "d"
 
     # Initialize buckets
     buckets: defaultdict[tuple[Any, Any], tuple[array[int], array[float]]] = (
-        defaultdict(lambda: (array("q"), array("d")))
+        defaultdict(lambda: (array("q"), array(typecode)))
     )
 
     # Process each individual trajectory
@@ -155,11 +161,10 @@ def build_possible_buckets(
             buckets[key][0].append(i)
             buckets[key][1].append(last_t)
 
-    dtype = torch.get_default_dtype()
     return {
         key: (
             idxs := torch.frombuffer(vals[0], dtype=torch.int64),
-            torch.frombuffer(vals[1], dtype=torch.float64).to(dtype).view(-1, 1),
+            torch.frombuffer(vals[1], dtype=dtype).view(-1, 1),
             c.index_select(0, idxs),
         )
         for key, vals in buckets.items()

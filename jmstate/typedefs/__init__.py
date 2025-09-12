@@ -1,4 +1,6 @@
-from ._data import ModelData, ModelDesign, SampleData  # noqa: D104
+"""Type definitions for the jmstate package."""
+
+from ._data import ModelData, ModelDesign, SampleData
 from ._defs import (
     BaseHazardFn,
     BucketData,

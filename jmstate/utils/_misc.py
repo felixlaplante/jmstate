@@ -7,6 +7,7 @@ import numpy as np
 import torch
 
 from ..typedefs._defs import Info, Job, Tensor1D
+from ..utils._dtype import get_dtype
 
 if TYPE_CHECKING:
     from ..typedefs._params import ModelParams
@@ -29,8 +30,9 @@ def legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:
         np.polynomial.legendre.leggauss(n_quad),  # type: ignore
     )
 
-    std_nodes = torch.tensor(nodes, dtype=torch.get_default_dtype()).unsqueeze(0)
-    std_weights = torch.tensor(weights, dtype=torch.get_default_dtype())
+    dtype = get_dtype()
+    std_nodes = torch.tensor(nodes, dtype=dtype).unsqueeze(0)
+    std_weights = torch.tensor(weights, dtype=dtype)
 
     return std_nodes, std_weights
 

@@ -4,6 +4,7 @@ from typing import Any, cast
 import torch
 
 from ..typedefs._defs import AuxData
+from ..utils._dtype import get_dtype
 
 
 class MetropolisHastingsSampler:
@@ -40,6 +41,8 @@ class MetropolisHastingsSampler:
             adapt_rate (int | float): Adaptation rate for the step_size.
             target_accept_rate (int | float): Mean acceptance target.
         """
+        dtype = get_dtype()
+
         self.logpdfs_aux_fn = cast(
             Callable[[torch.Tensor], tuple[torch.Tensor, AuxData]],
             torch.no_grad()(logpdfs_aux_fn),
@@ -56,11 +59,13 @@ class MetropolisHastingsSampler:
 
         # Proposal noise initialization
         self._noise = torch.empty_like(self.b)
-        self.step_sizes = torch.full((1, self.b.size(-2)), init_step_size)
+        self.step_sizes = torch.full(
+            (1, self.b.size(-2)), init_step_size, dtype=dtype
+        )
 
         # Statistics tracking
         self.n_samples = torch.tensor(0, dtype=torch.int64)
-        self.n_accepted = torch.zeros(self.b.size(-2))
+        self.n_accepted = torch.zeros(self.b.size(-2), dtype=dtype)
 
     def step(self):
         """Performs a single kernel step."""
@@ -88,7 +93,7 @@ class MetropolisHastingsSampler:
 
         # Update statistics
         self.n_samples += 1
-        mean_accept_mask = accept_mask.to(torch.get_default_dtype()).mean(dim=0)
+        mean_accept_mask = accept_mask.to(get_dtype()).mean(dim=0)
         self.n_accepted += mean_accept_mask
 
         # Update step sizes

@@ -6,6 +6,7 @@ import torch
 from pydantic import ConfigDict, validate_call
 
 from ..typedefs._defs import Info, Job, Metrics
+from ..utils._dtype import get_dtype
 
 
 class ComputeFIM(Job):
@@ -65,10 +66,12 @@ class ComputeFIM(Job):
                 stacklevel=2,
             )
 
+        dtype = get_dtype()
+
         d = info.model.params_.numel
-        self.grad_m2 = torch.zeros(d, d)
+        self.grad_m2 = torch.zeros(d, d, dtype=dtype)
         if bias:
-            self.grad_m1 = torch.zeros(d)
+            self.grad_m1 = torch.zeros(d, dtype=dtype)
 
         def _jac_fn(params_flat_tensor: torch.Tensor, b: torch.Tensor):
             params = info.model.params_.from_flat_tensor(params_flat_tensor)
@@ -204,7 +207,7 @@ class ComputeEBEs(Job):
         Args:
             info: The job information object.
         """
-        self.ebes = torch.zeros(info.sampler.b.shape[1:])
+        self.ebes = torch.zeros(info.sampler.b.shape[1:], dtype=get_dtype())
 
     def run(self, info: Info):
         """Updates the EBEs by stochastic approximation.

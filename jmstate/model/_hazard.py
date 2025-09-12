@@ -7,6 +7,7 @@ from xxhash import xxh3_64_intdigest
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
+from ..utils._dtype import get_dtype
 from ..utils._misc import legendre_quad
 from ..utils._surv import build_possible_buckets
 from ._cache import Cache
@@ -245,7 +246,9 @@ class HazardMixin:
 
         # Initialize candidate transition times
         n_transitions = len(current_buckets)
-        t_candidates = torch.full((sample_data.size, n_transitions), torch.inf)
+        t_candidates = torch.full(
+            (sample_data.size, n_transitions), torch.inf, dtype=get_dtype()
+        )
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
             idxs, t0, t1 = bucket
@@ -330,13 +333,14 @@ class HazardMixin:
         c = sample_data.c
 
         # Get buckets from last states
+        dtype = get_dtype()
         buckets = build_possible_buckets(
             sample_data.trajectories,
-            torch.full((sample_data.size,), torch.inf),
+            torch.full((sample_data.size,), torch.inf, dtype=dtype),
             tuple(self.model_design.surv.keys()),
         )
 
-        nlogps = torch.zeros(*sample_data.psi.shape[:-1], u.size(1))
+        nlogps = torch.zeros(*sample_data.psi.shape[:-1], u.size(1), dtype=dtype)
 
         # Compute the log probabilities summing over transitions
         for key, bucket in buckets.items():
@@ -375,7 +379,7 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log likelihoods.
         """
-        logliks = torch.zeros(psi.shape[:-1])
+        logliks = torch.zeros(psi.shape[:-1], dtype=get_dtype())
 
         for key, bucket in data.buckets.items():
             idxs, t0, t1, obs = bucket

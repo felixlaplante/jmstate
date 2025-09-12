@@ -1,3 +1,5 @@
-from ._base import MultiStateJointModel  # noqa: D104
+"""Multistate joint modeling package."""
+
+from ._base import MultiStateJointModel
 
 __all__ = ["MultiStateJointModel"]

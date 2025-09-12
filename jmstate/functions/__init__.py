@@ -1,4 +1,6 @@
-from ._base_hazards import (  # noqa: D104
+"""Functions for the jmstate package."""
+
+from ._base_hazards import (
     Exponential,
     Gompertz,
     LogNormal,

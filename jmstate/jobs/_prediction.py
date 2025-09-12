@@ -16,6 +16,7 @@ from ..typedefs._defs import (
 )
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_consistent_size, check_inf, check_nan
+from ..utils._dtype import get_dtype
 
 
 class PredictY(Job):
@@ -59,7 +60,7 @@ class PredictY(Job):
             ValueError: If u contains NaN values.
             ValueError: If u has incompatible shape.
         """
-        self.u = u.to(torch.get_default_dtype())
+        self.u = u.to(get_dtype())
         self.pred_y = []
 
         check_inf(((self.u, "u"),))
@@ -137,7 +138,7 @@ class PredictSurvLogps(Job):
             ValueError: If u has incompatible shape.
         """
         # Make sure u is contiguous
-        self.u = u.to(torch.get_default_dtype()).T.contiguous().T
+        self.u = u.to(get_dtype()).T.contiguous().T
         self.pred_surv_logps = []
 
         check_inf(((self.u, "u"),))
@@ -224,7 +225,7 @@ class PredictTrajectories(Job):
             ValueError: If c_max contains NaN values.
             ValueError: If c_max has incompatible shape.
         """
-        self.c_max = c_max.to(torch.get_default_dtype())
+        self.c_max = c_max.to(get_dtype())
         self.max_length = max_length
         self.pred_trajectories = []
 

@@ -7,6 +7,7 @@ import torch
 from pydantic import ConfigDict, dataclasses, validate_call
 
 from ..utils._checks import check_inf, check_matrix_dim, check_nan
+from ..utils._dtype import get_dtype
 from ..utils._linalg import cov_from_repr
 from ..utils._misc import map_fn_params
 from ._defs import MatRepr, Tensor1D
@@ -76,11 +77,13 @@ class ModelParams:
         if self.skip_validation:
             return
 
+        dtype = get_dtype()
+
         for t in self.as_list:
-            t.data = t.to(torch.get_default_dtype())
+            t.data = t.to(dtype)
         if self.extra is not None:
             for t in self.extra:
-                t.data = t.to(torch.get_default_dtype())
+                t.data = t.to(dtype)
 
         check_matrix_dim(self.Q_repr, "Q")
         check_matrix_dim(self.R_repr, "R")

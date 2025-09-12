@@ -11,6 +11,7 @@ from ..typedefs._defs import (
     Num,
     NumStrictlyPositive,
 )
+from ..utils._dtype import get_dtype
 
 
 def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
@@ -92,7 +93,7 @@ class Exponential(BaseHazardFn):
         """
         super().__init__()  # type: ignore
 
-        lmda_ = torch.tensor(lmda, dtype=torch.get_default_dtype())
+        lmda_ = torch.tensor(lmda, dtype=get_dtype())
         self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
 
     def forward(
@@ -163,8 +164,8 @@ class Weibull(BaseHazardFn):
         """
         super().__init__()  # type: ignore
 
-        k_ = torch.tensor(k, dtype=torch.get_default_dtype())
-        lmda_ = torch.tensor(lmda, dtype=torch.get_default_dtype())
+        k_ = torch.tensor(k, dtype=get_dtype())
+        lmda_ = torch.tensor(lmda, dtype=get_dtype())
         self.clock_method = clock_method
         self.log_k = nn.Parameter(torch.log(k_), requires_grad=False)
         self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
@@ -243,10 +244,9 @@ class Gompertz(BaseHazardFn):
         """
         super().__init__()  # type: ignore
 
-        a_ = torch.tensor(a, dtype=torch.get_default_dtype())
-        self.b = nn.Parameter(
-            torch.tensor(b, dtype=torch.get_default_dtype()), requires_grad=False
-        )
+        dtype = get_dtype()
+        a_ = torch.tensor(a, dtype=dtype)
+        self.b = nn.Parameter(torch.tensor(b, dtype=dtype), requires_grad=False)
         self.clock_method = clock_method
         self.log_a = nn.Parameter(torch.log(a_), requires_grad=False)
 
@@ -325,10 +325,9 @@ class LogNormal(BaseHazardFn):
         """
         super().__init__()  # type: ignore
 
-        self.mu = nn.Parameter(
-            torch.tensor(mu, dtype=torch.get_default_dtype()), requires_grad=False
-        )
-        scale_ = torch.tensor(scale, dtype=torch.get_default_dtype())
+        dtype = get_dtype()
+        self.mu = nn.Parameter(torch.tensor(mu, dtype=dtype), requires_grad=False)
+        scale_ = torch.tensor(scale, dtype=dtype)
         self.clock_method = clock_method
         self.log_scale = nn.Parameter(torch.log(scale_), requires_grad=False)
 

@@ -51,7 +51,7 @@ from .typedefs import (
     RegressionFn,
     SampleData,
 )
-from .utils import build_buckets, cov_from_repr, repr_from_cov
+from .utils import build_buckets, cov_from_repr, get_dtype, repr_from_cov, set_dtype
 
 __author__ = "Félix Laplante"
 __email__ = "felixlaplante0@gmail.com"
@@ -100,7 +100,9 @@ __all__ = [
     "cov_from_repr",
     "gamma_plus_b",
     "gamma_x_plus_b",
+    "get_dtype",
     "identity",
     "linear",
     "repr_from_cov",
+    "set_dtype",
 ]

@@ -14,6 +14,7 @@ from ..utils._checks import (
     check_trajectory_empty,
     check_trajectory_sorting,
 )
+from ..utils._dtype import get_dtype
 from ..utils._surv import build_all_buckets
 from ._defs import (
     HazardFns,
@@ -132,7 +133,7 @@ class ModelData:
         if self.skip_validation:
             return
 
-        dtype = torch.get_default_dtype()
+        dtype = get_dtype()
 
         object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
         object.__setattr__(self, "t", self.t.to(dtype))
@@ -222,7 +223,7 @@ class CompleteModelData(ModelData):
 
         nan_mask = self.y.isnan()
         valid_mask = ~nan_mask
-        self.valid_mask = valid_mask.to(torch.get_default_dtype())
+        self.valid_mask = valid_mask.to(get_dtype())
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
@@ -282,7 +283,7 @@ class SampleData:
         if self.skip_validation:
             return
 
-        dtype = torch.get_default_dtype()
+        dtype = get_dtype()
 
         object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
         object.__setattr__(self, "psi", self.psi.to(dtype))
