@@ -3,6 +3,7 @@ from pydantic import ConfigDict, validate_call
 
 from ..typedefs._defs import ValidDtype
 
+# Default dtype
 _dtype = torch.float32
 
 
