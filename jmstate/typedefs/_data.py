@@ -1,4 +1,5 @@
 import warnings
+from collections.abc import Mapping
 from dataclasses import field
 from functools import cached_property
 from typing import Any
@@ -17,8 +18,9 @@ from ..utils._checks import (
 from ..utils._dtype import get_dtype
 from ..utils._surv import build_all_buckets
 from ._defs import (
-    HazardFns,
+    BaseHazardFn,
     IndividualEffectsFn,
+    LinkFn,
     RegressionFn,
     Tensor1D,
     Tensor2D,
@@ -56,11 +58,12 @@ class ModelDesign:
             to be careful. The last dimension is the dimension of the response variable;
             second last is the repeated measurements; third last is individual based;
             possible fourth last is for parallelization of the MCMC sampler.
-        surv (dict[tuple[Any, Any], HazardFns]): A tuple of transition keys that can be
-            typed however you want. The HazardFns are a NamedTuple containing a base
-            hazard function in log scale, as well as a link function that shares the
-            same requirements as `regression_fn`. Base hazard function is expected to be
-            pure if caching is enabled, otherwise it will lead to false computations.
+        surv (Mapping[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]): A mapping of
+            transition keys that can be typed however you want. The tuple contains a
+            base hazard function in log scale, as well as a link function that shares
+            the same requirements as `regression_fn`. Base hazard function is expected
+            to be pure if caching is enabled, otherwise it will lead to false
+            computations.
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
@@ -74,9 +77,9 @@ class ModelDesign:
 
     individual_effects_fn: IndividualEffectsFn
     regression_fn: RegressionFn
-    surv: dict[
+    surv: Mapping[
         tuple[Any, Any],
-        HazardFns,
+        tuple[BaseHazardFn, LinkFn],
     ]
 
 

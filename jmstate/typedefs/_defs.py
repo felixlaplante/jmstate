@@ -167,18 +167,6 @@ class ClockMethod(Protocol):
 
 
 # Named tuples
-class HazardFns(NamedTuple):
-    """A simple `NamedTuple` containing base hazard and link functions.
-
-    Attributes:
-        base_hazard_fn (BaseHazardFn): The base hazard function.
-        link_fn (LinkFn): The link function.
-    """
-
-    base_hazard_fn: BaseHazardFn
-    link_fn: LinkFn
-
-
 class MatRepr(NamedTuple):
     r"""A simple `NamedTuple` containing matrix representation information.
 

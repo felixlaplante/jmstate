@@ -33,12 +33,11 @@ from .jobs import (
     SwitchParams,
     ValueStop,
 )
-from .model import MultiStateJointModel
+from .model._base import MultiStateJointModel
 from .typedefs import (
     BaseHazardFn,
     BucketData,
     ClockMethod,
-    HazardFns,
     IndividualEffectsFn,
     Info,
     Job,
@@ -69,7 +68,6 @@ __all__ = [
     "Fit",
     "Gompertz",
     "GradStop",
-    "HazardFns",
     "IndividualEffectsFn",
     "Info",
     "Job",

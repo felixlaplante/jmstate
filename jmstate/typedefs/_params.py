@@ -1,4 +1,3 @@
-from collections.abc import Iterable
 from dataclasses import field
 from functools import cached_property
 from typing import Any, Self, cast
@@ -54,7 +53,7 @@ class ModelParams:
         R_repr (MatRepr): The residuals precision matrix representation.
         alphas (dict[tuple[Any, Any], Tensor1D]) The link linear parameters.
         betas (dict[tuple[Any, Any], Tensor1D] | None): The covariates parameters.
-        extra (Iterable[torch.Tensor] | None): A list of parameters that is passed in
+        extra (list[torch.Tensor] | None): A list of parameters that is passed in
             addition to other mandatory parameters.
         skip_validation (bool): A boolean value to skip validation.
     """
@@ -64,7 +63,7 @@ class ModelParams:
     R_repr: MatRepr
     alphas: dict[tuple[Any, Any], Tensor1D]
     betas: dict[tuple[Any, Any], Tensor1D] | None
-    extra: Iterable[torch.Tensor] | None = field(default=None, repr=False)
+    extra: list[torch.Tensor] | None = field(default=None, repr=False)
     skip_validation: bool = field(default=False, repr=False)
 
     def __post_init__(self):
