@@ -1,25 +1,23 @@
 import numpy as np
-from numpy.typing import NDArray
 
 from ._methods import student, uniform
 
 
 def get_bands(
-    F_lo: NDArray[np.float32 | np.float64],
-    F_hi: NDArray[np.float32 | np.float64] | None = None,
+    F_lo: np.ndarray,
+    F_hi: np.ndarray | None = None,
     alpha: float = 0.05,
     *,
     eps: float = 1e-8,
     method: str = "uniform",
     min_val: float = 0.0,
     max_val: float = 1.0,
-) -> dict[str, NDArray[np.float32 | np.float64]]:
+) -> dict[str, np.ndarray]:
     """Gets the uniform bands according the specified method.
 
     Args:
-        F_lo (NDArray[np.float32  |  np.float64]): The lower high probability bounds.
-        F_hi (NDArray[np.float32  |  np.float64]):  The upper high probability bounds.
-            Defaults to None.
+        F_lo (np.ndarray): The lower high probability bounds.
+        F_hi (np.ndarray):  The upper high probability bounds. Defaults to None.
         alpha (float, optional): The level of supplementary risk. Defaults to 0.05.
         eps (float, optional): The regularization parameter to ensure a well defined
             division. Defaults to 1e-8.
@@ -38,7 +36,7 @@ def get_bands(
         ValueError: If the method is not 'uniform' nor 'student'.
 
     Returns:
-        dict[str, NDArray[np.float32 | np.float64]]: _description_
+        dict[str, np.ndarray]: The computed bands with keys "lower" and "upper".
     """
     F_hi = F_hi if F_hi is not None else F_lo
 
@@ -62,6 +60,10 @@ def get_bands(
             if eps <= 0:
                 raise ValueError(
                     f"eps must be strictly positive for the student method, got {eps}"
+                )
+            if min_val >= max_val:
+                raise ValueError(
+                    f"min_val must be less than max_val, got {min_val} >= {max_val}"
                 )
             return student(F_lo, F_hi, alpha, eps, min_val, max_val)
         case _:

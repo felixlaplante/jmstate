@@ -1,24 +1,23 @@
 from typing import cast
 
 import numpy as np
-from numpy.typing import NDArray
 from scipy.stats import rankdata  # type: ignore
 
 
 def uniform(
-    F_lo: NDArray[np.float32 | np.float64],
-    F_hi: NDArray[np.float32 | np.float64],
+    F_lo: np.ndarray,
+    F_hi: np.ndarray,
     alpha: float,
-) -> dict[str, NDArray[np.float32 | np.float64]]:
+) -> dict[str, np.ndarray]:
     """Implements the Uniform method for uniform control bands.
 
     Args:
-        F_lo (NDArray[np.float32  |  np.float64]): The lower high probability bounds.
-        F_hi (NDArray[np.float32  |  np.float64]):  The upper high probability bounds.
+        F_lo (np.ndarray): The lower high probability bounds.
+        F_hi (np.ndarray):  The upper high probability bounds.
         alpha (float): The level of supplementary risk.
 
     Returns:
-        dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha
+        dict[str, np.ndarray]: The uniform bands for level alpha
             of supplementary risk.
     """
     rank_lo, rank_hi = (
@@ -40,25 +39,25 @@ def uniform(
 
 
 def student(
-    F_lo: NDArray[np.float32 | np.float64],
-    F_hi: NDArray[np.float32 | np.float64],
+    F_lo: np.ndarray,
+    F_hi: np.ndarray,
     alpha: float,
     eps: float,
     min_val: float,
     max_val: float,
-) -> dict[str, NDArray[np.float32 | np.float64]]:
+) -> dict[str, np.ndarray]:
     """Implements the Student method for uniform control bands.
 
     Args:
-        F_lo (NDArray[np.float32  |  np.float64]): The lower high probability bounds.
-        F_hi (NDArray[np.float32  |  np.float64]):  The upper high probability bounds.
+        F_lo (np.ndarray): The lower high probability bounds.
+        F_hi (np.ndarray):  The upper high probability bounds.
         alpha (float): The level of supplementary risk.
         eps (float): The regularization parameter to ensure a well defined division.
         min_val (float): The minimum accepted values of the functions.
         max_val (float): The maximum accepted values of the functions.
 
     Returns:
-        dict[str, NDArray[np.float32 | np.float64]]: The uniform bands for level alpha
+        dict[str, np.ndarray]: The uniform bands for level alpha
             of supplementary risk.
     """
     mean_lo, mean_hi = F_lo.mean(axis=-2), F_hi.mean(axis=-2)
