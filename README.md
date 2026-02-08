@@ -37,4 +37,4 @@ pip install jmstate
 ## 📖 Learn More
 
 For tutorials, API reference, visit the official site:  
-👉 [jmstate Documentation](https://felixlaplante0.github.io/jmstate/)
+👉 [jmstate Documentation](https://felixlaplante.github.io/jmstate/)
