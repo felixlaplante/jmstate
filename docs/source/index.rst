@@ -1,4 +1,4 @@
-Welcome to jmstate's Documentation!
+Welcome to jmstate's documentation!
 ===================================
 
 This is a comprehensive guide to the jmstate package, a tool for multistate joint modeling with PyTorch.
