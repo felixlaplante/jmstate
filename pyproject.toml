@@ -2,7 +2,7 @@
 name = "jmstate"
 description = "Joint modeling with automatic differentiation"
 readme = "README.md"
-urls = { "Source" = "https://gitlab.com/felixlaplante0/jmstate" }
+urls = { "Source" = "https://github.com/felixlaplante/jmstate" }
 authors = [{ name = "Félix Laplante" }]
 requires-python = ">=3.10"
 dependencies = ["numpy", "torch", "matplotlib", "rich", "pydantic", "xxhash", "tqdm"]
