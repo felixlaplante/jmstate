@@ -1,5 +1,5 @@
 Visualization
-============
+=============
 
 .. automodule:: jmstate.visualization
    :no-members:
@@ -9,5 +9,6 @@ Visualization
 .. autosummary::
    :toctree: generated/
    :recursive:
+
 
    plot_history
