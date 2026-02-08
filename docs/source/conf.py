@@ -9,7 +9,7 @@
 project = "jmstate"
 release = ""
 version = ""
-copyright = "2025, Félix Laplante"
+copyright = "2026, Félix Laplante"
 author = "Félix Laplante"
 
 # -- General configuration ---------------------------------------------------
@@ -39,3 +39,4 @@ napoleon_attr_annotations = True
 
 html_theme = "furo"
 html_static_path = ["_static"]
+
