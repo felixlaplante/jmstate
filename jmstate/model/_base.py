@@ -381,7 +381,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         data: ModelData,
         job_factories: Sequence[Callable[[Info], Job]],
         *,
-        max_iterations: int | None = None,
+        max_iterations: IntStrictlyPositive | None = None,
         n_chains: IntStrictlyPositive | None = None,
         warmup: IntNonNegative | None = None,
         n_steps: IntStrictlyPositive | None = None,
@@ -416,8 +416,8 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             data (ModelData): The dataset to learn from.
             job_factories (Sequence[Callable[[Info], Job]]): A sequence of job factories
                 to execute in the order in which they are given.
-            max_iterations (int | None, optional): Maximum number of iterations.
-                Defaults to None.
+            max_iterations (IntStrictlyPositive | None, optional): Maximum number of
+                iterations. Defaults to None.
             n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
                 to None.
             warmup (IntNonNegative | None, optional): The number of iteration steps used
@@ -515,7 +515,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         data: ModelData,
         job_factories: Sequence[Callable[[Info], Job]] = (),
         *,
-        max_iterations: int | None = None,
+        max_iterations: IntStrictlyPositive | None = None,
         n_chains: IntStrictlyPositive | None = None,
         warmup: IntNonNegative | None = None,
         n_steps: IntStrictlyPositive | None = None,
@@ -541,8 +541,8 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             job_factories (Sequence[Callable[[Info], Fit]], optional): A sequence of job
                 factories to execute in the order in which they are given. Defaults to
                 ()
-            max_iterations (int | None, optional): Maximum number of iterations.
-                Defaults to None.
+            max_iterations (IntStrictlyPositive | None, optional): Maximum number of
+                iterations. Defaults to None.
             n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
                 to None.
             warmup (IntNonNegative | None, optional): The number of iteration steps used
@@ -583,7 +583,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         self,
         job_factories: Sequence[Callable[[Info], Job]] = (),
         *,
-        max_iterations: int | None = None,
+        max_iterations: IntStrictlyPositive | None = None,
         n_chains: IntStrictlyPositive | None = None,
         warmup: IntNonNegative | None = None,
         n_steps: IntStrictlyPositive | None = None,
@@ -602,8 +602,8 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         Args:
             job_factories (Sequence[Callable[[Info], Job]], optional): A sequence of job
                 factories to execute in the order in which they are given.
-            max_iterations (int | None, optional): Maximum number of iterations.
-                Defaults to None.
+            max_iterations (IntStrictlyPositive | None, optional): Maximum number of
+                iterations. Defaults to None.
             n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
                 to None.
             warmup (IntNonNegative | None, optional): The number of iteration steps used
