@@ -18,7 +18,7 @@ With **jmstate**, you can model longitudinal data jointly with multi-state trans
 - **Built-in Tools**  
   Includes default baseline hazards, regression, link functions, and analysis utilities.
 
-- **Automatic Differentiation & GPU Support**  
+- **Automatic Differentiation**  
   Powered by PyTorch for efficient gradient computation and vectorization.
 
 - **Analysis & Visualization**  
