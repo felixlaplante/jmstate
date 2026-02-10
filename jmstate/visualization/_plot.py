@@ -8,7 +8,7 @@ from ..typedefs._params import ModelParams
 from ..utils._checks import check_params_size_and_names
 
 
-def plot_history(
+def plot_params_history(
     params_history: list[ModelParams],
     *,
     real_params: ModelParams | None = None,

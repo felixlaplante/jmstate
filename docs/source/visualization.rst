@@ -11,4 +11,4 @@ Visualization
    :recursive:
 
 
-   plot_history
+   plot_params_history
