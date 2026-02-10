@@ -9,21 +9,20 @@ from ._defs import (
     Info,
     Job,
     LinkFn,
-    MatRepr,
     Metrics,
     RegressionFn,
 )
-from ._params import ModelParams
+from ._params import CovParams, ModelParams
 
 __all__ = [
     "BaseHazardFn",
     "BucketData",
     "ClockMethod",
+    "CovParams",
     "IndividualEffectsFn",
     "Info",
     "Job",
     "LinkFn",
-    "MatRepr",
     "Metrics",
     "ModelData",
     "ModelDesign",

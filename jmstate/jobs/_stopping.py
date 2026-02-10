@@ -16,7 +16,6 @@ from ..typedefs._defs import (
     Tensor1DPositive,
 )
 from ..utils._checks import check_consistent_size
-from ..utils._dtype import get_dtype
 
 # Constants
 NOT_CONVERGED_WARNING = (
@@ -245,7 +244,7 @@ class GradStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
-        dtype = get_dtype()
+        dtype = torch.get_default_dtype()
         self.m = torch.zeros(d, dtype=dtype)
         self.v = torch.zeros(d, dtype=dtype)
 
@@ -314,7 +313,7 @@ class ParamStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
-        dtype = get_dtype()
+        dtype = torch.get_default_dtype()
         self.m = torch.zeros(d, dtype=dtype)
         self.v = torch.zeros(d, dtype=dtype)
 
@@ -380,7 +379,7 @@ class ValueStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (1, None, "1")))
 
-        dtype = get_dtype()
+        dtype = torch.get_default_dtype()
         self.m = torch.zeros(1, dtype=dtype)
         self.v = torch.zeros(1, dtype=dtype)
 

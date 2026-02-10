@@ -33,8 +33,6 @@ from ..typedefs._defs import (
 )
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_consistent_size, check_inf, check_nan
-from ..utils._dtype import get_dtype
-from ..utils._misc import run_jobs
 from ..visualization._print import rich_str
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
@@ -248,7 +246,10 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         """
         # Initialize random effects
         init_b = torch.zeros(
-            n_chains, data.size, self.params_.Q_repr.dim, dtype=get_dtype()
+            n_chains,
+            data.size,
+            self.params_.Q.dim,
+            dtype=torch.get_default_dtype(),
         )
 
         return MetropolisHastingsSampler(
@@ -282,6 +283,28 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
         return None
 
+    @staticmethod
+    def _run_jobs(jobs: list[Job], info: Info) -> bool:
+        """Call jobs.
+
+        Args:
+            jobs (list[Job]): The jobs to execute.
+            info (Info): The information container.
+
+        Returns:
+            bool: Set to true to stop the iterations.
+        """
+        stop = None
+        for job in jobs:
+            result = job.run(info=info)
+            stop = (
+                stop
+                if result is None
+                else (result if stop is None else (stop and result))
+            )
+
+        return False if stop is None else stop
+
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def sample_trajectories(
         self,
@@ -312,7 +335,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
-        c_max = c_max.to(get_dtype())
+        c_max = c_max.to(torch.get_default_dtype())
 
         if not sample_data.skip_validation:
             check_inf(((c_max, "c_max"),))
@@ -364,7 +387,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
-        u = u.to(get_dtype())
+        u = u.to(torch.get_default_dtype())
 
         if not sample_data.skip_validation:
             check_inf(((u, "u"),))
@@ -489,7 +512,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             cast(int, max_iterations), desc="Running joint model", disable=not verbose
         ):
             info.iteration += 1
-            if run_jobs(jobs, info):
+            if self._run_jobs(jobs, info):
                 break
 
             for _ in range(cast(int, n_steps)):

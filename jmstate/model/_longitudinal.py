@@ -5,7 +5,6 @@ import torch
 from ..typedefs._data import CompleteModelData, ModelDesign
 from ..typedefs._defs import LOG_TWO_PI
 from ..typedefs._params import ModelParams
-from ..utils._linalg import get_cholesky_and_log_eigvals
 
 
 class LongitudinalMixin:
@@ -34,7 +33,7 @@ class LongitudinalMixin:
         predicted = self.model_design.regression_fn(data.valid_t, psi)
         diffs = data.valid_y.addcmul(predicted, data.valid_mask, value=-1.0)
 
-        R_inv_cholesky, R_nlog_eigvals = get_cholesky_and_log_eigvals(params, "R")
+        R_inv_cholesky, R_nlog_eigvals = params.R._precision_cholesky_and_log_eigvals
         R_quad_forms = (diffs @ R_inv_cholesky).pow(2).sum(dim=(-2, -1))
         R_norm_factor = data.n_valid @ (R_nlog_eigvals - LOG_TWO_PI)
 

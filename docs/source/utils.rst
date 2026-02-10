@@ -11,7 +11,3 @@ Utils
    :recursive:
 
    build_buckets
-   cov_from_repr
-   get_dtype
-   repr_from_cov
-   set_dtype

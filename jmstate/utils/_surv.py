@@ -7,7 +7,6 @@ from typing import Any
 import torch
 
 from ..typedefs._defs import BucketData, Trajectory
-from ..utils._dtype import get_dtype
 
 
 def build_buckets(
@@ -26,7 +25,7 @@ def build_buckets(
     Returns:
         dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).
     """
-    dtype = get_dtype()
+    dtype = torch.get_default_dtype()
     typecode = "f" if dtype == torch.float32 else "d"
 
     # Process each individual trajectory
@@ -91,7 +90,7 @@ def build_all_buckets(
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
-    dtype = get_dtype()
+    dtype = torch.get_default_dtype()
     typecode = "f" if dtype == torch.float32 else "d"
 
     # Initialize buckets
@@ -149,7 +148,7 @@ def build_possible_buckets(
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
-    dtype = get_dtype()
+    dtype = torch.get_default_dtype()
     typecode = "f" if dtype == torch.float32 else "d"
 
     # Initialize buckets
@@ -194,7 +193,7 @@ def build_remaining_buckets(
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
-    dtype = get_dtype()
+    dtype = torch.get_default_dtype()
     typecode = "f" if dtype == torch.float32 else "d"
 
     # Initialize buckets

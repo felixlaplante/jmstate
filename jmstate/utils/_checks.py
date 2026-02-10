@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import itertools
+from typing import TYPE_CHECKING
 
 import torch
 
-from ..typedefs._defs import MatRepr, Trajectory
+from ..typedefs._defs import Trajectory
+
+if TYPE_CHECKING:
+    pass
 
 
 def check_inf(tensors: tuple[tuple[torch.Tensor | None, str], ...]):
@@ -105,46 +111,68 @@ def check_trajectory_c(trajectories: list[Trajectory], c: torch.Tensor | None):
         raise ValueError("Last trajectory time must not be greater than censoring time")
 
 
-def check_matrix_dim(mat_repr: MatRepr, name: str):
+def check_matrix_dim(flat: torch.Tensor, dim: int, method: str):
     """Sets dimensions for matrix.
 
     Args:
-        mat_repr (MatRepr): The matrix representation.
-        name (str): The matrix name.
+        flat (torch.Tensor): The flat tensor.
+        dim (int): The dimension of the matrix.
+        method (str): The method to use.
 
     Raises:
-        ValueError: If flat tensor is not flat.
         ValueError: If the number of elements is incompatible with method "full".
         ValueError: If the number of elements is incompatible with method "diag".
         ValueError: If the number of elements is not one and the method is "ball".
         ValueError: If the method is not in ("full", "diag", "ball").
     """
-    flat, dim, method = mat_repr
-
-    if flat.ndim != 1:
-        raise ValueError(
-            f"flat must be flat tensor, got shape {flat.shape} for matrix {name}"
-        )
-
     match method:
         case "full":
             if flat.numel() != (dim * (dim + 1)) // 2:
                 raise ValueError(
-                    f"{flat.numel()} is incompatible with full matrix {name} of "
-                    f"dimension {dim}"
+                    f"{flat.numel()} is incompatible with full matrix of dimension "
+                    f"{dim}"
                 )
         case "diag":
             if flat.numel() != dim:
                 raise ValueError(
-                    f"{flat.numel()} is incompatible with diag matrix {name} of "
-                    f"dimension {dim}"
+                    f"{flat.numel()} is incompatible with diag matrix of dimension "
+                    f"{dim}"
                 )
         case "ball":
             if flat.numel() != 1:
                 raise ValueError(
-                    f"Expected 1 element for flat, got {flat.numel()} for matrix {name}"
+                    f"Expected 1 element for flat, got {flat.numel()} for matrix of "
+                    f" dimension {dim}"
                 )
         case _:
             raise ValueError(
                 f"Method must be be either 'full', 'diag' or 'ball', got {method}"
             )
+
+
+def check_params_size_and_names(
+    named_params_list1: list[tuple[str, torch.Tensor]],
+    named_params_list2: list[tuple[str, torch.Tensor]],
+):
+    """Checks if the named parameters lists have the same length, names and sizes.
+
+    Args:
+        named_params_list1 (list[tuple[str, torch.Tensor]]): The first named parameters
+            list.
+        named_params_list2 (list[tuple[str, torch.Tensor]]): The second named
+            parameters list.
+
+    Raises:
+        ValueError: If the named parameters lists do not have the same length.
+        ValueError: If the named parameters lists do not have the same names.
+        ValueError: If the named parameters lists do not have the same sizes.
+    """
+    if len(named_params_list1) != len(named_params_list2):
+        raise ValueError("Named parameters lists must have the same length")
+    for (name1, param1), (name2, param2) in zip(
+        named_params_list1, named_params_list2, strict=True
+    ):
+        if name1 != name2:
+            raise ValueError("Named parameters lists must have the same names")
+        if param1.size() != param2.size():
+            raise ValueError("Named parameters lists must have the same sizes")

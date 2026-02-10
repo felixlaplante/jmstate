@@ -86,9 +86,7 @@ def is_strict_pos(x: int | float | torch.Tensor) -> int | float | torch.Tensor:
     Returns:
         int | float | torch.Tensor: The output number or tensor.
     """
-    from jmstate.utils._dtype import get_dtype  # noqa: PLC0415
-
-    dtype = get_dtype()
+    dtype = torch.get_default_dtype()
     x_ = torch.as_tensor(x, dtype=dtype)
     if (x_ <= 0).any():
         raise ValueError(
@@ -109,9 +107,7 @@ def is_prob(x: int | float) -> int | float:
     Returns:
         int | float: The output number.
     """
-    from jmstate.utils._dtype import get_dtype  # noqa: PLC0415
-
-    dtype = get_dtype()
+    dtype = torch.get_default_dtype()
     x_ = torch.as_tensor(x, dtype=dtype)
     if not 0 < x_ < 1:
         raise ValueError(

@@ -13,11 +13,11 @@ Typedefs
    BaseHazardFn
    BucketData
    ClockMethod
+   CovParams
    IndividualEffectsFn
    Info
    Job
    LinkFn
-   MatRepr
    Metrics
    ModelData
    ModelDesign

@@ -16,7 +16,6 @@ from ..utils._checks import (
     check_trajectory_empty,
     check_trajectory_sorting,
 )
-from ..utils._dtype import get_dtype
 from ..utils._surv import build_all_buckets
 from ..visualization._print import (
     add_c,
@@ -176,7 +175,7 @@ class ModelData:
         if self.skip_validation:
             return
 
-        dtype = get_dtype()
+        dtype = torch.get_default_dtype()
 
         object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
         object.__setattr__(self, "t", self.t.to(dtype))
@@ -244,11 +243,11 @@ class CompleteModelData(ModelData):
             model_design (ModelDesign): The design of the model.
             params (ModelParams): The model parameters.
         """
-        check_consistent_size(((params.R_repr.dim, None, "R"), (self.y, -1, "y")))
+        check_consistent_size(((params.R.dim, None, "R"), (self.y, -1, "y")))
 
         nan_mask = self.y.isnan()
         valid_mask = ~nan_mask
-        self.valid_mask = valid_mask.to(get_dtype())
+        self.valid_mask = valid_mask.to(torch.get_default_dtype())
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
@@ -257,7 +256,7 @@ class CompleteModelData(ModelData):
         )
 
         if (
-            params.R_repr.method == "full"
+            params.R.method == "full"
             and (valid_mask.any(dim=-1) & nan_mask.any(dim=-1)).any()
         ):
             warnings.warn(
@@ -318,11 +317,19 @@ class SampleData:
         return rich_str(tree)
 
     def __post_init__(self):
-        """Runs the post init conversions and checks."""
+        """Runs the post init conversions and checks.
+
+        Raises:
+            ValueError: If the trajectories are not sorted by time.
+            ValueError: If the censoring time is lower than the maximum transition time.
+            ValueError: If any of the inputs contain inf values.
+            ValueError: If any of the inputs contain NaN values.
+            ValueError: If the size is not consistent between inputs.
+        """
         if self.skip_validation:
             return
 
-        dtype = get_dtype()
+        dtype = torch.get_default_dtype()
 
         object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
         object.__setattr__(self, "psi", self.psi.to(dtype))

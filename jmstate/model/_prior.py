@@ -4,7 +4,6 @@ import torch
 
 from ..typedefs._defs import LOG_TWO_PI
 from ..typedefs._params import ModelParams
-from ..utils._linalg import get_cholesky_and_log_eigvals
 
 
 class PriorMixin:
@@ -25,7 +24,7 @@ class PriorMixin:
         Returns:
             torch.Tensor: The computed log likelihoods.
         """
-        Q_inv_cholesky, Q_nlog_eigvals = get_cholesky_and_log_eigvals(params, "Q")
+        Q_inv_cholesky, Q_nlog_eigvals = params.Q._precision_cholesky_and_log_eigvals
         Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
         Q_norm_factor = (Q_nlog_eigvals - LOG_TWO_PI).sum()
 

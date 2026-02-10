@@ -167,50 +167,6 @@ class ClockMethod(Protocol):
 
 
 # Named tuples
-class MatRepr(NamedTuple):
-    r"""A simple `NamedTuple` containing matrix representation information.
-
-    Note three types of covariance matrices parametrization are provided: scalar
-    matrix; diagonal matrix; full matrix. Defaults to the full matrix parametrization.
-    This is achieved through a log Cholesky parametrization of the inverse covariance
-    matrix. Formally, consider :math:`P = \Sigma^{-1}` the precision matrix and let
-    :math:`L` be the Cholesky factor with positive diagonal elements, the log Cholseky
-    is given by:
-
-    .. math::
-        \tilde{L}_{ij} = L_{ij}, \, i > j,
-
-    and:
-
-    .. math::
-        \tilde{L}_{ii} = \log L_{ii}.
-
-    This is very numerically stable and fast, as it doesn't require inverting the
-    matrix when computing quadratic forms. The log determinant is then equal to:
-
-    .. math::
-
-        \log \det P = 2 \operatorname{Tr}(\tilde{L}).
-
-    You can use these methods by creating the appropriate `MatRepr` with methods of
-    `ball`, `diag` or `full`.
-
-    Additionnally, if your data has mixed missing values, do not use `full` matrix
-    parametrization for the residuals, as is this case the components must be
-    independent.
-
-
-    Attributes:
-        flat (Tensor1D): The flat representation.
-        dim (IntStrictlyPositive): The matrix dimension.
-        method (str): The parametrization method, either `ball`, `diag` or `full`.
-    """
-
-    flat: Tensor1D
-    dim: IntStrictlyPositive
-    method: str
-
-
 class BucketData(NamedTuple):
     """A simple `NamedTuple` containing transition information.
 

@@ -1,14 +1,13 @@
 from dataclasses import replace
-from typing import Any, Final
+from typing import Any, Final, cast
 
+import numpy as np
 import torch
 from xxhash import xxh3_64_intdigest
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
-from ..utils._dtype import get_dtype
-from ..utils._misc import legendre_quad
 from ..utils._surv import build_possible_buckets, build_remaining_buckets
 from ._cache import Cache
 
@@ -46,10 +45,34 @@ class HazardMixin:
         self.n_quad = n_quad
         self.n_bisect = n_bisect
         self.cache_limit = cache_limit
-        self._std_nodes, self._std_weights = legendre_quad(n_quad)
+        self._std_nodes, self._std_weights = self._legendre_quad(n_quad)
         self._cache = Cache(cache_limit, HAZARD_CACHE_KEYS)
 
         super().__init__(*args, **kwargs)
+
+    @staticmethod
+    def _legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Get the Legendre quadrature nodes and weights.
+
+        Args:
+            n_quad (int): The number of quadrature points.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]: The nodes and weights.
+        """
+        nodes, weights = cast(
+            tuple[
+                np.ndarray[Any, np.dtype[np.float64]],
+                np.ndarray[Any, np.dtype[np.float64]],
+            ],
+            np.polynomial.legendre.leggauss(n_quad),  # type: ignore
+        )
+
+        dtype = torch.get_default_dtype()
+        std_nodes = torch.tensor(nodes, dtype=dtype).unsqueeze(0)
+        std_weights = torch.tensor(weights, dtype=dtype)
+
+        return std_nodes, std_weights
 
     def _log_hazard(self, hazard_info: HazardInfo) -> torch.Tensor:
         """Computes log hazard.
@@ -260,7 +283,9 @@ class HazardMixin:
         # Initialize candidate transition times
         n_transitions = len(current_buckets)
         t_candidates = torch.full(
-            (sample_data.size, n_transitions), torch.inf, dtype=get_dtype()
+            (sample_data.size, n_transitions),
+            torch.inf,
+            dtype=torch.get_default_dtype(),
         )
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
@@ -347,7 +372,7 @@ class HazardMixin:
         c = sample_data.c
 
         # Get buckets from last states
-        dtype = get_dtype()
+        dtype = torch.get_default_dtype()
         buckets = build_remaining_buckets(
             sample_data.trajectories, tuple(self.model_design.surv.keys())
         )
@@ -392,7 +417,7 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log likelihoods.
         """
-        logliks = torch.zeros(psi.shape[:-1], dtype=get_dtype())
+        logliks = torch.zeros(psi.shape[:-1], dtype=torch.get_default_dtype())
 
         for key, bucket in data.buckets.items():
             idxs, t0, t1, obs = bucket

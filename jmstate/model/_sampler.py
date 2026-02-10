@@ -4,7 +4,6 @@ from typing import Any, cast
 import torch
 
 from ..typedefs._defs import AuxData
-from ..utils._dtype import get_dtype
 
 
 class MetropolisHastingsSampler:
@@ -41,8 +40,7 @@ class MetropolisHastingsSampler:
             adapt_rate (int | float): Adaptation rate for the step_size.
             target_accept_rate (int | float): Mean acceptance target.
         """
-        dtype = get_dtype()
-
+        dtype = torch.get_default_dtype()
         self.logpdfs_aux_fn = cast(
             Callable[[torch.Tensor], tuple[torch.Tensor, AuxData]],
             torch.no_grad()(logpdfs_aux_fn),
@@ -91,7 +89,7 @@ class MetropolisHastingsSampler:
 
         # Update statistics
         self.n_samples += 1
-        mean_accept_mask = accept_mask.to(get_dtype()).mean(dim=0)
+        mean_accept_mask = accept_mask.to(torch.get_default_dtype()).mean(dim=0)
         self.n_accepted += mean_accept_mask
 
         # Update step sizes

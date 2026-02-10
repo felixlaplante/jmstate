@@ -3,7 +3,6 @@ from pydantic import ConfigDict, validate_call
 from torch import nn
 
 from ..typedefs._defs import IntNonNegative, LinkFn, RegressionFn
-from ..utils._dtype import get_dtype
 
 
 def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
@@ -50,7 +49,7 @@ class Net(nn.Module):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, net: nn.Module):
         super().__init__()  # type: ignore
-        self.net = net.to(get_dtype())
+        self.net = net.to(torch.get_default_dtype())
         self.requires_grad_(False)
 
     def forward(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
