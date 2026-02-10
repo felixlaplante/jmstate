@@ -28,7 +28,7 @@ def plot_history(
         show (bool, optional): Whether to show the plot. Defaults to True.
 
     Raises:
-        ValueError: If the parameter history is empty.
+        ValueError: If the parameters' history is empty.
         ValueError: If the real parameters do not match the parameters' history length.
         ValueError: If the real parameters do not match the parameters' history names.
     """
@@ -76,3 +76,4 @@ def plot_history(
     plt.tight_layout()
     if show:
         plt.show()  # type: ignore
+
