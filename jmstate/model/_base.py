@@ -21,7 +21,6 @@ from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS, DEFAULT_HYPERPARAMETER
 from ..typedefs._defs import (
     SIGNIFICANCE_CODES,
     SIGNIFICANCE_LEVELS,
-    AuxData,
     Info,
     IntNonNegative,
     IntStrictlyPositive,
@@ -47,13 +46,14 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
     `torch.optim.Optimizer` of choice.
 
     It leverages the Fisher identity and stochastic gradient algorithm coupled
-    with a MCMC (Metropolis Hastings) sampler:
+    with a MCMC (Metropolis-Hastings) sampler:
 
     .. math::
         \nabla_\theta \log \mathcal{L}(\theta ; x) = \mathbb{E}_{b \sim p(\cdot \mid x,
-        \theta)} \bigl(\nabla_\theta \log \mathcal{L}(\theta ; x, b)\bigr).
+        \theta)} \left( \nabla_\theta \log \mathcal{L}(\theta ; x, b) \right).
 
-    The use of penalization is possible through the attribute `pen`.
+    The use of penalization is possible through the attribute `pen`, which is multiplied
+    by the number of samples.
 
     Please note this class encompasses both the linear joint model and the standard
     joint model, but also allows for the modeling of multiple states assuming a semi
@@ -205,7 +205,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
     def _logpdfs_aux_fn(
         self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
-    ) -> tuple[torch.Tensor, AuxData]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Gets the log pdfs with individual effects and log likelihoods.
 
         Args:
@@ -214,7 +214,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             data (CompleteModelData): Dataset on which likelihood is computed.
 
         Returns:
-           tuple[torch.Tensor, AuxData]: The log pdfs and aux.
+           tuple[torch.Tensor, torch.Tensor]: The log pdfs and aux.
         """
         psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
         logliks = super()._long_logliks(params, psi, data) + super()._hazard_logliks(
@@ -222,7 +222,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         )
         logpdfs = logliks + super()._prior_logliks(params, b)
 
-        return (logpdfs, AuxData(psi, logliks))
+        return logpdfs, psi
 
     def _setup_mcmc(
         self,
@@ -758,8 +758,8 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         the MLE:
 
         .. math::
-            \text{sd} = \sqrt{\operatorname{diag}\bigl(\mathcal{I}(\hat{\theta})^{-1}
-            \bigr)}
+            \text{sd} = \sqrt{\operatorname{diag}\left( \mathcal{I}(\hat{\theta})^{-1}
+            \right)}
 
         Returns:
             ModelParams: The standard error in the same format as the parameters.

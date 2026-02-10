@@ -73,9 +73,9 @@ class _BaseEMAStop(Job, ABC):
     """Job base class to test the convergence based on exponential moving averages.
 
     Attributes:
-        atol (NumNonNegative | Tensor1DPositive, optional): Absolute tolerance,
+        atol (int | float | torch.Tensor, optional): Absolute tolerance,
             either scalar or element-wise.
-        rtol (NumNonNegative | Tensor1DPositive, optional): Relative tolerance,
+        rtol (int | float | torch.Tensor, optional): Relative tolerance,
         either scalar or element-wise.
         min_consecutive (IntStrictlyPositive, optional): The minimum consecutive
             iterations with grad difference less than tolerance.
@@ -210,8 +210,8 @@ class GradStop(_BaseEMAStop):
     stochastically computed, using exponential moving averages with the formula:
 
     .. math::
-        m_i^{(t)} \gets \beta_i m_i^{(t-1)} + (1 - \beta_i) \bigl(\nabla \log
-        \mathcal{L}(\theta^{(t)})\bigr)^i, \quad \hat{m}_i^{(t)} = \frac{m_i^{(t)}}
+        m_i^{(t)} \gets \beta_i m_i^{(t-1)} + (1 - \beta_i) \left( \nabla \log
+        \mathcal{L}(\theta^{(t)}) \right)^i, \quad \hat{m}_i^{(t)} = \frac{m_i^{(t)}}
         {1 - \beta_i^t}.
 
     The `run` method returns true when for `min_consecutive` iterations:
@@ -331,70 +331,4 @@ class ParamStop(_BaseEMAStop):
         new_params = info.model.params_.as_flat_tensor
         diff = new_params - self.prev_params
         self.prev_params = new_params
-        return diff
-
-
-class ValueStop(_BaseEMAStop):
-    r"""Job to test the convergence based on log likelihood value.
-
-    All stopping jobs have to agree and return True for the process to stop. Other
-    jobs return None.
-
-    Mathematically, estimates of the first and the second moments of the log likelihood
-    difference are stochastically computed, using exponential moving averages with the
-    formula:
-
-    .. math::
-        m_i^{(t)} \gets \beta_i m_i^{(t-1)} + (1 - \beta_i) \Bigl(
-        \frac{\log \mathcal{L}(\theta^{(t)}) - \log \mathcal{L}(\theta^{(t-1)})}{n}
-        \Bigr)^i, \quad \hat{m}_i^{(t)} = \frac{m_i^{(t)}}{1 - \beta_i^t}.
-
-    The `run` method returns true when for `min_consecutive` iterations:
-
-    .. math::
-        \vert \hat{m}_1^{(t)} \vert \leq \text{atol} + \text{rtol}
-        \sqrt{\hat{m}_2^{(t)}}.
-
-    Please note the tolerances must be non-negative.
-
-    Attributes:
-        atol (int | float): Absolute tolerance.
-        min_consecutive (int): Minimum consecutive iterations to declare convergence.
-        betas (tuple[int | float, int | float]): The forget parameters
-        m (torch.Tensor): The first moment estimate of the log likelihood gain.
-        v (torch.Tensor): The second moment estimate of the log likelihood gain.
-        prev_loglik (torch.Tensor): The previous log likelihood value.
-        n_consecutive (int): The number of iterations with convergence criterion met.
-        stopped (bool): Indicator whether or not convergence has happened.
-    """
-
-    prev_loglik: torch.Tensor
-
-    @wraps(_BaseEMAStop.__init__)
-    def __init__(self, *args: Any, info: Info, **kwargs: Any):
-        super().__init__(*args, **kwargs)
-
-        if isinstance(self.atol, torch.Tensor):
-            check_consistent_size(((self.atol, 0, "atol"), (1, None, "1")))
-        if isinstance(self.rtol, torch.Tensor):
-            check_consistent_size(((self.rtol, 0, "rtol"), (1, None, "1")))
-
-        dtype = torch.get_default_dtype()
-        self.m = torch.zeros(1, dtype=dtype)
-        self.v = torch.zeros(1, dtype=dtype)
-
-        self.prev_loglik = info.sampler.aux.logliks.mean()
-
-    def quantity(self, info: Info) -> torch.Tensor:
-        """Gets the log likelihood difference.
-
-        Args:
-            info (Info): The job information object.
-
-        Returns:
-            torch.Tensor: The log likelihood difference.
-        """
-        new_loglik = info.sampler.aux.logliks.mean()
-        diff = new_loglik - self.prev_loglik
-        self.prev_loglik = new_loglik
         return diff

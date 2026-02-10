@@ -5,7 +5,7 @@ from ._fitting import Fit, Scheduling
 from ._logging import LogParamsHistory, MCMCDiagnostics
 from ._prediction import PredictSurvLogps, PredictTrajectories, PredictY, SwitchParams
 from ._projection import AdamL1Proximal
-from ._stopping import GradStop, NoStop, ParamStop, ValueStop
+from ._stopping import GradStop, NoStop, ParamStop
 
 __all__ = [
     "AdamL1Proximal",
@@ -23,5 +23,4 @@ __all__ = [
     "PredictY",
     "Scheduling",
     "SwitchParams",
-    "ValueStop",
 ]

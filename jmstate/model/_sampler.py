@@ -1,28 +1,26 @@
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 import torch
-
-from ..typedefs._defs import AuxData
 
 
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
-    logpdfs_aux_fn: Callable[[torch.Tensor], tuple[torch.Tensor, AuxData]]
+    logpdfs_aux_fn: Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]
     n_chains: int
     adapt_rate: int | float
     target_accept_rate: int | float
     b: torch.Tensor
     logpdfs: torch.Tensor
-    aux: AuxData
+    aux: torch.Tensor
     step_sizes: torch.Tensor
     n_samples: torch.Tensor
     n_accepted: torch.Tensor
 
     def __init__(
         self,
-        logpdfs_aux_fn: Callable[[torch.Tensor], tuple[torch.Tensor, AuxData]],
+        logpdfs_aux_fn: Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]],
         init_b: torch.Tensor,
         n_chains: int,
         init_step_size: int | float,
@@ -32,8 +30,8 @@ class MetropolisHastingsSampler:
         """Initializes the Metropolis-Hastings sampler kernel.
 
         Args:
-            logpdfs_aux_fn (Callable[[torch.Tensor], tuple[torch.Tensor, AuxData]]):
-                The log pdfs function with auxiliary data.
+            logpdfs_aux_fn (Callable[[torch.Tensor], tuple[torch.Tensor,
+                torch.Tensor]]): The log pdfs function with auxiliary data.
             init_b (torch.Tensor): Starting b for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (int | float): Kernel step in Metropolis Hastings.
@@ -41,10 +39,7 @@ class MetropolisHastingsSampler:
             target_accept_rate (int | float): Mean acceptance target.
         """
         dtype = torch.get_default_dtype()
-        self.logpdfs_aux_fn = cast(
-            Callable[[torch.Tensor], tuple[torch.Tensor, AuxData]],
-            torch.no_grad()(logpdfs_aux_fn),
-        )
+        self.logpdfs_aux_fn = torch.no_grad()(logpdfs_aux_fn)
         self.n_chains = n_chains
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
@@ -79,13 +74,7 @@ class MetropolisHastingsSampler:
 
         torch.where(accept_mask.unsqueeze(-1), proposed_state, self.b, out=self.b)
         torch.where(accept_mask, proposed_logpdfs, self.logpdfs, out=self.logpdfs)
-
-        torch.where(
-            accept_mask.unsqueeze(-1), proposed_aux.psi, self.aux.psi, out=self.aux.psi
-        )
-        torch.where(
-            accept_mask, proposed_aux.logliks, self.aux.logliks, out=self.aux.logliks
-        )
+        torch.where(accept_mask.unsqueeze(-1), proposed_aux, self.aux, out=self.aux)
 
         # Update statistics
         self.n_samples += 1

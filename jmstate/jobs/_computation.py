@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from pydantic import ConfigDict, validate_call
 
-from ..typedefs._defs import Info, Job, Metrics
+from ..typedefs._defs import LOG_TWO_PI, Info, Job, Metrics
 
 
 class ComputeFIM(Job):
@@ -17,19 +17,19 @@ class ComputeFIM(Job):
 
     .. math::
         \mathcal{I}_n(\theta) = \sum_{i=1}^n \mathbb{E}_{b \sim p(\cdot \mid x_i,
-        \theta)} \left(\nabla \log \mathcal{L}(x_i, b ; \theta) \nabla \log
-        \mathcal{L}(x_i, b ; \theta)^T \right)
+        \theta)} \left(\nabla \log \mathcal{L}(\theta ; x_i, b) \nabla \log
+        \mathcal{L}(\theta ; x_i, b)^T \right)
 
     Please note that this is a stochastic approximation. By using the `bias=True`
     option which is enabled by default, you can substract a bias term giving the
     covariance matrix instead. This can be useful if the parameter estimate is quite
     far from the MLE.
 
-    For more information, see PMLR 202:1430-1453, 2023.
+    For more information, see ISSN 2824-7795.
 
     Attributes:
         bias (bool): Whether or not to substract the bias term. Defaults to True.
-        jac (torch.Tensor): The moment estimate of the jacobian.
+        jac (torch.Tensor): The first moment estimate of the jacobian.
         jac_fn (Callable[[torch.Tensor, torch.Tensor], torch.Tensor]): The Jacobian
             function. Useful because of batching.
     """
@@ -81,8 +81,9 @@ class ComputeFIM(Job):
         Args:
             info (Info): The job information object.
         """
-        jac = self.jac_fn(info.model.params_.as_flat_tensor, info.sampler.b).detach()
-        self.jac.add_(jac)
+        self.jac += self.jac_fn(
+            info.model.params_.as_flat_tensor, info.sampler.b
+        ).detach()
 
     def end(self, info: Info, metrics: Metrics):
         """Writes the Fisher Information Matrix into metrics.
@@ -92,11 +93,11 @@ class ComputeFIM(Job):
             metrics (Metrics): The job metrics object.
         """
         self.jac /= info.iteration
-
-        metrics.fim = self.jac.T @ self.jac
+        metrics.fim = (self.jac.T @ self.jac) / info.data.size
         if self.bias:
             grad = self.jac.mean(dim=0)
             metrics.fim -= torch.outer(grad, grad)
+        metrics.fim *= info.data.size
 
 
 class ComputeCriteria(Job):
@@ -120,13 +121,27 @@ class ComputeCriteria(Job):
     computed, it is estimated using the number of samples and approximating the penalty
     by :math:`k \log n`, where :math:`k` is the number of parameters.
 
+    The log likelihood itself is computed the entropy identity:
+
+    .. math::
+        \log \mathcal{L}(x) = \mathbb{E}_{b \sim p(\cdot \mid x,
+        \theta)} \left( \log \mathcal{L}(\theta ; x, b) \right) - \mathbb{E}_{b \sim
+        p(\cdot \mid x, \theta)} \left( \log p(b \mid x, \theta) \right)
+
+    The entropy itself is approximated using a Gaussian approximation of the
+    posterior distribution.
+
     Please note that this is a stochastic approximation.
 
     Attributes:
-        loglik (float): The log likelihood.
+        logpdf (float): The log complete likelihood.
+        b (torch.Tensor): The first moment estimate of the latent variables.
+        b2 (torch.Tensor): The second moment estimate of the latent variables.
     """
 
-    loglik: float
+    logpdf: float
+    b: torch.Tensor
+    b2: torch.Tensor
 
     def __new__(cls) -> Callable[[Info], Job]:
         """Creates the criteria computation job."""
@@ -143,7 +158,11 @@ class ComputeCriteria(Job):
                 "Model should be fitted before computing criteria", stacklevel=2
             )
 
-        self.loglik = 0.0
+        self.logpdf = 0.0
+        self.b = torch.zeros(info.data.size, info.model.params_.Q.dim)
+        self.b2 = torch.zeros(
+            info.data.size, info.model.params_.Q.dim, info.model.params_.Q.dim
+        )
 
     def run(self, info: Info):
         """Updates the log likelihood by stochastic approximation.
@@ -151,7 +170,12 @@ class ComputeCriteria(Job):
         Args:
             info (Info): The job information object.
         """
-        self.loglik += info.sampler.aux.logliks.sum().item() / info.sampler.n_chains
+        self.logpdf += info.sampler.logpdfs.sum().item() / info.sampler.n_chains
+        self.b += info.sampler.b.mean(dim=0)
+        self.b2 += (
+            torch.einsum("ijk,ijl->jkl", info.sampler.b, info.sampler.b)
+            / info.sampler.n_chains
+        )
 
     def end(self, info: Info, metrics: Metrics):
         """Computes other criteria and write them into metrics.
@@ -160,7 +184,17 @@ class ComputeCriteria(Job):
             info (Info): The job information object.
             metrics (Metrics): The job metrics object.
         """
-        metrics.loglik = self.loglik / info.iteration
+        self.b /= info.iteration
+        self.b2 /= info.iteration
+        covs = self.b2 - torch.einsum("ij,ik->ijk", self.b, self.b)
+        entropy = (
+            0.5
+            * (torch.logdet(covs) + info.model.params_.Q.dim * (1 + LOG_TWO_PI))
+            .sum()
+            .item()
+        )
+
+        metrics.loglik = self.logpdf / info.iteration - entropy
         metrics.nloglik_pen = (
             info.data.size * info.model.pen(info.model.params_).item() - metrics.loglik
             if info.model.pen is not None

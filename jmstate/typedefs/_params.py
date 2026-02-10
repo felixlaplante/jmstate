@@ -140,7 +140,7 @@ class CovParams:
         return torch.cholesky_inverse(L)
 
     @property
-    def _precision_cholesky_and_log_eigvals(self) -> tuple[torch.Tensor, torch.Tensor]:
+    def _inv_cholesky_and_log_eigvals(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Gets Cholesky factor as well as log eigvals.
 
         Returns:

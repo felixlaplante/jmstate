@@ -171,32 +171,36 @@ class BucketData(NamedTuple):
     """A simple `NamedTuple` containing transition information.
 
     Attributes:
-        idxs (Tensor1D): The individual indices.
-        t0 (TensorCol): A column vector of previous transition times.
-        t1 (TensorCol): A column vecotr of next transition times.
+        idxs (torch.Tensor): The individual indices.
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A column vecotr of next transition times.
     """
 
-    idxs: Tensor1D
-    t0: TensorCol
-    t1: TensorCol
-
-
-class AuxData(NamedTuple):
-    """A simple internal `NamedTuple` for auxiliary data in sampling."""
-
-    psi: Tensor3D
-    logliks: Tensor2D
+    idxs: torch.Tensor
+    t0: torch.Tensor
+    t1: torch.Tensor
 
 
 class HazardInfo(NamedTuple):
-    """A simple internal `NamedTuple` required for hazard computation."""
+    """A simple internal `NamedTuple` required for hazard computation.
 
-    t0: TensorCol
-    t1: Tensor2D
-    x: Tensor2D | None
-    psi: Tensor2D | Tensor3D
-    alpha: Tensor1D
-    beta: Tensor1D | None
+    Attributes:
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A matrix of next transition times.
+        x (torch.Tensor | None): The covariates.
+        psi (torch.Tensor | torch.Tensor): The individual parameters.
+        alpha (torch.Tensor): The baseline hazard parameters.
+        beta (torch.Tensor | None): The regression parameters.
+        base_hazard_fn (BaseHazardFn): The base hazard function.
+        link_fn (LinkFn): The link function.
+    """
+
+    t0: torch.Tensor
+    t1: torch.Tensor
+    x: torch.Tensor | None
+    psi: torch.Tensor | torch.Tensor
+    alpha: torch.Tensor
+    beta: torch.Tensor | None
     base_hazard_fn: BaseHazardFn
     link_fn: LinkFn
 
@@ -209,9 +213,10 @@ class Info(SimpleNamespace):
 
     Attributes:
         data (ModelData): Learnable model data passed to `do` method.
-        logpdfs_aux_fn (Callable[[ModelParams, Tensor3D], tuple[Tensor2D, AuxData]]):
-            The log probability function with some aux containing individual effects as
-            well as the log likelihoods. Used in optimization steps.
+        logpdfs_aux_fn (Callable[[ModelParams, torch.Tensor], tuple[torch.Tensor,
+            torch.Tensor]]): The log probability function with some aux containing
+            individual effects as well as the log likelihoods. Used in optimization
+            steps.
         iteration (int): The current iteration value. -1 at start and max at end.
         max_iterations (int): The maximum number of iterations allowed.
         model (MultiStateJointModel): The multistate joint model.
@@ -224,7 +229,9 @@ class Info(SimpleNamespace):
     """
 
     data: ModelData
-    logpdfs_aux_fn: Callable[[ModelParams, Tensor3D], tuple[Tensor2D, AuxData]]
+    logpdfs_aux_fn: Callable[
+        [ModelParams, torch.Tensor], tuple[torch.Tensor, torch.Tensor]
+    ]
     iteration: int
     max_iterations: int
     model: MultiStateJointModel
@@ -238,30 +245,30 @@ class Metrics(SimpleNamespace):
     This may be used by the user as a custom bus.
 
     Attributes:
-        fim (Tensor2D): The Fisher Information Matrix.
-        ebes (Tensor2D): The Empirical Bayes Estimators of the rand effects.
+        fim (torch.Tensor): The Fisher Information Matrix.
+        ebes (torch.Tensor): The Empirical Bayes Estimators of the rand effects.
         loglik (float): The log likelihood.
         nloglik_pen (float): The penalized negative log likelihood.
         aic (float): The AIC criterion.
         bic (float): The BIC criterion.
-        pred_y (list[Tensor3D]): The predicted response variables for each drawing of
-            random effects.
-        pred_surv_logps (list[Tensor2D]): The predicted log survival probabilities for
-            each drawing of random effects.
+        pred_y (list[torch.Tensor]): The predicted response variables for each drawing
+            of random effects.
+        pred_surv_logps (list[torch.Tensor]): The predicted log survival probabilities
+            for each drawing of random effects.
         pred_trajectories (list[list[Trajectory]]): The predicted (sampled) trajectories
             for each drawing of random effects.
         params_history (list[ModelParams]): The parameters' evolution list.
         mcmc_diagnostics (list[dict[str, Any]]): The list of MCMC diagnostic dicts.
     """
 
-    fim: Tensor2D
-    ebes: Tensor2D
+    fim: torch.Tensor
+    ebes: torch.Tensor
     loglik: float
     nloglik_pen: float
     aic: float
     bic: float
-    pred_y: list[Tensor3D]
-    pred_surv_logps: list[Tensor2D]
+    pred_y: list[torch.Tensor]
+    pred_surv_logps: list[torch.Tensor]
     pred_trajectories: list[list[Trajectory]]
     params_history: list[ModelParams]
     mcmc_diagnostics: list[dict[str, Any]]

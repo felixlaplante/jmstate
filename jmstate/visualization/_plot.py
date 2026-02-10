@@ -76,4 +76,3 @@ def plot_params_history(
     plt.tight_layout()
     if show:
         plt.show()  # type: ignore
-

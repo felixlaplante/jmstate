@@ -13,9 +13,16 @@ DEFAULT_OPT_KWARGS: Final[dict[str, Any]] = {"lr": 0.5}
 
 
 class Fit(Job):
-    """Job to fit the model with random effects.
+    r"""Job to fit the model with random effects.
 
     This is a fitting job. It sets the `fit_` attribute when finished.
+
+    It leverages the Fisher identity and stochastic gradient algorithm coupled
+    with a MCMC (Metropolis-Hastings) sampler:
+
+    .. math::
+        \nabla_\theta \log \mathcal{L}(\theta ; x) = \mathbb{E}_{b \sim p(\cdot \mid x,
+        \theta)} \left( \nabla_\theta \log \mathcal{L}(\theta ; x, b) \right).
 
     It can be used with any optimizer factory built on the base class
     `torch.optim.Optimizer`. If None, it defaults to Adam.

@@ -139,8 +139,8 @@ class AdamL1Proximal(_BaseL1Proximal):
 
     .. math::
         \theta_i^{(t+1)} \gets \operatorname{sgn}(\theta_{\text{pre}, i}^{(t+1)})
-        \max\bigl(\vert \theta_{\text{pre}, i}^{(t+1)} \vert - \lambda \frac{\text{lr}}
-        {\epsilon + \sqrt{\hat{m}_{2, i}^{(t)}}}, 0\bigr).
+        \max\left( \vert \theta_{\text{pre}, i}^{(t+1)} \vert - \lambda \frac{\text{lr}}
+        {\epsilon + \sqrt{\hat{m}_{2, i}^{(t)}}}, 0 \right).
 
     Attributes:
         lmda (int | float): The penalty.
