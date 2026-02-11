@@ -11,7 +11,7 @@ from ..utils._checks import check_params_align
 def plot_params_history(
     params_history: list[ModelParams],
     *,
-    real_params: ModelParams | None = None,
+    true_params: ModelParams | None = None,
     figsize: tuple[int, int] = (10, 8),
     show: bool = True,
 ):
@@ -22,7 +22,7 @@ def plot_params_history(
     Args:
         params_history (list[ModelParams]): The parameter history as given in
             `Metrics.params_history`.
-        real_params (ModelParams | None, optional): The real parameters. Defaults to
+        true_params (ModelParams | None, optional): The real parameters. Defaults to
             None.
         figsize (tuple[int, int], optional): The figure size. Defaults to (10, 8).
         show (bool, optional): Whether to show the plot. Defaults to True.
@@ -42,9 +42,9 @@ def plot_params_history(
     ncols = math.ceil(math.sqrt(nsubplots))
     nrows = math.ceil(nsubplots / ncols)
 
-    # Check alignment between real and history
-    if real_params is not None:
-        check_params_align(params_history[0], real_params)
+    # Check alignment between true params and history
+    if true_params is not None:
+        check_params_align(params_history[0], true_params)
 
     # Create subplots
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)  # type: ignore
@@ -62,8 +62,8 @@ def plot_params_history(
         )
 
         lines = ax.plot(history, label=labels)
-        if real_params is not None:
-            for line, p in zip(lines, real_params.as_dict[name], strict=True):
+        if true_params is not None:
+            for line, p in zip(lines, true_params.as_dict[name], strict=True):
                 ax.axhline(p, linestyle="--", color=line.get_color())
         ax.set(title=name, xlabel="Iteration", ylabel="Value")
         ax.legend()
