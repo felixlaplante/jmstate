@@ -261,13 +261,8 @@ class ModelParams:
                 t.data = t.to(dtype)
 
         for key, val in self.as_dict.items():
-            if isinstance(val, dict):
-                tensor_tuple = tuple((t, key) for t in val.values())
-                check_inf(tensor_tuple)
-                check_nan(tensor_tuple)
-            else:
-                check_inf(((val, key),))
-                check_nan(((val, key),))
+            check_inf(((val, key),))
+            check_nan(((val, key),))
 
     def _map_fn_params(
         self,
@@ -296,23 +291,6 @@ class ModelParams:
         )
 
     @cached_property
-    def as_dict(self) -> dict[str, torch.Tensor | dict[tuple[Any, Any], torch.Tensor]]:
-        """Gets a grouped dict of all the parameters.
-
-        Returns:
-            dict[str, torch.Tensor | dict[tuple[Any, Any], torch.Tensor]]: The dict of
-                the parameters.
-        """
-        groups = {
-            "gamma": self.gamma,
-            "Q": self.Q.flat,
-            "R": self.R.flat,
-            "alphas": self.alphas,
-            "betas": None if self.betas is None else self.betas,
-        }
-        return {key: val for key, val in groups.items() if val is not None}
-
-    @cached_property
     def as_list(self) -> list[torch.Tensor]:
         """Gets a list of all the unique parameters.
 
@@ -320,36 +298,48 @@ class ModelParams:
             list[torch.Tensor]: The list of the (unique) parameters.
         """
         seen: set[torch.Tensor] = set()
+        candidates = [self.gamma, self.Q.flat, self.R.flat, self.alphas, self.betas]
         _is_new = lambda x: not (x in seen or seen.add(x))  # noqa: E731  # type: ignore
 
         def _items(
-            v: torch.Tensor | dict[tuple[Any, Any], torch.Tensor],
+            v: torch.Tensor | dict[tuple[Any, Any] | None, torch.Tensor],
         ) -> list[torch.Tensor]:
+            if v is None:
+                return []
             if isinstance(v, torch.Tensor):
                 return [v] if _is_new(v) else []
             return [t for t in v.values() if _is_new(t)]
 
-        return list(chain.from_iterable(_items(v) for v in self.as_dict.values()))
+        return list(chain.from_iterable(_items(v) for v in candidates))
 
     @cached_property
-    def as_named_list(self) -> list[tuple[str, torch.Tensor]]:
-        """Gets a list of all the unique parameters names and values.
+    def as_dict(self) -> dict[str, torch.Tensor]:
+        """Gets a dict of all the unique parameters names and values.
 
         Returns:
-            list[tuple[str, torch.Tensor]]: The list of the (unique) parameters names
-                and values.
+            dict[str, torch.Tensor]]: The dict of
+                the (unique) parameters names and values.
         """
         seen: set[torch.Tensor] = set()
+        candidates = {
+            "gamma": self.gamma,
+            "Q": self.Q.flat,
+            "R": self.R.flat,
+            "alphas": self.alphas,
+            "betas": self.betas,
+        }
         _is_new = lambda x: not (x in seen or seen.add(x))  # noqa: E731  # type: ignore
 
         def _items(
-            k: str, v: torch.Tensor | dict[tuple[Any, Any], torch.Tensor]
+            k: str, v: torch.Tensor | dict[tuple[Any, Any] | None, torch.Tensor]
         ) -> list[tuple[str, torch.Tensor]]:
+            if v is None:
+                return None
             if isinstance(v, torch.Tensor):
                 return [(k, v)] if _is_new(v) else []
             return [(f"{k}[{sk}]", sv) for sk, sv in v.items() if _is_new(sv)]
 
-        return list(chain.from_iterable(_items(k, v) for k, v in self.as_dict.items()))
+        return dict(chain.from_iterable(_items(k, v) for k, v in candidates.items()))
 
     @property
     def as_flat_tensor(self) -> Tensor1D:
@@ -410,9 +400,8 @@ class ModelParams:
                 return seen[ref]
 
             n = ref.numel()
-            result = flat[i : i + n]
+            seen[ref] = flat[i : i + n].reshape(ref.shape)
             i += n
-            seen[ref] = result.reshape(ref.shape)
 
             return seen[ref]
 

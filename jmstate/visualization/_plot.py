@@ -5,7 +5,7 @@ import torch
 from numpy import atleast_1d
 
 from ..typedefs._params import ModelParams
-from ..utils._checks import check_params_size_and_names
+from ..utils._checks import check_params_align
 
 
 def plot_params_history(
@@ -29,30 +29,30 @@ def plot_params_history(
 
     Raises:
         ValueError: If the parameters' history is empty.
-        ValueError: If the real parameters do not match the parameters' history length.
-        ValueError: If the real parameters do not match the parameters' history names.
+        ValueError: If the parameters do not have the same names.
+        ValueError: If the parameters do not have the same methods for Q.
+        ValueError: If the parameters do not have the same methods for R.
     """
     if not params_history:
         raise ValueError("Empty parameters' history provided")
 
     # Get the names
-    named_params_list = params_history[0].as_named_list
-    nsubplots = len(named_params_list)
+    params_dict = params_history[0].as_dict
+    nsubplots = len(params_dict)
     ncols = math.ceil(math.sqrt(nsubplots))
     nrows = math.ceil(nsubplots / ncols)
 
-    # Check naming is correct as well as sizes
+    # Check alignment between real and history
     if real_params is not None:
-        named_real_params_list = real_params.as_named_list
-        check_params_size_and_names(named_params_list, named_real_params_list)
+        check_params_align(params_history[0], real_params)
 
     # Create subplots
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)  # type: ignore
     axes = atleast_1d(axes).flat
 
-    for i, (ax, (name, _)) in enumerate(zip(axes, named_params_list, strict=True)):
+    for ax, (name, _) in zip(axes, params_dict.items(), strict=True):
         history = torch.cat(
-            [p.as_list[i].reshape(1, -1) for p in params_history], dim=0
+            [p.as_dict[name].reshape(1, -1) for p in params_history], dim=0
         )
 
         labels = (
@@ -63,7 +63,7 @@ def plot_params_history(
 
         lines = ax.plot(history, label=labels)
         if real_params is not None:
-            for line, p in zip(lines, real_params.as_list[i], strict=True):
+            for line, p in zip(lines, real_params.as_dict[name], strict=True):
                 ax.axhline(p, linestyle="--", color=line.get_color())
         ax.set(title=name, xlabel="Iteration", ylabel="Value")
         ax.legend()

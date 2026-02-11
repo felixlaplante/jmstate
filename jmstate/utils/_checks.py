@@ -8,7 +8,7 @@ import torch
 from ..typedefs._defs import Trajectory
 
 if TYPE_CHECKING:
-    pass
+    from ..typedefs._params import ModelParams
 
 
 def check_inf(tensors: tuple[tuple[torch.Tensor | None, str], ...]):
@@ -150,29 +150,21 @@ def check_matrix_dim(flat: torch.Tensor, dim: int, method: str):
             )
 
 
-def check_params_size_and_names(
-    named_params_list1: list[tuple[str, torch.Tensor]],
-    named_params_list2: list[tuple[str, torch.Tensor]],
-):
-    """Checks if the named parameters lists have the same length, names and sizes.
+def check_params_align(params1: ModelParams, params2: ModelParams):
+    """Checks if the named parameters lists have the same length, names and methods.
 
     Args:
-        named_params_list1 (list[tuple[str, torch.Tensor]]): The first named parameters
-            list.
-        named_params_list2 (list[tuple[str, torch.Tensor]]): The second named
-            parameters list.
+        params1 (ModelParams): The first instance of ModelParams.
+        params2 (ModelParams): The second instance of ModelParams.
 
     Raises:
-        ValueError: If the named parameters lists do not have the same length.
-        ValueError: If the named parameters lists do not have the same names.
-        ValueError: If the named parameters lists do not have the same sizes.
+        ValueError: If the parameters do not have the same names.
+        ValueError: If the parameters do not have the same methods for Q.
+        ValueError: If the parameters do not have the same methods for R.
     """
-    if len(named_params_list1) != len(named_params_list2):
-        raise ValueError("Named parameters lists must have the same length")
-    for (name1, param1), (name2, param2) in zip(
-        named_params_list1, named_params_list2, strict=True
-    ):
-        if name1 != name2:
-            raise ValueError("Named parameters lists must have the same names")
-        if param1.size() != param2.size():
-            raise ValueError("Named parameters lists must have the same sizes")
+    if params1.as_dict.keys() != params2.as_dict.keys():
+        raise ValueError("Named parameters lists must have the same names")
+    if params1.Q.method != params2.Q.method:
+        raise ValueError("Named parameters lists must have the same methods for Q")
+    if params1.R.method != params2.R.method:
+        raise ValueError("Named parameters lists must have the same methods for R")
