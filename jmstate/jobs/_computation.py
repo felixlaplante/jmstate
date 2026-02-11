@@ -5,7 +5,7 @@ from typing import Any
 import torch
 from pydantic import ConfigDict, validate_call
 
-from ..typedefs._defs import LOG_TWO_PI, Info, Job, Metrics
+from ..typedefs._defs import Info, Job, Metrics
 
 
 class ComputeFIM(Job):
@@ -183,17 +183,13 @@ class ComputeCriteria(Job):
             info (Info): The job information object.
             metrics (Metrics): The job metrics object.
         """
+        # The LOG_TWO_PI factor cancels out with prior log likelihood
         self.b /= info.iteration
         self.b2 /= info.iteration
         covs = self.b2 - torch.einsum("ij,ik->ijk", self.b, self.b)
-        entropy = (
-            0.5
-            * (torch.logdet(covs) + info.model.params_.Q.dim * (1 + LOG_TWO_PI))
-            .sum()
-            .item()
-        )
+        entropy = 0.5 * (torch.logdet(covs) + info.model.params_.Q.dim).sum().item()
 
-        metrics.loglik = self.logpdf / info.iteration - entropy
+        metrics.loglik = self.logpdf / info.iteration + entropy
         metrics.nloglik_pen = (
             info.data.size * info.model.pen(info.model.params_).item() - metrics.loglik
             if info.model.pen is not None
@@ -205,9 +201,7 @@ class ComputeCriteria(Job):
         if hasattr(metrics, "fim"):
             bic_pen = torch.logdet(metrics.fim).item()
         else:
-            warnings.warn(
-                "FIM not computed, using sample size instead", stacklevel=2
-            )
+            warnings.warn("FIM not computed, using sample size instead", stacklevel=2)
             bic_pen = d * torch.log(torch.tensor(info.data.size)).item()
 
         metrics.aic = 2 * metrics.nloglik_pen + aic_pen
