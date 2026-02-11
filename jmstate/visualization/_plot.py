@@ -50,7 +50,7 @@ def plot_params_history(
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)  # type: ignore
     axes = atleast_1d(axes).flat
 
-    for ax, (name, _) in zip(axes, params_dict.items(), strict=True):
+    for ax, name in zip(axes, params_dict.keys(), strict=True):
         history = torch.cat(
             [p.as_dict[name].reshape(1, -1) for p in params_history], dim=0
         )
@@ -76,3 +76,4 @@ def plot_params_history(
     plt.tight_layout()
     if show:
         plt.show()  # type: ignore
+
