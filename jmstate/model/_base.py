@@ -448,7 +448,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             n_steps (IntStrictlyPositive | None, optional): The steps to do at each
                 iteration; this is sub-sampling. Defaults to None.
             init_step_size (NumNonNegative, optional): Initial kernel step size in
-                Metropolis Hastings. Defaults to 0.1.
+                Metropolis-Hastings. Defaults to 0.1.
             adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
                 The adaptation is done with the Robbins Monro algorithm in log scale.
                 Defaults to 0.1.
@@ -573,7 +573,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             n_steps (IntStrictlyPositive | None, optional): The steps to do at each
                 iteration; this is sub-sampling. Defaults to None.
             init_step_size (NumNonNegative, optional): Initial kernel step size in
-                Metropolis Hastings. Defaults to 0.1.
+                Metropolis-Hastings. Defaults to 0.1.
             adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
                 The adaptation is done with the Robbins Monro algorithm in log scale.
                 Defaults to 0.1.
@@ -634,7 +634,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             n_steps (IntStrictlyPositive | None, optional): The steps to do at each
                 iteration; this is sub-sampling. Defaults to None.
             init_step_size (NumNonNegative, optional): Initial kernel step size in
-                Metropolis Hastings. Defaults to 0.1.
+                Metropolis-Hastings. Defaults to 0.1.
             adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
                 The adaptation is done with the Robbins Monro algorithm in log scale.
                 Defaults to 0.1.

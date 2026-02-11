@@ -34,7 +34,7 @@ class MetropolisHastingsSampler:
                 torch.Tensor]]): The log pdfs function with auxiliary data.
             init_b (torch.Tensor): Starting b for the chain.
             n_chains (int): The number of parallel chains to spawn.
-            init_step_size (int | float): Kernel step in Metropolis Hastings.
+            init_step_size (int | float): Kernel step in Metropolis-Hastings.
             adapt_rate (int | float): Adaptation rate for the step_size.
             target_accept_rate (int | float): Mean acceptance target.
         """
