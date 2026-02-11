@@ -206,7 +206,7 @@ class ComputeCriteria(Job):
             bic_pen = torch.logdet(metrics.fim).item()
         else:
             warnings.warn(
-                "FIM not computed, using effective sample size instead", stacklevel=2
+                "FIM not computed, using sample size instead", stacklevel=2
             )
             bic_pen = d * torch.log(torch.tensor(info.data.size)).item()
 
