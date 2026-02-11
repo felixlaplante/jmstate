@@ -61,10 +61,11 @@ def plot_params_history(
             else name
         )
 
-        lines = ax.plot(history, label=labels)
         if true_params is not None:
+            lines = ax.plot(history, label=labels)
             for line, p in zip(lines, true_params.as_dict[name], strict=True):
                 ax.axhline(p, linestyle="--", color=line.get_color())
+    
         ax.set(title=name, xlabel="Iteration", ylabel="Value")
         ax.legend()
 
@@ -76,4 +77,5 @@ def plot_params_history(
     plt.tight_layout()
     if show:
         plt.show()  # type: ignore
+
 
