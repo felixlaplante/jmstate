@@ -317,8 +317,8 @@ class ModelParams:
         """Gets a dict of all the unique parameters names and values.
 
         Returns:
-            dict[str, torch.Tensor]]: The dict of
-                the (unique) parameters names and values.
+            dict[str, torch.Tensor]: The dict of the (unique) parameters names and
+                values.
         """
         seen: set[torch.Tensor] = set()
         candidates = {
