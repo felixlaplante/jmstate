@@ -93,11 +93,10 @@ class ComputeFIM(Job):
             metrics (Metrics): The job metrics object.
         """
         self.jac /= info.iteration
-        metrics.fim = (self.jac.T @ self.jac) / info.data.size
+        metrics.fim = self.jac.T @ self.jac
         if self.bias:
             grad = self.jac.mean(dim=0)
-            metrics.fim -= torch.outer(grad, grad)
-        metrics.fim *= info.data.size
+            metrics.fim -= torch.outer(grad, grad) / info.data.size
 
 
 class ComputeCriteria(Job):
