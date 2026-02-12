@@ -28,10 +28,8 @@ def plot_params_history(
         show (bool, optional): Whether to show the plot. Defaults to True.
 
     Raises:
-        ValueError: If the parameters' history is empty.
         ValueError: If the parameters do not have the same names.
-        ValueError: If the parameters do not have the same methods for Q.
-        ValueError: If the parameters do not have the same methods for R.
+        ValueError: If the parameters do not have the same shapes.
     """
     if not params_history:
         raise ValueError("Empty parameters' history provided")
@@ -54,18 +52,13 @@ def plot_params_history(
         history = torch.cat(
             [p.as_dict[name].reshape(1, -1) for p in params_history], dim=0
         )
-
-        labels = (
-            [f"{name}[{i}]" for i in range(1, history.size(1) + 1)]
-            if history.size(1) > 1
-            else name
-        )
+        labels = [f"{name}[{i}]" for i in range(history.size(1))]
 
         if true_params is not None:
             lines = ax.plot(history, label=labels)
             for line, p in zip(lines, true_params.as_dict[name], strict=True):
                 ax.axhline(p, linestyle="--", color=line.get_color())
-    
+
         ax.set(title=name, xlabel="Iteration", ylabel="Value")
         ax.legend()
 
@@ -77,5 +70,3 @@ def plot_params_history(
     plt.tight_layout()
     if show:
         plt.show()  # type: ignore
-
-

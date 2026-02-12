@@ -291,28 +291,6 @@ class ModelParams:
         )
 
     @cached_property
-    def as_list(self) -> list[torch.Tensor]:
-        """Gets a list of all the unique parameters.
-
-        Returns:
-            list[torch.Tensor]: The list of the (unique) parameters.
-        """
-        seen: set[torch.Tensor] = set()
-        candidates = [self.gamma, self.Q.flat, self.R.flat, self.alphas, self.betas]
-        _is_new = lambda x: not (x in seen or seen.add(x))  # noqa: E731  # type: ignore
-
-        def _items(
-            v: torch.Tensor | dict[tuple[Any, Any] | None, torch.Tensor],
-        ) -> list[torch.Tensor]:
-            if v is None:
-                return []
-            if isinstance(v, torch.Tensor):
-                return [v] if _is_new(v) else []
-            return [t for t in v.values() if _is_new(t)]
-
-        return list(chain.from_iterable(_items(v) for v in candidates))
-
-    @cached_property
     def as_dict(self) -> dict[str, torch.Tensor]:
         """Gets a dict of all the unique parameters names and values.
 
@@ -334,12 +312,21 @@ class ModelParams:
             k: str, v: torch.Tensor | dict[tuple[Any, Any] | None, torch.Tensor]
         ) -> list[tuple[str, torch.Tensor]]:
             if v is None:
-                return None
+                return []
             if isinstance(v, torch.Tensor):
                 return [(k, v)] if _is_new(v) else []
             return [(f"{k}[{sk}]", sv) for sk, sv in v.items() if _is_new(sv)]
 
         return dict(chain.from_iterable(_items(k, v) for k, v in candidates.items()))
+
+    @cached_property
+    def as_list(self) -> list[torch.Tensor]:
+        """Gets a list of all the unique parameters.
+
+        Returns:
+            list[torch.Tensor]: The list of the (unique) parameters.
+        """
+        return list(self.as_dict.values())
 
     @property
     def as_flat_tensor(self) -> Tensor1D:
@@ -398,22 +385,26 @@ class ModelParams:
             nonlocal seen, i
             if ref in seen:
                 return seen[ref]
-
-            n = ref.numel()
-            seen[ref] = flat[i : i + n].reshape(ref.shape)
-            i += n
-
+            seen[ref] = flat[i : (i := i + ref.numel())].reshape(ref.shape)
             return seen[ref]
 
         return cast(Self, self._map_fn_params(_next))
 
     def detach(self) -> Self:
-        """Returns a detached reshape of the parameters.
+        """Returns a detached version of the parameters.
 
         Returns:
-            Self The detached reshape.
+            Self The detached version.
         """
-        return cast(Self, self._map_fn_params(torch.detach))
+        seen: dict[torch.Tensor, torch.Tensor] = {}
+
+        def _detach(t: torch.Tensor):
+            nonlocal seen
+            if t not in seen:
+                seen[t] = t.detach()
+            return seen[t]
+
+        return cast(Self, self._map_fn_params(_detach))
 
     def clone(self) -> Self:
         """Returns a clone of the parameters.
@@ -423,11 +414,10 @@ class ModelParams:
         """
         seen: dict[torch.Tensor, torch.Tensor] = {}
 
-        def _next(t: torch.Tensor):
+        def _clone(t: torch.Tensor):
             nonlocal seen
             if t not in seen:
                 seen[t] = t.clone()
-
             return seen[t]
 
-        return cast(Self, self._map_fn_params(_next))
+        return cast(Self, self._map_fn_params(_clone))

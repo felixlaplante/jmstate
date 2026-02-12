@@ -159,12 +159,12 @@ def check_params_align(params1: ModelParams, params2: ModelParams):
 
     Raises:
         ValueError: If the parameters do not have the same names.
-        ValueError: If the parameters do not have the same methods for Q.
-        ValueError: If the parameters do not have the same methods for R.
+        ValueError: If the parameters do not have the same shapes.
     """
     if params1.as_dict.keys() != params2.as_dict.keys():
-        raise ValueError("Named parameters lists must have the same names")
-    if params1.Q.method != params2.Q.method:
-        raise ValueError("Named parameters lists must have the same methods for Q")
-    if params1.R.method != params2.R.method:
-        raise ValueError("Named parameters lists must have the same methods for R")
+        raise ValueError("All parameters must have the same names")
+    if any(
+        t1.shape != t2.shape
+        for t1, t2 in zip(params1.as_list, params2.as_list, strict=True)
+    ):
+        raise ValueError("All parameters must have the same shapes")
