@@ -49,7 +49,7 @@ class Net(nn.Module):
     @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, net: nn.Module):
         super().__init__()  # type: ignore
-        self.net = net.to(torch.get_default_dtype())
+        self.net = net
         self.requires_grad_(False)
 
     def forward(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:

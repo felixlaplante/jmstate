@@ -3,25 +3,6 @@ from collections.abc import Callable
 import torch
 
 
-def is_valid_dtype(dtype: torch.dtype) -> torch.dtype:
-    """Checks if the dtype is valid for PyTorch.
-
-    Args:
-        dtype (torch.dtype): The dtype to check.
-
-    Raises:
-        ValueError: If the dtype is not float32 or float64.
-
-    Returns:
-        torch.dtype: The dtype.
-    """
-    if dtype not in (torch.float32, torch.float64):
-        raise ValueError(
-            f"expected dtype in {(torch.float32, torch.float64)}, got {dtype}"
-        )
-    return dtype
-
-
 def is_ndim(ndim: int) -> Callable[[torch.Tensor], torch.Tensor]:
     """Checks the number of dimension of a tensor.
 

@@ -233,7 +233,7 @@ class ModelParams:
         return rich_str(tree)
 
     def __post_init__(self):
-        """Validate and put to dtype all tensors.
+        """Validate all tensors.
 
         Raises:
             ValueError: If any of the tensors contains inf values.
@@ -251,14 +251,6 @@ class ModelParams:
         object.__setattr__(self, "alphas", _sort_dict(self.alphas))
         if self.betas is not None:
             object.__setattr__(self, "betas", _sort_dict(self.betas))
-
-        dtype = torch.get_default_dtype()
-
-        for t in self.as_list:
-            t.data = t.to(dtype)
-        if self.extra is not None:
-            for t in self.extra:
-                t.data = t.to(dtype)
 
         for key, val in self.as_dict.items():
             check_inf(((val, key),))

@@ -11,9 +11,7 @@ def _tril_from_flat(flat: torch.Tensor, dim: int) -> torch.Tensor:
     Returns:
         torch.Tensor: The lower triangular matrix.
     """
-    return torch.zeros(dim, dim, dtype=flat.dtype).index_put_(
-        tuple(torch.tril_indices(dim, dim)), flat
-    )
+    return torch.zeros(dim, dim).index_put_(tuple(torch.tril_indices(dim, dim)), flat)
 
 
 def _flat_from_tril(L: torch.Tensor) -> torch.Tensor:

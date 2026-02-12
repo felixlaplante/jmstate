@@ -20,14 +20,7 @@ from pydantic import AfterValidator
 from torch import nn
 from xxhash import xxh3_64_intdigest
 
-from ._validators import (
-    is_col,
-    is_ndim,
-    is_non_neg,
-    is_prob,
-    is_strict_pos,
-    is_valid_dtype,
-)
+from ._validators import is_col, is_ndim, is_non_neg, is_prob, is_strict_pos
 
 if TYPE_CHECKING:
     from ..model._base import MultiStateJointModel
@@ -42,7 +35,6 @@ Trajectory: TypeAlias = list[tuple[Num, Any]]
 
 
 # Pydantic annotations
-ValidDtype = Annotated[torch.dtype, AfterValidator(is_valid_dtype)]
 Tensor0D = Annotated[torch.Tensor, AfterValidator(is_ndim(0))]
 Tensor1D = Annotated[torch.Tensor, AfterValidator(is_ndim(1))]
 Tensor2D = Annotated[torch.Tensor, AfterValidator(is_ndim(2))]

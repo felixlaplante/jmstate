@@ -22,11 +22,19 @@ def build_buckets(
     Args:
         trajectories (list[Trajectory]): The list of individual trajectories.
 
+    Raises:
+        TypeError: If the default dtype is not float32 or float64.
+
     Returns:
         dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).
     """
     dtype = torch.get_default_dtype()
-    typecode = "f" if dtype == torch.float32 else "d"
+    if dtype == torch.float32:
+        typecode = "f"
+    elif dtype == torch.float64:
+        typecode = "d"
+    else:
+        raise TypeError(f"Unsupported default dtype: {dtype}")
 
     # Process each individual trajectory
     buckets: defaultdict[
@@ -85,13 +93,21 @@ def build_all_buckets(
         c (torch.Tensor): Censoring times.
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
+    Raises:
+        TypeError: If the default dtype is not float32 or float64.
+
     Returns:
         dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The vectorizable buckets
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
     dtype = torch.get_default_dtype()
-    typecode = "f" if dtype == torch.float32 else "d"
+    if dtype == torch.float32:
+        typecode = "f"
+    elif dtype == torch.float64:
+        typecode = "d"
+    else:
+        raise TypeError(f"Unsupported default dtype: {dtype}")
 
     # Initialize buckets
     buckets: defaultdict[
@@ -143,13 +159,21 @@ def build_possible_buckets(
         c (torch.Tensor): Censoring times.
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
+    Raises:
+        TypeError: If the default dtype is not float32 or float64.
+
     Returns:
         dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The possible buckets
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
     dtype = torch.get_default_dtype()
-    typecode = "f" if dtype == torch.float32 else "d"
+    if dtype == torch.float32:
+        typecode = "f"
+    elif dtype == torch.float64:
+        typecode = "d"
+    else:
+        raise TypeError(f"Unsupported default dtype: {dtype}")
 
     # Initialize buckets
     buckets: defaultdict[tuple[Any, Any], tuple[array[int], array[float]]] = (
@@ -188,13 +212,21 @@ def build_remaining_buckets(
         trajectories (list[Trajectory]): The trajectories.
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
+    Raises:
+        TypeError: If the default dtype is not float32 or float64.
+
     Returns:
         dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The remaining buckets
             representation.
     """
     alt_map = _build_alt_map(surv_keys)
     dtype = torch.get_default_dtype()
-    typecode = "f" if dtype == torch.float32 else "d"
+    if dtype == torch.float32:
+        typecode = "f"
+    elif dtype == torch.float64:
+        typecode = "d"
+    else:
+        raise TypeError(f"Unsupported default dtype: {dtype}")
 
     # Initialize buckets
     buckets: defaultdict[tuple[Any, Any], tuple[array[int], array[float]]] = (

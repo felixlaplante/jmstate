@@ -63,11 +63,9 @@ class ComputeFIM(Job):
                 stacklevel=2,
             )
 
-        dtype = torch.get_default_dtype()
-
         d = info.model.params_.numel
         self.bias = bias
-        self.jac = torch.zeros(info.data.size, d, dtype=dtype)
+        self.jac = torch.zeros(info.data.size, d)
 
         def _jac_fn(params_flat_tensor: torch.Tensor, b: torch.Tensor):
             params = info.model.params_.from_flat_tensor(params_flat_tensor)
@@ -234,9 +232,7 @@ class ComputeEBEs(Job):
         Args:
             info: The job information object.
         """
-        self.ebes = torch.zeros(
-            info.sampler.b.shape[1:], dtype=torch.get_default_dtype()
-        )
+        self.ebes = torch.zeros(info.sampler.b.shape[1:])
 
     def run(self, info: Info):
         """Updates the EBEs by stochastic approximation.

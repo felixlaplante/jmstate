@@ -245,12 +245,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             MetropolisHastingsSampler: The intialized Markov kernel.
         """
         # Initialize random effects
-        init_b = torch.zeros(
-            n_chains,
-            data.size,
-            self.params_.Q.dim,
-            dtype=torch.get_default_dtype(),
-        )
+        init_b = torch.zeros(n_chains, data.size, self.params_.Q.dim)
 
         return MetropolisHastingsSampler(
             partial(self._logpdfs_aux_fn, self.params_, data=data),
@@ -335,8 +330,6 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
-        c_max = c_max.to(torch.get_default_dtype())
-
         if not sample_data.skip_validation:
             check_inf(((c_max, "c_max"),))
             check_nan(((c_max, "c_max"),))
@@ -387,8 +380,6 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
-        u = u.to(torch.get_default_dtype())
-
         if not sample_data.skip_validation:
             check_inf(((u, "u"),))
             check_nan(((u, "u"),))

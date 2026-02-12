@@ -244,9 +244,8 @@ class GradStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
-        dtype = torch.get_default_dtype()
-        self.m = torch.zeros(d, dtype=dtype)
-        self.v = torch.zeros(d, dtype=dtype)
+        self.m = torch.zeros(d)
+        self.v = torch.zeros(d)
 
     def quantity(self, info: Info) -> torch.Tensor:
         """Gets the gradients.
@@ -313,9 +312,8 @@ class ParamStop(_BaseEMAStop):
         if isinstance(self.rtol, torch.Tensor):
             check_consistent_size(((self.rtol, 0, "rtol"), (d, None, "params.numel")))
 
-        dtype = torch.get_default_dtype()
-        self.m = torch.zeros(d, dtype=dtype)
-        self.v = torch.zeros(d, dtype=dtype)
+        self.m = torch.zeros(d)
+        self.v = torch.zeros(d)
 
         self.prev_params = info.model.params_.as_flat_tensor
 

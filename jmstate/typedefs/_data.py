@@ -175,30 +175,11 @@ class ModelData:
         if self.skip_validation:
             return
 
-        dtype = torch.get_default_dtype()
-
-        object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
-        object.__setattr__(self, "t", self.t.to(dtype))
-        object.__setattr__(self, "y", self.y.to(dtype))
-        object.__setattr__(self, "c", self.c.to(dtype))
-
         check_trajectory_empty(self.trajectories)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
 
-        last_times = torch.tensor(
-            [trajectory[-1][0] for trajectory in self.trajectories], dtype=dtype
-        )
-
-        check_inf(
-            (
-                (self.x, "x"),
-                (self.t, "t"),
-                (self.y, "y"),
-                (self.c, "c"),
-                (last_times, "trajectories"),
-            )
-        )
+        check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
         check_nan(((self.x, "x"), (self.c, "c")))
         check_consistent_size(
             (
@@ -247,7 +228,7 @@ class CompleteModelData(ModelData):
 
         nan_mask = self.y.isnan()
         valid_mask = ~nan_mask
-        self.valid_mask = valid_mask.to(torch.get_default_dtype())
+        self.valid_mask = valid_mask
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
@@ -329,28 +310,11 @@ class SampleData:
         if self.skip_validation:
             return
 
-        dtype = torch.get_default_dtype()
-
-        object.__setattr__(self, "x", None if self.x is None else self.x.to(dtype))
-        object.__setattr__(self, "psi", self.psi.to(dtype))
-        object.__setattr__(self, "c", None if self.c is None else self.c.to(dtype))
-
         check_trajectory_empty(self.trajectories)
         check_trajectory_sorting(self.trajectories)
         check_trajectory_c(self.trajectories, self.c)
 
-        last_times = torch.tensor(
-            [trajectory[-1][0] for trajectory in self.trajectories], dtype=dtype
-        )
-
-        check_inf(
-            (
-                (self.x, "x"),
-                (self.psi, "psi"),
-                (self.c, "c"),
-                (last_times, "trajectories"),
-            )
-        )
+        check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
         check_nan(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
         check_consistent_size(
             (

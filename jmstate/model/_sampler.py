@@ -38,7 +38,6 @@ class MetropolisHastingsSampler:
             adapt_rate (int | float): Adaptation rate for the step_size.
             target_accept_rate (int | float): Mean acceptance target.
         """
-        dtype = torch.get_default_dtype()
         self.logpdfs_aux_fn = torch.no_grad()(logpdfs_aux_fn)
         self.n_chains = n_chains
         self.adapt_rate = adapt_rate
@@ -52,11 +51,11 @@ class MetropolisHastingsSampler:
 
         # Proposal noise initialization
         self._noise = torch.empty_like(self.b)
-        self.step_sizes = torch.full((1, self.b.size(-2)), init_step_size, dtype=dtype)
+        self.step_sizes = torch.full((1, self.b.size(-2)), init_step_size)
 
         # Statistics tracking
-        self.n_samples = torch.tensor(0, dtype=torch.int64)
-        self.n_accepted = torch.zeros(self.b.size(-2), dtype=dtype)
+        self.n_samples = torch.tensor(0)
+        self.n_accepted = torch.zeros(self.b.size(-2))
 
     def step(self):
         """Performs a single kernel step."""

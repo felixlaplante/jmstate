@@ -236,7 +236,7 @@ class HazardMixin:
         # Initialize for bisection search
         t_left, t_right = (
             t0.clone(),
-            torch.nextafter(t1, torch.tensor(torch.inf, dtype=t1.dtype)),
+            torch.nextafter(t1, torch.tensor(torch.inf)),
         )
 
         # Generate exponential random variables
@@ -282,11 +282,7 @@ class HazardMixin:
 
         # Initialize candidate transition times
         n_transitions = len(current_buckets)
-        t_candidates = torch.full(
-            (sample_data.size, n_transitions),
-            torch.inf,
-            dtype=torch.get_default_dtype(),
-        )
+        t_candidates = torch.full((sample_data.size, n_transitions), torch.inf)
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
             idxs, t0, t1 = bucket
@@ -372,12 +368,11 @@ class HazardMixin:
         c = sample_data.c
 
         # Get buckets from last states
-        dtype = torch.get_default_dtype()
         buckets = build_remaining_buckets(
             sample_data.trajectories, tuple(self.model_design.surv.keys())
         )
 
-        nlogps = torch.zeros(*psi.shape[:-1], u.size(1), dtype=dtype)
+        nlogps = torch.zeros(*psi.shape[:-1], u.size(1))
 
         # Compute the log probabilities summing over transitions
         for key, bucket in buckets.items():
@@ -417,7 +412,7 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log likelihoods.
         """
-        logliks = torch.zeros(psi.shape[:-1], dtype=torch.get_default_dtype())
+        logliks = torch.zeros(psi.shape[:-1])
 
         for key, bucket in data.buckets.items():
             idxs, t0, t1, obs = bucket
