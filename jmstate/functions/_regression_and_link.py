@@ -31,6 +31,7 @@ class Net(nn.Module):
     sequentials. When not knowing which link or regression function to use, try Net.
     You can use derivatives of arbitrary order for the link function using the
     derivatives method.
+
     If the input layer is in :math:`\mathbb{R}^d`, then one dimension is used for the
     input :math:`t`, and the rest for the individual parameters.
 

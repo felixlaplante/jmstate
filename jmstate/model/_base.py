@@ -1,6 +1,4 @@
 from bisect import bisect_left
-from collections.abc import Callable
-from typing import Self
 
 import torch
 from rich.console import Console, Group
@@ -10,46 +8,60 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 from torch.distributions import Normal
-from tqdm import trange
 
-from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
-from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS, Trajectory
+from ..typedefs._data import CompleteModelData, ModelDesign
+from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
 from ..typedefs._params import ModelParams
-from ..utils._checks import check_consistent_size, check_inf, check_nan
 from ..visualization._print import rich_str
 from ._fit import FitMixin
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
+from ._prediction import PredictionMixin
 from ._prior import PriorMixin
-from ._sampler import MCMCMixin
 
 
 class MultiStateJointModel(
-    PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, FitMixin
+    PriorMixin, LongitudinalMixin, HazardMixin, FitMixin, PredictionMixin
 ):
     r"""A class of the nonlinear multistate joint model.
 
-    It features methods to simulate data, fit based on stochastic gradient with any
-    `torch.optim.Optimizer` of choice.
-
-    It leverages the Fisher identity and stochastic gradient algorithm coupled
-    with a MCMC (Metropolis-Hastings) sampler:
-
-    .. math::
-        \nabla_\theta \log \mathcal{L}(\theta ; x) = \mathbb{E}_{b \sim p(\cdot \mid x,
-        \theta)} \left( \nabla_\theta \log \mathcal{L}(\theta ; x, b) \right).
-
-    The use of penalization is possible through the attribute `pen`, which is multiplied
-    by the number of samples.
-
     Please note this class encompasses both the linear joint model and the standard
     joint model, but also allows for the modeling of multiple states assuming a semi
-    Markov property.
+    Markov property. The model is defined by a set of longitudinal and hazard
+    functions, which are parameterized by a set of parameters.
+
+    The model is fit using a stochastic gradient ascent algorithm, and the parameters
+    are sampled using a Metropolis-Hastings algorithm.
+
+    Dynamic prediciton is possible using the different prediction methods, that support
+    dynamic prediction with both single and double Monte Carlo integration.
+
+    For numerical integration, use `n_quad` to specify the number of nodes for the
+    Gauss Legendre quadrature of hazard, and `n_bisect` to specify the number of
+    bisection steps for the bisection algorithm for transition sampling.
+
+    For caching, use `cache_limit` to specify the limit of the cache used in hazard
+    computation, greatly reducing memory and CPU usage. None means infinite, 0 means
+    no caching.
+
+    For MCMC, use `n_chains` to specify the number of chains, `init_step_size` to
+    specify the initial step size for the MCMC sampler, `adapt_rate` to specify the
+    adaptation rate for the step size, `target_accept_rate` to specify the target
+    acceptance rate, `n_warmup` to specify the number of warmup iterations, and
+    `n_subsample` to specify the number of subsamples.
+
+    For fitting, use `n_iter_fit` to specify the number of iterations for stochastic
+    gradient ascent, `n_iter_summary` to specify the number of iterations to compute
+    Fisher Information Matrix and criteria, `lr` to specify the learning rate for the
+    optimizer, `tol` to specify the tolerance for the R2 convergence, and
+    `window_size` to specify the window size for the R2 convergence.
+
+    For printing, use `verbose` to specify whether to print the progress of the model
+    fitting and predicting.
 
     Attributes:
         model_design (ModelDesign): The model design.
         params_ (ModelParams): The (variable) model parameters.
-        pen (Callable[[ModelParams], torch.Tensor] | None): The log likelihood penalty.
         n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
         n_bisect (int): The number of bisection steps for the bisection algorithm.
         cache_limit (int | None): The limit of the cache used in hazard computation,
@@ -60,24 +72,23 @@ class MultiStateJointModel(
         adapt_rate (float): Adaptation rate for the step_size.
         target_accept_rate (float): Mean acceptance target.
         n_warmup (int): The number of warmup iterations for the MCMC sampler.
-        n_steps (int): The number of steps for the MCMC sampler.
-        n_iters (tuple[int, int]): The number of iterations for stochastic gradient and
-            MCMC.
+        n_subsample (int): The number of subsamples for the MCMC sampler.
+        n_iter_fit (int): The number of iterations for stochastic gradient ascent.
+        n_iter_summary (int): The number of iterations to compute Fisher Information
+            Matrix and criteria.
         lr (float): The learning rate for the optimizer.
-        atol (float): The absolute tolerance for convergence.
-        rtol (float): The relative tolerance for convergence.
+        tol (float): The tolerance for the R2 convergence.
+        window_size (int): The window size for the R2 convergence.
         verbose (bool): Whether to print the progress of the model fitting.
         params_history_ (list[ModelParams]): The history of model parameters.
         fim_ (torch.Tensor | None): The Fisher Information Matrix.
         loglik_ (float | None): The log likelihood.
-        nloglik_pen (float | None): The penalized negative log likelihood.
         aic_ (float | None): The Akaike Information Criterion.
         bic_ (float | None): The Bayesian Information Criterion.
     """
 
     model_design: ModelDesign
     params_: ModelParams
-    pen: Callable[[ModelParams], torch.Tensor] | None
     n_quad: int
     n_bisect: int
     cache_limit: int | None
@@ -86,15 +97,16 @@ class MultiStateJointModel(
     adapt_rate: float
     target_accept_rate: float
     n_warmup: int
-    n_steps: int
-    n_iters: tuple[int, int]
+    n_subsample: int
+    n_iter_fit: int
+    n_iter_summary: int
     lr: float
-    tols: tuple[float, float]
+    tol: float
+    window_size: int
     verbose: bool
     params_history_: list[ModelParams]
     fim_: torch.Tensor | None
     loglik_: float | None
-    nloglik_pen: float | None
     aic_: float | None
     bic_: float | None
 
@@ -103,7 +115,6 @@ class MultiStateJointModel(
         model_design: ModelDesign,
         init_params: ModelParams,
         *,
-        pen: Callable[[ModelParams], torch.Tensor] | None = None,
         n_quad: int = 32,
         n_bisect: int = 32,
         cache_limit: int | None = 256,
@@ -112,10 +123,12 @@ class MultiStateJointModel(
         adapt_rate: float = 0.01,
         target_accept_rate: float = 0.234,
         n_warmup: int = 100,
-        n_steps: int = 10,
-        n_iters: tuple[int, int] = (500, 100),
+        n_subsample: int = 10,
+        n_iter_fit: int = 500,
+        n_iter_summary: int = 100,
         lr: float = 0.5,
-        tols: tuple[float, float] = (1e-6, 1e-1),
+        tol: float = 0.1,
+        window_size: int = 100,
         verbose: bool = True,
     ):
         """Initializes the joint model based on the user defined design.
@@ -123,8 +136,6 @@ class MultiStateJointModel(
         Args:
             model_design (ModelDesign): Model design containing modeling information.
             init_params (ModelParams): Initial values for the parameters.
-            pen (Callable[[ModelParams], torch.Tensor] | None, optional):
-                The penalization function. Defaults to None.
             n_quad (int, optional): The used number of points for Gauss-Legendre
                 quadrature. Defaults to 32.
             n_bisect (int, optional): The number of bisection steps used in transition
@@ -140,13 +151,16 @@ class MultiStateJointModel(
                 MCMC sampler. Defaults to 0.234.
             n_warmup (int, optional): The number of warmup iterations for the MCMC
                 sampler. Defaults to 100.
-            n_steps (int, optional): The number of steps for the MCMC sampler. Defaults
-                to 10.
-            n_iters (tuple[int, int], optional): The number of iterations for stochastic
-                gradient and MCMC. Defaults to (500, 100).
+            n_subsample (int, optional): The number of subsamples for the MCMC sampler.
+                Defaults to 10.
+            n_iter_fit (int, optional): The number of iterations for stochastic
+                gradient ascent. Defaults to 500.
+            n_iter_summary (int, optional): The number of iterations to compute Fisher
+                Information Matrix and criteria. Defaults to 100.
             lr (float, optional): The learning rate for the optimizer. Defaults to 0.5.
-            tols (tuple[float, float], optional): The absolute and relative tolerances
-                for convergence. Defaults to (1e-6, 1e-1).
+            tol (float, optional): The tolerance for the convergence. Defaults to 0.1.
+            window_size (int, optional): The window size for the convergence. Defaults
+                to 100.
             verbose (bool, optional): Whether to print the progress of the model
                 fitting. Defaults to True.
         """
@@ -160,100 +174,23 @@ class MultiStateJointModel(
             adapt_rate=adapt_rate,
             target_accept_rate=target_accept_rate,
             lr=lr,
-            tols=tols,
+            tol=tol,
+            window_size=window_size,
         )
 
         # Store model components
         self.model_design = model_design
-        self.params_ = init_params.clone()
-        self.pen = pen
+        self.params_ = init_params.clone().detach()
         self.n_warmup = n_warmup
-        self.n_steps = n_steps
-        self.n_iters = n_iters
+        self.n_subsample = n_subsample
+        self.n_iter_fit = n_iter_fit
+        self.n_iter_summary = n_iter_summary
         self.verbose = verbose
-        self.params_history_ = [self.params_.clone().detach()]
+        self.params_history_ = [self.params_.clone()]
         self.fim_ = None
         self.loglik_ = None
-        self.nloglik_pen = None
         self.aic_ = None
         self.bic_ = None
-
-    def __str__(self) -> str:
-        """Returns a string representation of the model.
-
-        Returns:
-            str: The string representation.
-        """
-        tree = Tree("MultiStateJointModel")
-        tree.add(f"model_design: {self.model_design}")
-        tree.add(f"params_: {self.params_}")
-        tree.add(f"pen: {self.pen}")
-        tree.add(f"n_quad: {self.n_quad}")
-        tree.add(f"n_bisect: {self.n_bisect}")
-        tree.add(f"cache_limit: {self.cache_limit}")
-        tree.add(f"params_history_: {len(self.params_history_)} element(s)")
-        tree.add(f"fim_: {self.fim_}")
-        tree.add(f"loglik_: {self.loglik_}")
-        tree.add(f"nloglik_pen: {self.nloglik_pen}")
-        tree.add(f"aic_: {self.aic_}")
-        tree.add(f"bic_: {self.bic_}")
-        tree.add(f"n_warmup: {self.n_warmup}")
-        tree.add(f"n_iters: {self.n_iters}")
-        tree.add(f"tols: {self.tols}")
-
-        return rich_str(tree)
-
-    def summary(self):
-        """Prints a summary of the model.
-
-        This function prints the p-values of the parameters as well as values and
-        standard error. Also prints the log likelihood, AIC, BIC with lovely colors!
-        """
-        values = self.params_.as_flat_tensor
-        stderrors = self.stderror.as_flat_tensor
-        zvalues = torch.abs(values / stderrors)
-        pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
-
-        table = Table()
-        table.add_column("Parameter name", justify="left")
-        table.add_column("Value", justify="center")
-        table.add_column("Standard Error", justify="center")
-        table.add_column("z-value", justify="center")
-        table.add_column("p-value", justify="center")
-        table.add_column("Significance level", justify="center")
-
-        i = 0
-        for name, value in self.params_.as_dict.items():
-            for j in range(value.numel()):
-                code = SIGNIFICANCE_CODES[
-                    bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())
-                ]
-
-                table.add_row(
-                    f"{name}[{j}]",
-                    f"{values[i].item():.3f}",
-                    f"{stderrors[i].item():.3f}",
-                    f"{zvalues[i].item():.3f}",
-                    f"{pvalues[i].item():.3f}",
-                    code,
-                )
-                i += 1
-
-        criteria = Text(
-            f"Log-likelihood: {self.loglik_:.3f}\n"
-            f"Penalized negative log-likelihood: {self.nloglik_pen:.3f}\n"
-            f"AIC: {self.aic_:.3f}\n"
-            f"BIC: {self.bic_:.3f}",
-            style="bold cyan",
-        )
-
-        content = Group(table, Rule(style="dim"), criteria, Rule(style="dim"))
-
-        panel = Panel(
-            content, title="Model Summary", border_style="green", expand=False
-        )
-
-        Console().print(panel)
 
     def _logpdfs_aux_fn(  # type: ignore
         self, params: ModelParams, data: CompleteModelData, b: torch.Tensor
@@ -277,137 +214,82 @@ class MultiStateJointModel(
 
         return logpdfs, psi
 
-    def sample_trajectories(
-        self,
-        sample_data: SampleData,
-        c_max: torch.Tensor,
-        *,
-        max_length: int = 10,
-    ) -> list[Trajectory]:
-        """Sample trajectories from the joint model.
-
-        The sampling is done usign a bisection algorithm by inversing the log cdf of the
-        transitions inside a Gillespie-like algorithm.
-
-        Checks are run only if the `skip_validation` attribute of `sample_date` is not
-        set to `True`.
-
-        Args:
-            sample_data (SampleData): Prediction data.
-            c_max (TensorCol): The maximum trajectory censoring times.
-            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling.
-                Defaults to 10.
-
-        Raises:
-            ValueError: If c_max contains inf values.
-            ValueError: If c_max contains NaN values.
-            ValueError: If c_max has incorrect shape.
+    def __str__(self) -> str:
+        """Returns a string representation of the model.
 
         Returns:
-            list[Trajectory]: The sampled trajectories.
+            str: The string representation.
         """
-        if not sample_data.skip_validation:
-            check_inf(((c_max, "c_max"),))
-            check_nan(((c_max, "c_max"),))
-            check_consistent_size(
-                ((c_max, 0, "c_max"), (sample_data.size, None, "sample_data.size"))
-            )
+        tree = Tree("MultiStateJointModel")
+        tree.add(f"model_design: {self.model_design}")
+        tree.add(f"params_: {self.params_}")
+        tree.add(f"n_quad: {self.n_quad}")
+        tree.add(f"n_bisect: {self.n_bisect}")
+        tree.add(f"cache_limit: {self.cache_limit}")
+        tree.add(f"n_warmup: {self.n_warmup}")
+        tree.add(f"n_subsample: {self.n_subsample}")
+        tree.add(f"n_iter_fit: {self.n_iter_fit}")
+        tree.add(f"n_iter_summary: {self.n_iter_summary}")
+        tree.add(f"tol: {self.tol}")
+        tree.add(f"window_size: {self.window_size}")
+        tree.add(f"params_history_: {len(self.params_history_)} element(s)")
+        tree.add(f"fim_: {self.fim_}")
+        tree.add(f"loglik_: {self.loglik_}")
+        tree.add(f"aic_: {self.aic_}")
+        tree.add(f"bic_: {self.bic_}")
 
-        return super()._sample_trajectories(sample_data, c_max, max_length=max_length)
+        return rich_str(tree)
 
-    def compute_surv_logps(
-        self, sample_data: SampleData, u: torch.Tensor
-    ) -> torch.Tensor:
-        r"""Computes log probabilites of remaining event free up to time u.
+    def summary(self):
+        """Prints a summary of the model.
 
-        A censoring time may also be given. With known individual effects, this computes
-        at the times :math:`u` the values of the log survival probabilities given input
-        data conditionally to survival up to time :math:`c`:
-
-        .. math::
-            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt.
-
-        When multiple transitions are allowed, :math:`\lambda(t)` is a sum over all
-        possible transitions, that is to say if an individual is in the state :math:`k`
-        from time :math:`t_0`, this gives:
-
-        .. math::
-            -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt.
-
-        Please note this makes use of the Chasles property in order to avoid the
-        computation of two integrals and make computations more precise.
-
-        The variable `u` is expected to be a matrix with the same number of rows as
-        individuals, and the same number of columns as prediction times.
-
-        Checks are run only if the `skip_validation` attribute of `sample_date` is not
-        set to `True`.
-
-        Args:
-            sample_data (SampleData): The data on which to compute the probabilities.
-            u (torch.Tensor): The time at which to evaluate the probabilities.
-
-        Raises:
-            ValueError: If u contains inf values.
-            ValueError: If u contains NaN values.
-            ValueError: If u has incorrect shape.
-
-        Returns:
-            torch.Tensor: The computed survival log probabilities.
+        This function prints the p-values of the parameters as well as values and
+        standard error. Also prints the log likelihood, AIC, BIC with lovely colors!
         """
-        if not sample_data.skip_validation:
-            check_inf(((u, "u"),))
-            check_nan(((u, "u"),))
-            check_consistent_size(
-                ((u, 0, "u"), (sample_data.size, None, "sample_data.size"))
-            )
+        values = self.params_.as_flat_tensor
+        stderrs = self.stderr.as_flat_tensor
+        zvalues = torch.abs(values / stderrs)
+        pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
 
-        return super()._compute_surv_logps(sample_data, u)
+        table = Table()
+        table.add_column("Parameter name", justify="left")
+        table.add_column("Value", justify="center")
+        table.add_column("Standard Error", justify="center")
+        table.add_column("z-value", justify="center")
+        table.add_column("p-value", justify="center")
+        table.add_column("Significance level", justify="center")
 
-    def fit(self, data: ModelData) -> Self:
-        # Load and complete data
-        data = CompleteModelData(
-            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
-        )
-        data.prepare(self.model_design, self.params_)
+        i = 0
+        for name, value in self.params_.as_dict.items():
+            for j in range(value.numel()):
+                code = SIGNIFICANCE_CODES[
+                    bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())
+                ]
 
-        # Initialize optimizer and MCMC
-        optimizer = self._init_optimizer()
-        sampler = self._init_mcmc(data)
-        sampler.run(self.n_warmup)
+                table.add_row(
+                    f"{name}[{j}]",
+                    f"{values[i].item():.3f}",
+                    f"{stderrs[i].item():.3f}",
+                    f"{zvalues[i].item():.3f}",
+                    f"{pvalues[i].item():.3f}",
+                    code,
+                )
+                i += 1
 
-        # Main fitting loop
-        for _ in trange(
-            self.n_iters[0], desc="Fitting joint model", disable=not self.verbose
-        ):
-            self._step(optimizer, sampler, data)
-            self.params_history_.append(self.params_.clone().detach())
-            if self._is_converged(optimizer):
-                break
-            sampler.run(self.n_steps)
-
-        # Initialize Jacobian matrix and criteria
-        mjac, jac_fn = self._init_jac(data)
-        logpdf, mb, mb2 = self._init_criteria(data)
-
-        # FIM and Criteria loop
-        for _ in trange(
-            self.n_iters[1],
-            desc="Computing FIM and Criteria",
-            disable=not self.verbose,
-        ):
-            self._update_jac(mjac, jac_fn, sampler)
-            self._update_criteria(logpdf, mb, mb2, sampler)
-            for _ in range(self.n_steps):
-                sampler.step()
-
-        self.fim_ = self._compute_fim(mjac)
-        self.loglik, self.nloglik_pen, self.aic, self.bic = self._compute_criteria(
-            logpdf, mb, mb2, self.fim_, data
+        criteria = Text(
+            f"Log-likelihood: {self.loglik_:.3f}\n"
+            f"AIC: {self.aic_:.3f}\n"
+            f"BIC: {self.bic_:.3f}",
+            style="bold cyan",
         )
 
-        self._cache.clear_cache()
-        return self
+        content = Group(table, Rule(style="dim"), criteria, Rule(style="dim"))
+
+        panel = Panel(
+            content, title="Model Summary", border_style="green", expand=False
+        )
+
+        Console().print(panel)
 
     def sample_params(self, sample_size: int) -> list[ModelParams]:
         """Sample parameters based on asymptotic behavior of the MLE.
@@ -432,7 +314,7 @@ class MultiStateJointModel(
         return [self.params_.from_flat_tensor(sample) for sample in flat_samples]
 
     @property
-    def stderror(self) -> ModelParams:
+    def stderr(self) -> ModelParams:
         r"""Returns the standard error of the parameters.
 
         They can be used to draw confidence intervals. The standard errors are computed

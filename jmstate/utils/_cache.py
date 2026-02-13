@@ -48,6 +48,6 @@ class Cache:
 
         return cache[key]
 
-    def clear_cache(self):
+    def clear(self):
         """Clears the cache."""
         self.cache = {key: OrderedDict() for key in self.keys}

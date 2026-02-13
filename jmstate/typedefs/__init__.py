@@ -6,10 +6,7 @@ from ._defs import (
     BucketData,
     ClockMethod,
     IndividualEffectsFn,
-    Info,
-    Job,
     LinkFn,
-    Metrics,
     RegressionFn,
 )
 from ._params import CovParams, ModelParams
@@ -20,10 +17,7 @@ __all__ = [
     "ClockMethod",
     "CovParams",
     "IndividualEffectsFn",
-    "Info",
-    "Job",
     "LinkFn",
-    "Metrics",
     "ModelData",
     "ModelDesign",
     "ModelParams",

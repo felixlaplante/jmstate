@@ -212,7 +212,7 @@ class CompleteModelData(ModelData):
         check_consistent_size(((params.R.dim, None, "R"), (self.y, -1, "y")))
 
         self.valid_mask = ~self.y.isnan()
-        self.n_valid = self.valid_mask.sum(dim=-2)
+        self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_all_buckets(

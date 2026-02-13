@@ -3,11 +3,7 @@ from typing import cast
 import torch
 from torch import nn
 
-from ..typedefs._defs import (
-    LOG_TWO_PI,
-    BaseHazardFn,
-    ClockMethod,
-)
+from ..typedefs._defs import LOG_TWO_PI, BaseHazardFn, ClockMethod
 
 
 def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
@@ -64,6 +60,7 @@ class Exponential(BaseHazardFn):
     r"""Implements the Exponential base hazard.
 
     Exponential base hazard is time independent.
+
     It is given by the formula:
 
     .. math::
@@ -121,6 +118,7 @@ class Weibull(BaseHazardFn):
     r"""Implements the Weibull base hazard.
 
     Weibull base hazard is time dependent.
+
     It is given by the formula:
 
     .. math::

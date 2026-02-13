@@ -1,15 +1,9 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeAlias
+from typing import Any, Final, NamedTuple, Protocol, TypeAlias
 
 import torch
 from torch import nn
 from xxhash import xxh3_64_intdigest
-
-if TYPE_CHECKING:
-    pass
-
 
 # Type Aliases
 Trajectory: TypeAlias = list[tuple[float, Any]]
@@ -114,45 +108,6 @@ class ClockMethod(Protocol):
     def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
 
 
-# Named tuples
-class BucketData(NamedTuple):
-    """A simple `NamedTuple` containing transition information.
-
-    Attributes:
-        idxs (torch.Tensor): The individual indices.
-        t0 (torch.Tensor): A column vector of previous transition times.
-        t1 (torch.Tensor): A column vecotr of next transition times.
-    """
-
-    idxs: torch.Tensor
-    t0: torch.Tensor
-    t1: torch.Tensor
-
-
-class HazardInfo(NamedTuple):
-    """A simple internal `NamedTuple` required for hazard computation.
-
-    Attributes:
-        t0 (torch.Tensor): A column vector of previous transition times.
-        t1 (torch.Tensor): A matrix of next transition times.
-        x (torch.Tensor | None): The covariates.
-        psi (torch.Tensor): The individual parameters.
-        alpha (torch.Tensor): The baseline hazard parameters.
-        beta (torch.Tensor | None): The regression parameters.
-        base_hazard_fn (BaseHazardFn): The base hazard function.
-        link_fn (LinkFn): The link function.
-    """
-
-    t0: torch.Tensor
-    t1: torch.Tensor
-    x: torch.Tensor | None
-    psi: torch.Tensor
-    alpha: torch.Tensor
-    beta: torch.Tensor | None
-    base_hazard_fn: BaseHazardFn
-    link_fn: LinkFn
-
-
 # Abstract classes
 class BaseHazardFn(nn.Module, ABC):
     """The base hazard base class.
@@ -190,6 +145,45 @@ class BaseHazardFn(nn.Module, ABC):
 
     @abstractmethod
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
+
+
+# Named tuples
+class BucketData(NamedTuple):
+    """A simple `NamedTuple` containing transition information.
+
+    Attributes:
+        idxs (torch.Tensor): The individual indices.
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A column vecotr of next transition times.
+    """
+
+    idxs: torch.Tensor
+    t0: torch.Tensor
+    t1: torch.Tensor
+
+
+class HazardInfo(NamedTuple):
+    """A simple internal `NamedTuple` required for hazard computation.
+
+    Attributes:
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A matrix of next transition times.
+        x (torch.Tensor | None): The covariates.
+        psi (torch.Tensor): The individual parameters.
+        alpha (torch.Tensor): The baseline hazard parameters.
+        beta (torch.Tensor | None): The regression parameters.
+        base_hazard_fn (BaseHazardFn): The base hazard function.
+        link_fn (LinkFn): The link function.
+    """
+
+    t0: torch.Tensor
+    t1: torch.Tensor
+    x: torch.Tensor | None
+    psi: torch.Tensor
+    alpha: torch.Tensor
+    beta: torch.Tensor | None
+    base_hazard_fn: BaseHazardFn
+    link_fn: LinkFn
 
 
 # Constants
