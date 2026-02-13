@@ -1,6 +1,6 @@
 from bisect import bisect_left
 from collections.abc import Callable
-from typing import Self, cast
+from typing import Self
 
 import torch
 from rich.console import Console, Group
@@ -386,18 +386,9 @@ class MultiStateJointModel(
                 break
             sampler.run(self.n_steps)
 
-        # Initialize Jacobian matrix
-        jac = torch.zeros(data.size, self.params_.numel)
-
-        @torch.func.jacfwd  # type: ignore
-        def _jac_fn(params_flat_tensor: torch.Tensor, b: torch.Tensor):
-            params = self.params_.from_flat_tensor(params_flat_tensor)
-            return self._logpdfs_aux_fn(params, b, complete_data)[0].mean(dim=0)
-
-        # Initialize criteria
-        logpdf = 0.0
-        b = torch.zeros(data.size, self.params_.Q.dim)
-        b2 = torch.zeros(data.size, self.params_.Q.dim, self.params_.Q.dim)
+        # Initialize Jacobian matrix and criteria
+        mjac, jac_fn = self._init_jac(data)
+        logpdf, mb, mb2 = self._init_criteria(data)
 
         # FIM and Criteria loop
         for _ in trange(
@@ -405,35 +396,15 @@ class MultiStateJointModel(
             desc="Computing FIM and Criteria",
             disable=not self.verbose,
         ):
-            jac += (
-                cast(
-                    torch.Tensor, _jac_fn(self.params_.as_flat_tensor, sampler.b)
-                ).detach()
-                / self.n_iters[1]
-            )
-
-            logpdf += sampler.logpdfs.mean().item() / self.n_iters[1]
-            b += sampler.b.mean(dim=0) / self.n_iters[1]
-            b2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b) / (
-                self.n_iters[1] * self.n_chains
-            )
-
-            # Run MCMC
+            self._update_jac(mjac, jac_fn, sampler)
+            self._update_criteria(logpdf, mb, mb2, sampler)
             for _ in range(self.n_steps):
                 sampler.step()
 
-        self.fim_ = jac.T @ jac
-
-        covs = b2 - torch.einsum("ij,ik->ijk", b, b)
-        entropy = 0.5 * (torch.logdet(covs) + self.params_.Q.dim).sum().item()
-        self.loglik = logpdf + entropy
-        self.nloglik_pen = (
-            data.size * self.pen(self.params_).item() - self.loglik
-            if self.pen is not None
-            else -self.loglik
+        self.fim_ = self._compute_fim(mjac)
+        self.loglik, self.nloglik_pen, self.aic, self.bic = self._compute_criteria(
+            logpdf, mb, mb2, self.fim_, data
         )
-        self.aic = 2 * self.nloglik_pen + 2 * self.params_.numel
-        self.bic = 2 * self.nloglik_pen + torch.logdet(self.fim_).item()
 
         self._cache.clear_cache()
         return self

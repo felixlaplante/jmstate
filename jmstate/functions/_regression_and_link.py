@@ -1,8 +1,7 @@
 import torch
-from pydantic import ConfigDict, validate_call
 from torch import nn
 
-from ..typedefs._defs import IntNonNegative, LinkFn, RegressionFn
+from ..typedefs._defs import LinkFn, RegressionFn
 
 
 def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
@@ -46,7 +45,6 @@ class Net(nn.Module):
 
     net: nn.Module
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, net: nn.Module):
         super().__init__()  # type: ignore
         self.net = net
@@ -67,12 +65,11 @@ class Net(nn.Module):
         x = torch.cat([t_ext, psi_ext], dim=-1)
         return self.net(x)
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def derivatives(self, degs: tuple[IntNonNegative, ...]) -> RegressionFn | LinkFn:
+    def derivatives(self, degs: tuple[int, ...]) -> RegressionFn | LinkFn:
         """Gets a function returning multiple derivatives of the neural network.
 
         Args:
-            degs (tuple[IntNonNegative, ...]): The degrees.
+            degs (tuple[int, ...]): The degrees.
 
         Returns:
             RegressionFn | LinkFn: A regresion/link function.

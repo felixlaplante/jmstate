@@ -6,7 +6,6 @@ from typing import Any, Self, cast
 
 import torch
 from numpy import array2string
-from pydantic import ConfigDict, validate_call
 from rich.tree import Tree
 
 from ..utils._checks import check_inf, check_matrix_dim, check_nan

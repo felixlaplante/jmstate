@@ -1,15 +1,12 @@
 from typing import cast
 
 import torch
-from pydantic import ConfigDict, validate_call
 from torch import nn
 
 from ..typedefs._defs import (
     LOG_TWO_PI,
     BaseHazardFn,
     ClockMethod,
-    Num,
-    NumStrictlyPositive,
 )
 
 
@@ -80,12 +77,11 @@ class Exponential(BaseHazardFn):
 
     log_lmda: nn.Parameter
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, lmda: NumStrictlyPositive):
+    def __init__(self, lmda: float):
         """Initializes the Exponential hazard.
 
         Args:
-            lmda (NumStrictlyPositive): The rate factor.
+            lmda (float): The rate factor.
 
         Raises:
             ValueError: If lmda is not strictly positive.
@@ -142,18 +138,12 @@ class Weibull(BaseHazardFn):
     log_k: nn.Parameter
     log_lmda: nn.Parameter
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        k: NumStrictlyPositive,
-        lmda: NumStrictlyPositive,
-        clock_method: ClockMethod = clock_reset,
-    ):
+    def __init__(self, k: float, lmda: float, clock_method: ClockMethod = clock_reset):
         """Initializes the Weibull base hazard.
 
         Args:
-            k (NumStrictlyPositive): The shape parameter.
-            lmda (NumStrictlyPositive): The scale parameter.
+            k (float): The shape parameter.
+            lmda (float): The scale parameter.
             clock_method (ClockMethod, optional): The ClockMethod transformation.
                 Defaults to clock_reset.
 
@@ -223,21 +213,12 @@ class Gompertz(BaseHazardFn):
     clock_method: ClockMethod
     log_a: nn.Parameter
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(
-        self,
-        a: NumStrictlyPositive,
-        b: NumStrictlyPositive,
-        clock_method: ClockMethod = clock_reset,
-    ):
+    def __init__(self, a: float, b: float, clock_method: ClockMethod = clock_reset):
         """Initializes the Gompertz base hazard.
 
-        Raises:
-            ValueError: If a is not strictly positive.
-
         Args:
-            a (NumStrictlyPositive): The baseline hazard.
-            b (Num): The shape parameter.
+            a (float): The baseline hazard.
+            b (float): The shape parameter.
             clock_method (ClockMethod, optional): The ClockMethod transformation.
                 Defaults to clock_reset.
         """
@@ -300,18 +281,14 @@ class LogNormal(BaseHazardFn):
     clock_method: ClockMethod
     log_scale: nn.Parameter
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
-        self,
-        mu: Num,
-        scale: NumStrictlyPositive,
-        clock_method: ClockMethod = clock_reset,
+        self, mu: float, scale: float, clock_method: ClockMethod = clock_reset
     ):
         """Initializes the log normal base hazard.
 
         Args:
-            mu (Num): The log time mean.
-            scale (NumStrictlyPositive): The log time scale.
+            mu (float): The log time mean.
+            scale (float): The log time scale.
             clock_method (ClockMethod, optional): The ClockMethod transformation.
                 Defaults to clock_reset.
 
