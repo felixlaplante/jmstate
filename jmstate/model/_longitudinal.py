@@ -8,7 +8,11 @@ from ..typedefs._params import ModelParams
 
 
 class LongitudinalMixin:
-    """Mixin class for longitudinal model computations."""
+    """Mixin class for longitudinal model computations.
+
+    Attributes:
+        model_design (ModelDesign): The model design.
+    """
 
     model_design: ModelDesign
 
@@ -17,14 +21,14 @@ class LongitudinalMixin:
         super().__init__(*args, **kwargs)
 
     def _long_logliks(
-        self, params: ModelParams, psi: torch.Tensor, data: CompleteModelData
+        self, params: ModelParams, data: CompleteModelData, psi: torch.Tensor
     ) -> torch.Tensor:
         """Computes the longitudinal log likelihoods.
 
         Args:
             params (ModelParams): The model parameters.
+            data (CompleteModelData): Dataset on which likelihood is computed.
             psi (torch.Tensor): A 3D tensor of individual parameters.
-            data (ModelData): Dataset on which likelihood is computed.
 
         Returns:
             torch.Tensor: The computed log likelihoods.

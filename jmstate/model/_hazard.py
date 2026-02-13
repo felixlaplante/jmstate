@@ -16,7 +16,18 @@ HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc"
 
 
 class HazardMixin:
-    """Mixin class for hazard model computations."""
+    """Mixin class for hazard model computations.
+
+    Attributes:
+        params_ (ModelParams): The model parameters.
+        model_design (ModelDesign): The model design.
+        n_quad (int): Number of quadrature nodes.
+        n_bisect (int): The number of bisection steps.
+        cache_limit (int | None): Max length of cache.
+        _std_nodes (torch.Tensor): The standard nodes.
+        _std_weights (torch.Tensor): The standard weights.
+        _cache (Cache): The cache.
+    """
 
     params_: ModelParams
     model_design: ModelDesign
@@ -399,15 +410,14 @@ class HazardMixin:
         return -nlogps.clamp(min=0.0)
 
     def _hazard_logliks(
-        self, params: ModelParams, psi: torch.Tensor, data: CompleteModelData
+        self, params: ModelParams, data: CompleteModelData, psi: torch.Tensor
     ) -> torch.Tensor:
         """Computes the hazard log likelihoods.
 
         Args:
             params (ModelParams): The model parameters.
-            psi (torch.Tensor): A matrix of individual parameters.
             data (CompleteModelData): Dataset on which likelihood is computed.
-            enable_cache (bool): Enable caching
+            psi (torch.Tensor): A matrix of individual parameters.
 
         Returns:
             torch.Tensor: The computed log likelihoods.

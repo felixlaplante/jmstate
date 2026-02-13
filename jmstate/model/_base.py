@@ -1,10 +1,8 @@
 from bisect import bisect_left
-from collections.abc import Callable, Sequence
-from functools import partial
-from typing import Any, cast
+from collections.abc import Callable
+from typing import Self, cast
 
 import torch
-from pydantic import ConfigDict, validate_call
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.rule import Rule
@@ -14,32 +12,21 @@ from rich.tree import Tree
 from torch.distributions import Normal
 from tqdm import trange
 
-from ..jobs._computation import ComputeCriteria, ComputeFIM
-from ..jobs._fitting import Fit
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
-from ..typedefs._defaults import DEFAULT_HYPERPARAMETERS, DEFAULT_HYPERPARAMETERS_FIELDS
-from ..typedefs._defs import (
-    SIGNIFICANCE_CODES,
-    SIGNIFICANCE_LEVELS,
-    Info,
-    IntNonNegative,
-    IntStrictlyPositive,
-    Job,
-    Metrics,
-    NumNonNegative,
-    NumProbability,
-    Trajectory,
-)
+from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS, Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_consistent_size, check_inf, check_nan
 from ..visualization._print import rich_str
+from ._fit import FitMixin
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._prior import PriorMixin
-from ._sampler import MetropolisHastingsSampler
+from ._sampler import MCMCMixin
 
 
-class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
+class MultiStateJointModel(
+    PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, FitMixin
+):
     r"""A class of the nonlinear multistate joint model.
 
     It features methods to simulate data, fit based on stochastic gradient with any
@@ -68,10 +55,24 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         cache_limit (int | None): The limit of the cache used in hazard computation,
             greatly reducing memory and CPU usage. None means infinite, 0 means no
             caching.
-        data (ModelData | None): The learnable dataset used when the model was fitted.
-        metrics_ (Metrics): Metrics object containing information about the model
-            and the jobs it executed.
-        fit_ (bool): A boolean value set to True when the model has been fitted.
+        n_chains (int): The number of parallel MCMC chains.
+        init_step_size (float): Kernel standard error in Metropolis.
+        adapt_rate (float): Adaptation rate for the step_size.
+        target_accept_rate (float): Mean acceptance target.
+        n_warmup (int): The number of warmup iterations for the MCMC sampler.
+        n_steps (int): The number of steps for the MCMC sampler.
+        n_iters (tuple[int, int]): The number of iterations for stochastic gradient and
+            MCMC.
+        lr (float): The learning rate for the optimizer.
+        atol (float): The absolute tolerance for convergence.
+        rtol (float): The relative tolerance for convergence.
+        verbose (bool): Whether to print the progress of the model fitting.
+        params_history_ (list[ModelParams]): The history of model parameters.
+        fim_ (torch.Tensor | None): The Fisher Information Matrix.
+        loglik_ (float | None): The log likelihood.
+        nloglik_pen (float | None): The penalized negative log likelihood.
+        aic_ (float | None): The Akaike Information Criterion.
+        bic_ (float | None): The Bayesian Information Criterion.
     """
 
     model_design: ModelDesign
@@ -80,20 +81,42 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
     n_quad: int
     n_bisect: int
     cache_limit: int | None
-    data: ModelData | None
-    metrics_: Metrics
-    fit_: bool
+    n_chains: int
+    init_step_size: float
+    adapt_rate: float
+    target_accept_rate: float
+    n_warmup: int
+    n_steps: int
+    n_iters: tuple[int, int]
+    lr: float
+    tols: tuple[float, float]
+    verbose: bool
+    params_history_: list[ModelParams]
+    fim_: torch.Tensor | None
+    loglik_: float | None
+    nloglik_pen: float | None
+    aic_: float | None
+    bic_: float | None
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(
         self,
         model_design: ModelDesign,
         init_params: ModelParams,
         *,
         pen: Callable[[ModelParams], torch.Tensor] | None = None,
-        n_quad: IntStrictlyPositive = 32,
-        n_bisect: IntStrictlyPositive = 32,
-        cache_limit: IntNonNegative | None = 256,
+        n_quad: int = 32,
+        n_bisect: int = 32,
+        cache_limit: int | None = 256,
+        n_chains: int = 5,
+        init_step_size: float = 0.1,
+        adapt_rate: float = 0.01,
+        target_accept_rate: float = 0.234,
+        n_warmup: int = 100,
+        n_steps: int = 10,
+        n_iters: tuple[int, int] = (500, 100),
+        lr: float = 0.5,
+        tols: tuple[float, float] = (1e-6, 1e-1),
+        verbose: bool = True,
     ):
         """Initializes the joint model based on the user defined design.
 
@@ -102,31 +125,58 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             init_params (ModelParams): Initial values for the parameters.
             pen (Callable[[ModelParams], torch.Tensor] | None, optional):
                 The penalization function. Defaults to None.
-            n_quad (IntStrictlyPositive, optional): The used number of points for
-                Gauss-Legendre quadrature. Defaults to 32.
-            n_bisect (IntStrictlyPositive, optional): The number of bisection steps
-                used in transition sampling. Defaults to 32.
-            cache_limit (IntNonNegative | None, optional): The max length of cache.
-                Defaults to 256.
+            n_quad (int, optional): The used number of points for Gauss-Legendre
+                quadrature. Defaults to 32.
+            n_bisect (int, optional): The number of bisection steps used in transition
+                sampling. Defaults to 32.
+            cache_limit (int | None, optional): The max length of cache. Defaults to
+                256.
+            n_chains (int, optional): The number of chains for MCMC. Defaults to 5.
+            init_step_size (float, optional): The initial step size for the MCMC
+                sampler. Defaults to 0.1.
+            adapt_rate (float, optional): The adaptation rate for the MCMC sampler.
+                Defaults to 0.01.
+            target_accept_rate (float, optional): The target acceptance rate for the
+                MCMC sampler. Defaults to 0.234.
+            n_warmup (int, optional): The number of warmup iterations for the MCMC
+                sampler. Defaults to 100.
+            n_steps (int, optional): The number of steps for the MCMC sampler. Defaults
+                to 10.
+            n_iters (tuple[int, int], optional): The number of iterations for stochastic
+                gradient and MCMC. Defaults to (500, 100).
+            lr (float, optional): The learning rate for the optimizer. Defaults to 0.5.
+            tols (tuple[float, float], optional): The absolute and relative tolerances
+                for convergence. Defaults to (1e-6, 1e-1).
+            verbose (bool, optional): Whether to print the progress of the model
+                fitting. Defaults to True.
         """
-        # Store model components
-        self.model_design = model_design
-        self.params_ = init_params.clone()
-
-        # Store penalization
-        self.pen = pen
-
         # Info of the Mixin Classes
         super().__init__(
             n_quad=n_quad,
             n_bisect=n_bisect,
             cache_limit=cache_limit,
+            n_chains=n_chains,
+            init_step_size=init_step_size,
+            adapt_rate=adapt_rate,
+            target_accept_rate=target_accept_rate,
+            lr=lr,
+            tols=tols,
         )
 
-        # Initialize attributes that will be set later
-        self.data = None
-        self.metrics_ = Metrics()
-        self.fit_ = False
+        # Store model components
+        self.model_design = model_design
+        self.params_ = init_params.clone()
+        self.pen = pen
+        self.n_warmup = n_warmup
+        self.n_steps = n_steps
+        self.n_iters = n_iters
+        self.verbose = verbose
+        self.params_history_ = [self.params_.clone().detach()]
+        self.fim_ = None
+        self.loglik_ = None
+        self.nloglik_pen = None
+        self.aic_ = None
+        self.bic_ = None
 
     def __str__(self) -> str:
         """Returns a string representation of the model.
@@ -141,22 +191,24 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         tree.add(f"n_quad: {self.n_quad}")
         tree.add(f"n_bisect: {self.n_bisect}")
         tree.add(f"cache_limit: {self.cache_limit}")
-        tree.add(f"data: {self.data}")
-        tree.add(f"metrics_: object with attributes {list(vars(self.metrics_).keys())}")
-        tree.add(f"fit_: {self.fit_}")
+        tree.add(f"params_history_: {len(self.params_history_)} element(s)")
+        tree.add(f"fim_: {self.fim_}")
+        tree.add(f"loglik_: {self.loglik_}")
+        tree.add(f"nloglik_pen: {self.nloglik_pen}")
+        tree.add(f"aic_: {self.aic_}")
+        tree.add(f"bic_: {self.bic_}")
+        tree.add(f"n_warmup: {self.n_warmup}")
+        tree.add(f"n_iters: {self.n_iters}")
+        tree.add(f"tols: {self.tols}")
 
         return rich_str(tree)
 
-    def summary(self, fmt: str = ".3f"):
+    def summary(self):
         """Prints a summary of the model.
-
-        Args:
-            fmt (str, optional): The format of the p-values. Defaults to ".3f".
 
         This function prints the p-values of the parameters as well as values and
         standard error. Also prints the log likelihood, AIC, BIC with lovely colors!
         """
-        named_params_list = self.params_.as_named_list
         values = self.params_.as_flat_tensor
         stderrors = self.stderror.as_flat_tensor
         zvalues = torch.abs(values / stderrors)
@@ -171,27 +223,27 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
         table.add_column("Significance level", justify="center")
 
         i = 0
-        for name, value in named_params_list:
-            for j in range(1, value.numel() + 1):
+        for name, value in self.params_.as_dict.items():
+            for j in range(value.numel()):
                 code = SIGNIFICANCE_CODES[
                     bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())
                 ]
 
                 table.add_row(
-                    f"{name}[{j}]" if value.numel() > 1 else name,
-                    f"{values[i]:{fmt}}",
-                    f"{stderrors[i]:{fmt}}",
-                    f"{zvalues[i]:{fmt}}",
-                    f"{pvalues[i]:{fmt}}",
+                    f"{name}[{j}]",
+                    f"{values[i].item():.3f}",
+                    f"{stderrors[i].item():.3f}",
+                    f"{zvalues[i].item():.3f}",
+                    f"{pvalues[i].item():.3f}",
                     code,
                 )
                 i += 1
 
         criteria = Text(
-            f"Log-likelihood: {self.loglik:{fmt}}\n"
-            f"Penalized negative log-likelihood: {self.nloglik_pen:{fmt}}\n"
-            f"AIC: {self.aic:{fmt}}\n"
-            f"BIC: {self.bic:{fmt}}",
+            f"Log-likelihood: {self.loglik_:.3f}\n"
+            f"Penalized negative log-likelihood: {self.nloglik_pen:.3f}\n"
+            f"AIC: {self.aic_:.3f}\n"
+            f"BIC: {self.bic_:.3f}",
             style="bold cyan",
         )
 
@@ -203,110 +255,34 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
         Console().print(panel)
 
-    def _logpdfs_aux_fn(
-        self, params: ModelParams, b: torch.Tensor, data: CompleteModelData
+    def _logpdfs_aux_fn(  # type: ignore
+        self, params: ModelParams, data: CompleteModelData, b: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Gets the log pdfs with individual effects and log likelihoods.
 
         Args:
             params (ModelParams): The model parameters.
-            b (torch.Tensor): The random effects.
             data (CompleteModelData): Dataset on which likelihood is computed.
+            b (torch.Tensor): The random effects.
 
         Returns:
            tuple[torch.Tensor, torch.Tensor]: The log pdfs and aux.
         """
         psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
-        logliks = super()._long_logliks(params, psi, data) + super()._hazard_logliks(
-            params, psi, data
+        logpdfs = (
+            super()._long_logliks(params, data, psi)
+            + super()._hazard_logliks(params, data, psi)
+            + super()._prior_logliks(params, b)
         )
-        logpdfs = logliks + super()._prior_logliks(params, b)
 
         return logpdfs, psi
 
-    def _setup_mcmc(
-        self,
-        data: CompleteModelData,
-        n_chains: int,
-        init_step_size: int | float,
-        adapt_rate: int | float,
-        target_accept_rate: int | float,
-    ) -> MetropolisHastingsSampler:
-        """Setup the MCMC kernel and hyper-parameters.
-
-        Args:
-            data (CompleteModelData): The complete dataset.
-            n_chains (int): The number of parallel MCMC chains.
-            init_step_size (int | float): Kernel standard error in Metropolis.
-            adapt_rate (int | float): Adaptation rate for the step_size.
-            target_accept_rate (int | float): Mean acceptance target.
-
-        Returns:
-            MetropolisHastingsSampler: The intialized Markov kernel.
-        """
-        # Initialize random effects
-        init_b = torch.zeros(n_chains, data.size, self.params_.Q.dim)
-
-        return MetropolisHastingsSampler(
-            partial(self._logpdfs_aux_fn, self.params_, data=data),
-            init_b,
-            n_chains,
-            init_step_size,
-            adapt_rate,
-            target_accept_rate,
-        )
-
-    def _get_hyperparameters(
-        self, job_factories: Sequence[Callable[[Info], Job]]
-    ) -> dict[str, Any] | None:
-        """Gets default hyper-parameters.
-
-        Args:
-            job_factories (Sequence[Callable[[Info], Job]]): The job factories.
-
-        Returns:
-            dict[str, Any] | None: The default hyper-parameters associated.
-        """
-        for job_factory in reversed(job_factories):
-            key = getattr(job_factory, "cls", None)
-            if not (isinstance(key, type) and issubclass(key, Job)):
-                continue
-
-            hyperparameters = DEFAULT_HYPERPARAMETERS.get(key)
-            if hyperparameters is not None:
-                return hyperparameters
-
-        return None
-
-    @staticmethod
-    def _run_jobs(jobs: list[Job], info: Info) -> bool:
-        """Call jobs.
-
-        Args:
-            jobs (list[Job]): The jobs to execute.
-            info (Info): The information container.
-
-        Returns:
-            bool: Set to true to stop the iterations.
-        """
-        stop = None
-        for job in jobs:
-            result = job.run(info=info)
-            stop = (
-                stop
-                if result is None
-                else (result if stop is None else (stop and result))
-            )
-
-        return False if stop is None else stop
-
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def sample_trajectories(
         self,
         sample_data: SampleData,
         c_max: torch.Tensor,
         *,
-        max_length: IntStrictlyPositive = 10,
+        max_length: int = 10,
     ) -> list[Trajectory]:
         """Sample trajectories from the joint model.
 
@@ -339,7 +315,6 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
         return super()._sample_trajectories(sample_data, c_max, max_length=max_length)
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def compute_surv_logps(
         self, sample_data: SampleData, u: torch.Tensor
     ) -> torch.Tensor:
@@ -370,7 +345,7 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
         Args:
             sample_data (SampleData): The data on which to compute the probabilities.
-            u (Tensor2D): The time at which to evaluate the probabilities.
+            u (torch.Tensor): The time at which to evaluate the probabilities.
 
         Raises:
             ValueError: If u contains inf values.
@@ -389,356 +364,101 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
 
         return super()._compute_surv_logps(sample_data, u)
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def do(
-        self,
-        data: ModelData,
-        job_factories: Sequence[Callable[[Info], Job]],
-        *,
-        max_iterations: IntStrictlyPositive | None = None,
-        n_chains: IntStrictlyPositive | None = None,
-        warmup: IntNonNegative | None = None,
-        n_steps: IntStrictlyPositive | None = None,
-        init_step_size: NumNonNegative = 0.1,
-        adapt_rate: NumNonNegative = 0.1,
-        accept_target: NumProbability = 0.234,
-        verbose: bool = True,
-    ) -> Metrics:
-        """Runs the sampler loop and some jobs.
-
-        Many jobs are predefined for user convenience, but you can use the base class
-        `Job` to define your own. The `Job` class returns a factory that is not
-        initialized until this function calls the job factories. For default jobs, a set
-        of default hyper-parameters allows matching via the `.cls` attribute, but these
-        defaults can always be overriden. In the case where multiple jobs with
-        conflicting defaults are passed, only the last default will be kept and used.
-
-        To do parallel MCMC sampling, which is enabled by default, use `n_chains`.
-
-        Also, note that the function passed to the MCMC sampler will be built using the
-        `torch.no_grad()` decorator. If needs be, use `torch.enable_grad()` if one of
-        the model design functions always require gradient computation regardless of
-        setting. If the data provided is equal to the data seen during fit, metrics are
-        computed and added to those computed during fit in the `metrics_` attribute.
-
-        To enable caching, please refer to the argument `cache_limit` to see the
-        behaviour.
-
-        This returns a `Metrics` object.
-
-        Args:
-            data (ModelData): The dataset to learn from.
-            job_factories (Sequence[Callable[[Info], Job]]): A sequence of job factories
-                to execute in the order in which they are given.
-            max_iterations (IntStrictlyPositive | None, optional): Maximum number of
-                iterations. Defaults to None.
-            n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
-                to None.
-            warmup (IntNonNegative | None, optional): The number of iteration steps used
-            in the warmup. Defaults to None.
-            n_steps (IntStrictlyPositive | None, optional): The steps to do at each
-                iteration; this is sub-sampling. Defaults to None.
-            init_step_size (NumNonNegative, optional): Initial kernel step size in
-                Metropolis-Hastings. Defaults to 0.1.
-            adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
-                The adaptation is done with the Robbins Monro algorithm in log scale.
-                Defaults to 0.1.
-            accept_target (NumProbability, optional): Acceptance target. Defaults to
-                0.234.
-            verbose (bool, optional): Whether or not to show progress. Defaults to True.
-
-        Raises:
-            TypeError: If some attribute is left unset.
-
-        Returns:
-            Metrics: The metrics.
-        """
+    def fit(self, data: ModelData) -> Self:
         # Load and complete data
-        complete_data = CompleteModelData(
+        data = CompleteModelData(
             data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
-        complete_data.prepare(self.model_design, self.params_)
+        data.prepare(self.model_design, self.params_)
 
-        # Set up jobs and hyper-parameters.
-        hyperparameters = self._get_hyperparameters(job_factories)
-        if hyperparameters is not None:
-            max_iterations = (
-                hyperparameters["max_iterations"]
-                if max_iterations is None
-                else max_iterations
-            )
-            n_chains = hyperparameters["n_chains"] if n_chains is None else n_chains
-            warmup = hyperparameters["warmup"] if warmup is None else warmup
-            n_steps = hyperparameters["n_steps"] if n_steps is None else n_steps
+        # Initialize optimizer and MCMC
+        optimizer = self._init_optimizer()
+        sampler = self._init_mcmc(data)
+        sampler.run(self.n_warmup)
 
-        # Check everything is there
-        for field in DEFAULT_HYPERPARAMETERS_FIELDS:
-            if locals()[field] is None:
-                raise TypeError(f"Missing required argument: '{field}'")
-
-        # Set up MCMC
-        sampler = self._setup_mcmc(
-            complete_data,
-            cast(int, n_chains),
-            init_step_size,
-            adapt_rate,
-            accept_target,
-        )
-        for _ in range(cast(int, warmup)):
-            sampler.step()
-
-        # Initialize info
-        info = Info(
-            data=data,
-            logpdfs_aux_fn=partial(self._logpdfs_aux_fn, data=complete_data),
-            iteration=-1,
-            model=self,
-            sampler=sampler,
-        )
-
-        jobs = [job_factory(info) for job_factory in job_factories]
-
-        # Main loop
+        # Main fitting loop
         for _ in trange(
-            cast(int, max_iterations), desc="Running joint model", disable=not verbose
+            self.n_iters[0], desc="Fitting joint model", disable=not self.verbose
         ):
-            info.iteration += 1
-            if self._run_jobs(jobs, info):
+            self._step(optimizer, sampler, data)
+            self.params_history_.append(self.params_.clone().detach())
+            if self._is_converged(optimizer):
                 break
+            sampler.run(self.n_steps)
 
-            for _ in range(cast(int, n_steps)):
+        # Initialize Jacobian matrix
+        jac = torch.zeros(data.size, self.params_.numel)
+
+        @torch.func.jacfwd  # type: ignore
+        def _jac_fn(params_flat_tensor: torch.Tensor, b: torch.Tensor):
+            params = self.params_.from_flat_tensor(params_flat_tensor)
+            return self._logpdfs_aux_fn(params, b, complete_data)[0].mean(dim=0)
+
+        # Initialize criteria
+        logpdf = 0.0
+        b = torch.zeros(data.size, self.params_.Q.dim)
+        b2 = torch.zeros(data.size, self.params_.Q.dim, self.params_.Q.dim)
+
+        # FIM and Criteria loop
+        for _ in trange(
+            self.n_iters[1],
+            desc="Computing FIM and Criteria",
+            disable=not self.verbose,
+        ):
+            jac += (
+                cast(
+                    torch.Tensor, _jac_fn(self.params_.as_flat_tensor, sampler.b)
+                ).detach()
+                / self.n_iters[1]
+            )
+
+            logpdf += sampler.logpdfs.mean().item() / self.n_iters[1]
+            b += sampler.b.mean(dim=0) / self.n_iters[1]
+            b2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b) / (
+                self.n_iters[1] * self.n_chains
+            )
+
+            # Run MCMC
+            for _ in range(self.n_steps):
                 sampler.step()
 
-        # End things
-        metrics = Metrics()
+        self.fim_ = jac.T @ jac
 
-        info.iteration += 1
-        for job in jobs:
-            job.end(info=info, metrics=metrics)
-
-        # Update metrics if data is the same as seen during fit
-        if data is self.data:
-            self.metrics_ = Metrics(**self.metrics_.__dict__, **metrics.__dict__)
+        covs = b2 - torch.einsum("ij,ik->ijk", b, b)
+        entropy = 0.5 * (torch.logdet(covs) + self.params_.Q.dim).sum().item()
+        self.loglik = logpdf + entropy
+        self.nloglik_pen = (
+            data.size * self.pen(self.params_).item() - self.loglik
+            if self.pen is not None
+            else -self.loglik
+        )
+        self.aic = 2 * self.nloglik_pen + 2 * self.params_.numel
+        self.bic = 2 * self.nloglik_pen + torch.logdet(self.fim_).item()
 
         self._cache.clear_cache()
-        return metrics
+        return self
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def fit(
-        self,
-        data: ModelData,
-        job_factories: Sequence[Callable[[Info], Job]] = (),
-        *,
-        max_iterations: IntStrictlyPositive | None = None,
-        n_chains: IntStrictlyPositive | None = None,
-        warmup: IntNonNegative | None = None,
-        n_steps: IntStrictlyPositive | None = None,
-        init_step_size: NumNonNegative = 0.1,
-        adapt_rate: NumNonNegative = 0.1,
-        accept_target: NumProbability = 0.234,
-        verbose: bool = True,
-        opt_factory: type[torch.optim.Optimizer] | None = None,
-        fit_extra: bool = True,
-        **kwargs: Any,
-    ) -> Metrics:
-        """Fits the model and runs some jobs.
-
-        Interally calls
-        `do(data, [Fit(opt_factory, fit_extra, lr, **kwargs), *job_factories], ...)`.
-        See `do` for more details.
-
-        This sets the `fit_` attribute to True and the `data` attribute to the data
-        provided. Metrics are stored in the `metrics_` attribute.
-
-        Args:
-            data (ModelData): The dataset to learn from.
-            job_factories (Sequence[Callable[[Info], Fit]], optional): A sequence of job
-                factories to execute in the order in which they are given. Defaults to
-                ()
-            max_iterations (IntStrictlyPositive | None, optional): Maximum number of
-                iterations. Defaults to None.
-            n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
-                to None.
-            warmup (IntNonNegative | None, optional): The number of iteration steps used
-            in the warmup. Defaults to None.
-            n_steps (IntStrictlyPositive | None, optional): The steps to do at each
-                iteration; this is sub-sampling. Defaults to None.
-            init_step_size (NumNonNegative, optional): Initial kernel step size in
-                Metropolis-Hastings. Defaults to 0.1.
-            adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
-                The adaptation is done with the Robbins Monro algorithm in log scale.
-                Defaults to 0.1.
-            accept_target (NumProbability, optional): Acceptance target. Defaults to
-                0.234.
-            verbose (bool, optional): Whether or not to show progress. Defaults to True.
-            opt_factory (type[torch.optim.Optimizer] | None, optional): The optimizer
-                factory. Defaults to None.
-            fit_extra (bool, optional): An option to fit extra parameters or not.
-                Defaults to True.
-            kwargs (Any): Additional kwargs passed to the optimizer factory, such as lr.
-
-        Returns:
-            Metrics: The metrics computed.
-        """
-        return self.do(
-            data,
-            [Fit(opt_factory, fit_extra, **kwargs), *job_factories],
-            max_iterations=max_iterations,
-            n_chains=n_chains,
-            warmup=warmup,
-            n_steps=n_steps,
-            init_step_size=init_step_size,
-            adapt_rate=adapt_rate,
-            accept_target=accept_target,
-            verbose=verbose,
-        )
-
-    def compute_summary(
-        self,
-        job_factories: Sequence[Callable[[Info], Job]] = (),
-        *,
-        max_iterations: IntStrictlyPositive | None = None,
-        n_chains: IntStrictlyPositive | None = None,
-        warmup: IntNonNegative | None = None,
-        n_steps: IntStrictlyPositive | None = None,
-        init_step_size: NumNonNegative = 0.1,
-        adapt_rate: NumNonNegative = 0.1,
-        accept_target: NumProbability = 0.234,
-        verbose: bool = True,
-        bias: bool = True,
-    ) -> Metrics:
-        """Fits the model and runs some jobs.
-
-        Interally calls
-        `do(self.data, [ComputeFIM(bias), ComputeCriteria(), *job_factories], ...)`. See
-        `do` for more details.
-
-        Args:
-            job_factories (Sequence[Callable[[Info], Job]], optional): A sequence of job
-                factories to execute in the order in which they are given.
-            max_iterations (IntStrictlyPositive | None, optional): Maximum number of
-                iterations. Defaults to None.
-            n_chains (IntStrictlyPositive | None, optional): Batch size used. Defaults
-                to None.
-            warmup (IntNonNegative | None, optional): The number of iteration steps used
-            in the warmup. Defaults to None.
-            n_steps (IntStrictlyPositive | None, optional): The steps to do at each
-                iteration; this is sub-sampling. Defaults to None.
-            init_step_size (NumNonNegative, optional): Initial kernel step size in
-                Metropolis-Hastings. Defaults to 0.1.
-            adapt_rate (NumNonNegative, optional): Adaptation rate for the step_size.
-                The adaptation is done with the Robbins Monro algorithm in log scale.
-                Defaults to 0.1.
-            accept_target (NumProbability, optional): Acceptance target. Defaults to
-                0.234.
-            verbose (bool, optional): Whether or not to show progress. Defaults to True.
-            bias (bool, optional): Whether or not to substract the bias term of the
-                gradient in the FIM. Refer to `ComputeFIM` for more details. Defaults to
-                True.
-
-        Raises:
-            ValueError: If self.data is None.
-
-        Returns:
-            Metrics: The metrics computed.
-        """
-        if self.data is None:
-            raise ValueError("Data must be set before and seen during fitting")
-
-        return self.do(
-            self.data,
-            [ComputeFIM(bias), ComputeCriteria(), *job_factories],
-            max_iterations=max_iterations,
-            n_chains=n_chains,
-            warmup=warmup,
-            n_steps=n_steps,
-            init_step_size=init_step_size,
-            adapt_rate=adapt_rate,
-            accept_target=accept_target,
-            verbose=verbose,
-        )
-
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def sample_params(self, sample_size: IntNonNegative) -> list[ModelParams]:
+    def sample_params(self, sample_size: int) -> list[ModelParams]:
         """Sample parameters based on asymptotic behavior of the MLE.
 
         Args:
-            sample_size (IntNonNegative): The desired sample size.
+            sample_size (int): The desired sample size.
+
+        Raises:
+            ValueError: If Fisher Information Matrix has not been computed.
 
         Returns:
-            list[ModelParams]: A list of model parameters.
+            list[ModelParams]: A list of sampled model parameters.
         """
+        if self.fim_ is None:
+            raise ValueError("Fisher Information Matrix must be previously computed.")
+
         dist = torch.distributions.MultivariateNormal(
-            self.params_.as_flat_tensor, self.fim.inverse()
+            self.params_.as_flat_tensor, self.fim_.inverse()
         )
         flat_samples = dist.sample((sample_size,))
 
         return [self.params_.from_flat_tensor(sample) for sample in flat_samples]
-
-    @property
-    def fim(self) -> torch.Tensor:
-        """Returns the Fisher Information Matrix.
-
-        Raises:
-            ValueError: If Fisher Information Matrix has not yet been computed.
-
-        Returns:
-            torch.Tensor: The Fisher Information Matrix.
-        """
-        if not hasattr(self.metrics_, "fim"):
-            raise ValueError("Fisher Information Matrix must be previously computed.")
-
-        return self.metrics_.fim
-
-    @property
-    def loglik(self) -> float:
-        """Returns the log likelihood of the model.
-
-        Returns:
-            float: The log likelihood.
-        """
-        if not hasattr(self.metrics_, "loglik"):
-            raise ValueError("Log likelihood must be previously computed.")
-
-        return self.metrics_.loglik
-
-    @property
-    def nloglik_pen(self) -> float:
-        """Returns the penalized negative log likelihood of the model.
-
-        Returns:
-            float: The penalized negative log likelihood.
-        """
-        if not hasattr(self.metrics_, "nloglik_pen"):
-            raise ValueError(
-                "Penalized negative log likelihood must be previously computed."
-            )
-
-        return self.metrics_.nloglik_pen
-
-    @property
-    def aic(self) -> float:
-        """Returns the Akaike Information Criterion of the model.
-
-        Returns:
-            float: The Akaike Information Criterion.
-        """
-        if not hasattr(self.metrics_, "aic"):
-            raise ValueError("AIC must be previously computed.")
-
-        return self.metrics_.aic
-
-    @property
-    def bic(self) -> float:
-        """Returns the Bayesian Information Criterion of the model.
-
-        Returns:
-            float: The Bayesian Information Criterion.
-        """
-        if not hasattr(self.metrics_, "bic"):
-            raise ValueError("BIC must be previously computed.")
-
-        return self.metrics_.bic
 
     @property
     def stderror(self) -> ModelParams:
@@ -752,7 +472,13 @@ class MultiStateJointModel(PriorMixin, LongitudinalMixin, HazardMixin):
             \text{sd} = \sqrt{\operatorname{diag}\left( \mathcal{I}(\hat{\theta})^{-1}
             \right)}
 
+        Raises:
+            ValueError: If Fisher Information Matrix has not been computed.
+
         Returns:
             ModelParams: The standard error in the same format as the parameters.
         """
-        return self.params_.from_flat_tensor(self.fim.inverse().diag().sqrt())
+        if self.fim_ is None:
+            raise ValueError("Fisher Information Matrix must be previously computed.")
+
+        return self.params_.from_flat_tensor(self.fim_.inverse().diag().sqrt())

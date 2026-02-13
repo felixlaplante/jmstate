@@ -1,21 +1,20 @@
 from collections.abc import Callable
-from dataclasses import field, replace
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from itertools import chain
 from typing import Any, Self, cast
 
 import torch
 from numpy import array2string
-from pydantic import ConfigDict, dataclasses, validate_call
+from pydantic import ConfigDict, validate_call
 from rich.tree import Tree
 
 from ..utils._checks import check_inf, check_matrix_dim, check_nan
 from ..utils._linalg import flat_from_log_cholesky, log_cholesky_from_flat
 from ..visualization._print import rich_str
-from ._defs import Tensor1D
 
 
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class CovParams:
     r"""Dataclass containing covariance parameters.
 
@@ -49,13 +48,13 @@ class CovParams:
     independent.
 
     Attributes:
-        flat (Tensor1D): The flat representation of the covariance matrix.
+        flat (torch.Tensor): The flat representation of the covariance matrix.
         dim (int): The dimension of the covariance matrix.
         method (str): The method used to parametrize the covariance matrix.
         skip_validation (bool): Whether to skip validation.
     """
 
-    flat: Tensor1D
+    flat: torch.Tensor
     dim: int
     method: str
     skip_validation: bool = field(default=False, repr=False)
@@ -90,7 +89,7 @@ class CovParams:
         `ball`, `diag` or `full`.
 
         Args:
-            V (Tensor2D): The square covariance matrix parameter.
+            V (torch.Tensor): The square covariance matrix parameter.
             method (str, optional): The method, full, diag or ball. Defaults to "full".
 
         Returns:
@@ -153,7 +152,7 @@ class CovParams:
         return L, log_eigvals
 
 
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class ModelParams:
     r"""Dataclass containing model parameters.
 
@@ -189,21 +188,21 @@ class ModelParams:
     Bypass checks by activating the `skip_validation` flag.
 
     Attributes:
-        gamma (Tensor1D | None): The population level parameters.
+        gamma (torch.Tensor | None): The population level parameters.
         Q (CovParams): The random effects precision matrix representation.
         R (CovParams): The residuals precision matrix representation.
-        alphas (dict[tuple[Any, Any], Tensor1D]): The link linear parameters.
-        betas (dict[tuple[Any, Any], Tensor1D] | None): The covariates parameters.
+        alphas (dict[tuple[Any, Any], torch.Tensor]): The link linear parameters.
+        betas (dict[tuple[Any, Any], torch.Tensor] | None): The covariates parameters.
         extra (list[torch.Tensor] | None): A list of parameters that is passed in
             addition to other mandatory parameters.
         skip_validation (bool): A boolean value to skip validation.
     """
 
-    gamma: Tensor1D | None
+    gamma: torch.Tensor | None
     Q: CovParams
     R: CovParams
-    alphas: dict[tuple[Any, Any], Tensor1D]
-    betas: dict[tuple[Any, Any], Tensor1D] | None
+    alphas: dict[tuple[Any, Any], torch.Tensor]
+    betas: dict[tuple[Any, Any], torch.Tensor] | None
     extra: list[torch.Tensor] | None = field(default=None, repr=False)
     skip_validation: bool = field(default=False, repr=False)
 
@@ -301,7 +300,7 @@ class ModelParams:
         _is_new = lambda x: not (x in seen or seen.add(x))  # noqa: E731  # type: ignore
 
         def _items(
-            k: str, v: torch.Tensor | dict[tuple[Any, Any] | None, torch.Tensor]
+            k: str, v: torch.Tensor | dict[tuple[Any, Any], torch.Tensor] | None
         ) -> list[tuple[str, torch.Tensor]]:
             if v is None:
                 return []
@@ -321,7 +320,7 @@ class ModelParams:
         return list(self.as_dict.values())
 
     @property
-    def as_flat_tensor(self) -> Tensor1D:
+    def as_flat_tensor(self) -> torch.Tensor:
         """Get the flattened unique parameters.
 
         Returns:
@@ -346,20 +345,11 @@ class ModelParams:
         """
         for t in self.as_list:
             t.requires_grad_(req)
+        if self.extra is not None:
+            for t in self.extra:
+                t.requires_grad_(req)
 
-    def extra_requires_grad_(self, req: bool):
-        """Enable or disable gradient computation on extra parameters.
-
-        Args:
-            req (bool): Wether to require or not.
-        """
-        if self.extra is None:
-            return
-        for t in self.extra:
-            t.requires_grad_(req)
-
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def from_flat_tensor(self, flat: Tensor1D) -> Self:
+    def from_flat_tensor(self, flat: torch.Tensor) -> Self:
         """Gets a ModelParams object based on the flat representation.
 
         This uses the current object as the reference.
@@ -380,7 +370,7 @@ class ModelParams:
             seen[ref] = flat[i : (i := i + ref.numel())].reshape(ref.shape)
             return seen[ref]
 
-        return cast(Self, self._map_fn_params(_next))
+        return self._map_fn_params(_next)
 
     def detach(self) -> Self:
         """Returns a detached version of the parameters.
@@ -396,7 +386,7 @@ class ModelParams:
                 seen[t] = t.detach()
             return seen[t]
 
-        return cast(Self, self._map_fn_params(_detach))
+        return self._map_fn_params(_detach)
 
     def clone(self) -> Self:
         """Returns a clone of the parameters.
@@ -412,4 +402,4 @@ class ModelParams:
                 seen[t] = t.clone()
             return seen[t]
 
-        return cast(Self, self._map_fn_params(_clone))
+        return self._map_fn_params(_clone)

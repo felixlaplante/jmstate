@@ -63,7 +63,7 @@ def check_consistent_size(
             )
 
 
-def check_trajectory_empty(trajectories: list[Trajectory]):
+def check_trajectories_empty(trajectories: list[Trajectory]):
     """Check if the trajectories are not empty.
 
     Args:
@@ -76,7 +76,7 @@ def check_trajectory_empty(trajectories: list[Trajectory]):
         raise ValueError("Trajectories must not be empty")
 
 
-def check_trajectory_sorting(trajectories: list[Trajectory]):
+def check_trajectories_sorting(trajectories: list[Trajectory]):
     """Check if the trajectories are well sorted.
 
     Args:
@@ -95,7 +95,7 @@ def check_trajectory_sorting(trajectories: list[Trajectory]):
         )
 
 
-def check_trajectory_c(trajectories: list[Trajectory], c: torch.Tensor | None):
+def check_trajectories_c(trajectories: list[Trajectory], c: torch.Tensor | None):
     """Check if the trajectories are compatible with censoring times.
 
     Args:

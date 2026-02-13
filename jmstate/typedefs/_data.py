@@ -1,20 +1,18 @@
-import warnings
 from collections.abc import Mapping
-from dataclasses import field
+from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Any
 
 import torch
-from pydantic import ConfigDict, dataclasses
 from rich.tree import Tree
 
 from ..utils._checks import (
     check_consistent_size,
     check_inf,
     check_nan,
-    check_trajectory_c,
-    check_trajectory_empty,
-    check_trajectory_sorting,
+    check_trajectories_c,
+    check_trajectories_empty,
+    check_trajectories_sorting,
 )
 from ..utils._surv import build_all_buckets
 from ..visualization._print import (
@@ -26,22 +24,12 @@ from ..visualization._print import (
     add_y,
     rich_str,
 )
-from ._defs import (
-    BaseHazardFn,
-    IndividualEffectsFn,
-    LinkFn,
-    RegressionFn,
-    Tensor1D,
-    Tensor2D,
-    Tensor3D,
-    TensorCol,
-    Trajectory,
-)
+from ._defs import BaseHazardFn, IndividualEffectsFn, LinkFn, RegressionFn, Trajectory
 from ._params import ModelParams
 
 
 # Dataclasses
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class ModelDesign:
     """Class containing model design.
 
@@ -107,7 +95,7 @@ class ModelDesign:
         return rich_str(tree)
 
 
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class ModelData:
     r"""Dataclass containing learnable multistate joint model data.
 
@@ -140,11 +128,11 @@ class ModelData:
         skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
-    x: Tensor2D | None
-    t: Tensor1D | Tensor2D
-    y: Tensor3D
+    x: torch.Tensor | None
+    t: torch.Tensor | torch.Tensor
+    y: torch.Tensor
     trajectories: list[Trajectory]
-    c: TensorCol
+    c: torch.Tensor
     skip_validation: bool = field(default=False, repr=False)
 
     def __str__(self) -> str:
@@ -175,9 +163,9 @@ class ModelData:
         if self.skip_validation:
             return
 
-        check_trajectory_empty(self.trajectories)
-        check_trajectory_sorting(self.trajectories)
-        check_trajectory_c(self.trajectories, self.c)
+        check_trajectories_empty(self.trajectories)
+        check_trajectories_sorting(self.trajectories)
+        check_trajectories_c(self.trajectories, self.c)
 
         check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
         check_nan(((self.x, "x"), (self.c, "c")))
@@ -208,17 +196,14 @@ class ModelData:
 class CompleteModelData(ModelData):
     """Complete model data class."""
 
-    valid_mask: Tensor3D = field(init=False)
-    n_valid: Tensor2D = field(init=False)
-    valid_t: Tensor1D | Tensor2D = field(init=False)
-    valid_y: Tensor2D | Tensor3D = field(init=False)
+    valid_mask: torch.Tensor = field(init=False)
+    n_valid: torch.Tensor = field(init=False)
+    valid_t: torch.Tensor = field(init=False)
+    valid_y: torch.Tensor = field(init=False)
     buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
 
     def prepare(self, model_design: ModelDesign, params: ModelParams):
         """Sets the missing representation.
-
-        Raises:
-            ValueError: If y and R are not compatible in shape.
 
         Args:
             model_design (ModelDesign): The design of the model.
@@ -226,9 +211,7 @@ class CompleteModelData(ModelData):
         """
         check_consistent_size(((params.R.dim, None, "R"), (self.y, -1, "y")))
 
-        nan_mask = self.y.isnan()
-        valid_mask = ~nan_mask
-        self.valid_mask = valid_mask
+        self.valid_mask = ~self.y.isnan()
         self.n_valid = self.valid_mask.sum(dim=-2)
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
@@ -236,20 +219,8 @@ class CompleteModelData(ModelData):
             self.trajectories, self.c, tuple(model_design.surv.keys())
         )
 
-        if (
-            params.R.method == "full"
-            and (valid_mask.any(dim=-1) & nan_mask.any(dim=-1)).any()
-        ):
-            warnings.warn(
-                (
-                    "R method should not be full when having mixed NaNs as incorrect "
-                    "likelihood will be computed"
-                ),
-                stacklevel=2,
-            )
 
-
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class SampleData:
     """Dataclass for data used in sampling.
 
@@ -263,24 +234,24 @@ class SampleData:
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
-        x (Tensor2D | None): The fixed covariates.
+        x (torch.Tensor | None): The fixed covariates.
         trajectories (list[Trajectory]): The list of the individual trajectories.
             A `Trajectory` is a list of tuples containing time and state.
-        psi (Tensor2D | Tensor3D): The individual parameters. Define it as a matrix with
+        psi (torch.Tensor): The individual parameters. Define it as a matrix with
             the same number of rows as there are `len(trajectories)`. Only use a 3D
             tensor if you fully understand the codebase and the mechanisms. Trajectory
             sampling may only be used with matrices.
-        c (TensorCol | None, optional): The censoring times as a column vector. They
+        c (torch.Tensor | None, optional): The censoring times as a column vector. They
             must not be less than the trajectory maximum times. This corresponds to
             the last times of observation of the individuals or prediction current
             times.
         skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
-    x: Tensor2D | None
+    x: torch.Tensor | None
     trajectories: list[Trajectory]
-    psi: Tensor2D | Tensor3D
-    c: TensorCol | None = None
+    psi: torch.Tensor
+    c: torch.Tensor | None = None
     skip_validation: bool = field(default=False, repr=False)
 
     def __str__(self):
@@ -310,9 +281,9 @@ class SampleData:
         if self.skip_validation:
             return
 
-        check_trajectory_empty(self.trajectories)
-        check_trajectory_sorting(self.trajectories)
-        check_trajectory_c(self.trajectories, self.c)
+        check_trajectories_empty(self.trajectories)
+        check_trajectories_sorting(self.trajectories)
+        check_trajectories_c(self.trajectories, self.c)
 
         check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
         check_nan(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))

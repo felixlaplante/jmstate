@@ -3,6 +3,75 @@ from typing import Any
 
 import torch
 
+from ..typedefs._data import CompleteModelData
+from ..typedefs._params import ModelParams
+
+
+class MCMCMixin:
+    """Mixin for MCMC sampling.
+
+    Attributes:
+        params_ (ModelParams): The parameters of the model.
+        n_chains (int): The number of parallel chains to spawn.
+        init_step_size (float): Kernel step in Metropolis-Hastings.
+        adapt_rate (float): Adaptation rate for the step_size.
+        target_accept_rate (float): Mean acceptance target.
+        _logpdfs_aux_fn (Callable[[ModelParams, CompleteModelData, torch.Tensor],
+            tuple[torch.Tensor, torch.Tensor]]): The log pdfs function with auxiliary
+            data.
+    """
+
+    params_: ModelParams
+    n_chains: int
+    init_step_size: float
+    adapt_rate: float
+    target_accept_rate: float
+    _logpdfs_aux_fn: Callable[
+        [ModelParams, CompleteModelData, torch.Tensor],
+        tuple[torch.Tensor, torch.Tensor],
+    ]
+
+    def __init__(
+        self,
+        n_chains: int,
+        init_step_size: float,
+        adapt_rate: float,
+        target_accept_rate: float,
+        *args: Any,
+        **kwargs: Any,
+    ):
+        """Initializes the MCMC mixin.
+
+        Args:
+            n_chains (int): The number of parallel chains to spawn.
+            init_step_size (float): Kernel step in Metropolis-Hastings.
+            adapt_rate (float): Adaptation rate for the step_size.
+            target_accept_rate (float): Mean acceptance target.
+        """
+        super().__init__(*args, **kwargs)
+        self.n_chains = n_chains
+        self.init_step_size = init_step_size
+        self.adapt_rate = adapt_rate
+        self.target_accept_rate = target_accept_rate
+
+    def _init_mcmc(self, data: CompleteModelData):
+        """Initializes the MCMC sampler.
+
+        Args:
+            data (CompleteModelData): The complete model data.
+
+        Returns:
+            MetropolisHastingsSampler: The initialized MCMC sampler.
+        """
+        return MetropolisHastingsSampler(
+            lambda b: self._logpdfs_aux_fn(self.params_, data, b),
+            torch.zeros(self.n_chains, data.size, self.params_.Q.dim),
+            self.n_chains,
+            self.init_step_size,
+            self.adapt_rate,
+            self.target_accept_rate,
+        )
+
 
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
@@ -15,8 +84,6 @@ class MetropolisHastingsSampler:
     logpdfs: torch.Tensor
     aux: torch.Tensor
     step_sizes: torch.Tensor
-    n_samples: torch.Tensor
-    n_accepted: torch.Tensor
 
     def __init__(
         self,
@@ -53,10 +120,6 @@ class MetropolisHastingsSampler:
         self._noise = torch.empty_like(self.b)
         self.step_sizes = torch.full((1, self.b.size(-2)), init_step_size)
 
-        # Statistics tracking
-        self.n_samples = torch.tensor(0)
-        self.n_accepted = torch.zeros(self.b.size(-2))
-
     def step(self):
         """Performs a single kernel step."""
         # Generate proposal noise
@@ -75,52 +138,16 @@ class MetropolisHastingsSampler:
         torch.where(accept_mask, proposed_logpdfs, self.logpdfs, out=self.logpdfs)
         torch.where(accept_mask.unsqueeze(-1), proposed_aux, self.aux, out=self.aux)
 
-        # Update statistics
-        self.n_samples += 1
-        mean_accept_mask = accept_mask.to(torch.get_default_dtype()).mean(dim=0)
-        self.n_accepted += mean_accept_mask
-
         # Update step sizes
+        mean_accept_mask = accept_mask.to(torch.get_default_dtype()).mean(dim=0)
         adaptation = (mean_accept_mask - self.target_accept_rate) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 
-    @property
-    def acceptance_rates(self) -> torch.Tensor:
-        """Gets the acceptance_rate.
+    def run(self, n_steps: int):
+        """Runs the sampler for a given number of steps.
 
-        Returns:
-            torch.Tensor: The means of the acceptance_rates across iterations.
+        Args:
+            n_steps (int): The number of steps to run the sampler for.
         """
-        return self.n_accepted / torch.clamp(self.n_samples, min=1.0)
-
-    @property
-    def mean_acceptance_rate(self) -> float:
-        """Gets the acceptance_rate mean across all individuals.
-
-        Returns:
-            torch.Tensor: The means across iterations and individuals.
-        """
-        return self.acceptance_rates.mean().item()
-
-    @property
-    def mean_step_size(self) -> float:
-        """Gets the mean step size.
-
-        Returns:
-            float: The mean step size.
-        """
-        return self.step_sizes.mean().item()
-
-    @property
-    def diagnostics(self) -> dict[str, Any]:
-        """Gets the summary of the MCMC diagnostics.
-
-        Returns:
-            dict[str, Any]: The dict of the diagnostics.
-        """
-        return {
-            "acceptance_rates": self.acceptance_rates.clone(),
-            "mean_acceptance_rate": self.mean_acceptance_rate,
-            "step_sizes": self.step_sizes.clone(),
-            "mean_step_size": self.mean_step_size,
-        }
+        for _ in range(n_steps):
+            self.step()
