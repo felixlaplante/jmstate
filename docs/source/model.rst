@@ -1,7 +1,7 @@
 Model
 =====
 
-.. automodule:: jmstate.typedefs
+.. automodule:: jmstate.model
    :no-members:
    :no-undoc-members:
    :no-index:
@@ -12,3 +12,4 @@ Model
 
 
    MultiStateJointModel
+
