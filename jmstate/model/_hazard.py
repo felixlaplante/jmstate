@@ -1,25 +1,28 @@
 from dataclasses import replace
-from typing import Any, Final, cast
+from numbers import Integral
+from typing import Any, cast
 
 import numpy as np
 import torch
+from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
+from sklearn.utils.validation import (  #  type: ignore
+    assert_all_finite,  #  type: ignore
+    check_consistent_length,  #  type: ignore
+)
 from xxhash import xxh3_64_intdigest
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
-from ..typedefs._defs import HazardInfo, Trajectory
+from ..typedefs._defs import HAZARD_CACHE_KEYS, HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
+from ..utils._cache import Cache
 from ..utils._surv import build_possible_buckets, build_remaining_buckets
-from ._cache import Cache
-
-# Constants
-HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
 
 
 class HazardMixin:
     """Mixin class for hazard model computations."""
 
-    params_: ModelParams
     model_design: ModelDesign
+    params_: ModelParams
     n_quad: int
     n_bisect: int
     cache_limit: int | None
@@ -42,13 +45,13 @@ class HazardMixin:
             n_bisect (int): The number of bisection steps.
             cache_limit (int | None): Max length of cache.
         """
+        super().__init__(*args, **kwargs)
+
         self.n_quad = n_quad
         self.n_bisect = n_bisect
         self.cache_limit = cache_limit
         self._std_nodes, self._std_weights = self._legendre_quad(n_quad)
         self._cache = Cache(cache_limit, HAZARD_CACHE_KEYS)
-
-        super().__init__(*args, **kwargs)
 
     @staticmethod
     def _legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -83,7 +86,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log hazard.
         """
-        # Unpack data
         t0, t1, x, psi, alpha, beta, base_hazard_fn, link_fn = hazard_info
 
         # Compute baseline hazard
@@ -124,7 +126,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed cumulative hazard.
         """
-        # Unpack data
         t0, t1, *_ = hazard_info
         c = t0 if c is None else c
 
@@ -181,7 +182,6 @@ class HazardMixin:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: The log and cum hazard.
         """
-        # Unpack data
         t0, t1, *_ = hazard_info
 
         # Transform to quadrature interval
@@ -230,7 +230,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed pre transition times.
         """
-        # Unpack data
         t0, t1, *_ = hazard_info
 
         # Initialize for bisection search
@@ -267,7 +266,6 @@ class HazardMixin:
         Returns:
             bool: If the sampling is done.
         """
-        # Unpack data
         x = sample_data.x
         psi = sample_data.psi
         c = sample_data.c
@@ -278,16 +276,15 @@ class HazardMixin:
         )
 
         if not current_buckets:
-            return False
+            return True
 
         # Initialize candidate transition times
         n_transitions = len(current_buckets)
-        t_candidates = torch.full((sample_data.size, n_transitions), torch.inf)
+        t_candidates = torch.full((len(sample_data), n_transitions), torch.inf)
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
             idxs, t0, t1 = bucket
 
-            # Create info
             hazard_info = HazardInfo(
                 t0,
                 t1,
@@ -303,7 +300,6 @@ class HazardMixin:
                 hazard_info,
                 None if c is None else c.index_select(-2, idxs),
             )
-
             t_candidates[idxs, j] = t_sample.reshape(-1)
 
         # Find earliest transition
@@ -316,32 +312,52 @@ class HazardMixin:
                     (time.item(), bucket_keys[int(arg_idx)][1])
                 )
 
-        return True
+        return False
 
-    def _sample_trajectories(
+    @validate_params(
+        {
+            "sample_data": [SampleData],
+            "c_max": [torch.Tensor],
+            "max_length": [Interval(Integral, 1, None, closed="left")],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def sample_trajectories(
         self,
         sample_data: SampleData,
         c_max: torch.Tensor,
-        max_length: int,
+        *,
+        max_length: int = 10,
     ) -> list[Trajectory]:
-        """Sample future trajectories from the fitted joint model.
+        """Sample trajectories from the joint model.
+
+        The sampling is done usign a bisection algorithm by inversing the log cdf of the
+        transitions inside a Gillespie-like algorithm.
+
+        Checks are run only if the `skip_validation` attribute of `sample_date` is not
+        set to `True`.
 
         Args:
             sample_data (SampleData): Prediction data.
-            c_max (torch.Tensor): The maximum trajectory censoring times.
-            max_length (int): Maximum iterations or sampling.
+            c_max (TensorCol): The maximum trajectory censoring times.
+            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling.
+                Defaults to 10.
+
+        Raises:
+            ValueError: If c_max contains inf or NaN values.
+            ValueError: If c_max has incorrect shape.
 
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
+        if not sample_data.skip_validation:
+            assert_all_finite(c_max, input_name="c_max")
+            check_consistent_length(c_max, sample_data)
         sample_data_copied = replace(sample_data, skip_validation=True)
 
         # Sample future transitions iteratively
         for _ in range(max_length):
-            if not self._sample_trajectory_step(
-                sample_data_copied,
-                c_max,
-            ):
+            if self._sample_trajectory_step(sample_data_copied, c_max):
                 break
             object.__setattr__(sample_data_copied, "c", None)
 
@@ -350,19 +366,56 @@ class HazardMixin:
             for i, trajectory in enumerate(sample_data_copied.trajectories)
         ]
 
-    def _compute_surv_logps(
+    @validate_params(
+        {
+            "sample_data": [SampleData],
+            "u": [torch.Tensor],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def compute_surv_logps(
         self, sample_data: SampleData, u: torch.Tensor
     ) -> torch.Tensor:
-        """Computes log probabilites of remaining event free up to time u.
+        r"""Computes log probabilites of remaining event free up to time u.
+
+        A censoring time may also be given. With known individual effects, this computes
+        at the times :math:`u` the values of the log survival probabilities given input
+        data conditionally to survival up to time :math:`c`:
+
+        .. math::
+            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt.
+
+        When multiple transitions are allowed, :math:`\lambda(t)` is a sum over all
+        possible transitions, that is to say if an individual is in the state :math:`k`
+        from time :math:`t_0`, this gives:
+
+        .. math::
+            -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt.
+
+        Please note this makes use of the Chasles property in order to avoid the
+        computation of two integrals and make computations more precise.
+
+        The variable `u` is expected to be a matrix with the same number of rows as
+        individuals, and the same number of columns as prediction times.
+
+        Checks are run only if the `skip_validation` attribute of `sample_date` is not
+        set to `True`.
 
         Args:
             sample_data (SampleData): The data on which to compute the probabilities.
             u (torch.Tensor): The time at which to evaluate the probabilities.
 
+        Raises:
+            ValueError: If `u` contains inf or NaN values.
+            ValueError: If `u` has incorrect shape.
+
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
-        # Unpack data
+        if not sample_data.skip_validation:
+            assert_all_finite(u, input_name="u")
+            check_consistent_length(u, sample_data)
+
         x = sample_data.x
         psi = sample_data.psi
         c = sample_data.c
@@ -372,13 +425,11 @@ class HazardMixin:
             sample_data.trajectories, tuple(self.model_design.surv.keys())
         )
 
-        nlogps = torch.zeros(*psi.shape[:-1], u.size(1))
-
         # Compute the log probabilities summing over transitions
+        nlogps = torch.zeros(*psi.shape[:-1], u.size(1))
         for key, bucket in buckets.items():
             idxs, t0 = bucket
 
-            # Create info
             hazard_info = HazardInfo(
                 t0,
                 u.index_select(0, idxs),
@@ -393,21 +444,19 @@ class HazardMixin:
             alts_logliks = self._cum_hazard(
                 hazard_info, None if c is None else c.index_select(0, idxs)
             )
-
             nlogps.index_add_(-2, idxs, alts_logliks)
 
         return -nlogps.clamp(min=0.0)
 
     def _hazard_logliks(
-        self, params: ModelParams, psi: torch.Tensor, data: CompleteModelData
+        self, params: ModelParams, data: CompleteModelData, psi: torch.Tensor
     ) -> torch.Tensor:
         """Computes the hazard log likelihoods.
 
         Args:
             params (ModelParams): The model parameters.
-            psi (torch.Tensor): A matrix of individual parameters.
             data (CompleteModelData): Dataset on which likelihood is computed.
-            enable_cache (bool): Enable caching
+            psi (torch.Tensor): A matrix of individual parameters.
 
         Returns:
             torch.Tensor: The computed log likelihoods.
@@ -417,7 +466,6 @@ class HazardMixin:
         for key, bucket in data.buckets.items():
             idxs, t0, t1, obs = bucket
 
-            # Create info
             hazard_info = HazardInfo(
                 t0,
                 t1,
@@ -432,7 +480,6 @@ class HazardMixin:
                 hazard_info,
                 self.cache_limit != 0,
             )
-
             vals = (-alts_logliks).addcmul(obs, obs_logliks)
             logliks.index_add_(-1, idxs, vals)
 

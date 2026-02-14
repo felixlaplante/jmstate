@@ -1,0 +1,326 @@
+import math
+from numbers import Integral
+from typing import Any
+
+import torch
+from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
+from sklearn.utils.validation import (  # type: ignore
+    assert_all_finite,  # type: ignore
+    check_consistent_length,  # type: ignore
+)
+from tqdm import trange
+
+from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
+from ..typedefs._defs import Trajectory
+from ..typedefs._params import ModelParams
+from ..utils._cache import Cache
+from ._sampler import MCMCMixin
+
+
+class PredictionMixin(MCMCMixin):
+    """Mixin class for prediction."""
+
+    model_design: ModelDesign
+    params_: ModelParams
+    n_chains: int
+    n_warmup: int
+    n_subsample: int
+    verbose: bool
+    _cache: Cache
+
+    def sample_params(self, sample_size: int) -> list[ModelParams]: ...
+
+    def compute_surv_logps(
+        self,
+        sample_data: SampleData,
+        u: torch.Tensor,
+    ) -> torch.Tensor: ...
+
+    def sample_trajectories(
+        self,
+        sample_data: SampleData,
+        c_max: torch.Tensor,
+        *,
+        max_length: int,
+    ) -> list[Trajectory]: ...
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize the prediction mixin."""
+        super().__init__(*args, **kwargs)
+
+    @validate_params(
+        {
+            "data": [ModelData],
+            "u": [torch.Tensor],
+            "n_samples": [Interval(Integral, 1, None, closed="left")],
+            "double_monte_carlo": [bool],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def predict_y(
+        self,
+        data: ModelData,
+        u: torch.Tensor,
+        *,
+        n_samples: int = 1000,
+        double_monte_carlo: bool = False,
+    ) -> torch.Tensor:
+        r"""Function to predict longitudinal values.
+
+        For every drawing of a random effect :math:`b`, this computes at the prediction
+        times :math:`u` the values of the regression function given input data:
+
+        .. math::
+            h(u, b).
+
+        The variable `u` is expected to be a matrix with the same number of rows as
+        individuals, and the same number of columns as prediction times.
+
+        If `double_monte_carlo` is True, then the prediction is computed using double
+        Monte Carlo Rizopoulos-style (2011).
+
+        Args:
+            data (ModelData): The data to predict.
+            u (torch.Tensor): The matrix containing prediction times.
+            n_samples (int, optional): The number of samples to draw from the
+                posterior. Defaults to 1000.
+            double_monte_carlo (bool, optional): Whether to use double Monte Carlo.
+                Defaults to False.
+
+        Raises:
+            ValueError: If `double_monte_carlo` is True and the Fisher Information
+                Matrix has not been computed.
+            ValueError: If `u` contains inf or NaN values.
+            ValueError: If `u` has incompatible shape.
+
+        Returns:
+            torch.Tensor: The predicted longitudinal values.
+        """
+        assert_all_finite(u, input_name="u")
+        check_consistent_length(u, data)
+
+        # Load and complete data
+        data = CompleteModelData(
+            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
+        )
+        data.prepare(self.model_design, self.params_)
+
+        # Initialize variables
+        y_pred: list[torch.Tensor] = []
+        n_iter = math.ceil(n_samples / self.n_chains)
+
+        if double_monte_carlo:
+            init_params = self.params_
+            params_list = self.sample_params(n_iter)
+
+        # Initialize optimizer and MCMC
+        sampler = self._init_mcmc(data)
+        sampler.run(self.n_warmup)
+
+        for _ in trange(
+            n_iter, desc="Predicting longitudinal values", disable=not self.verbose
+        ):
+            if double_monte_carlo:
+                self.params_ = params_list.pop()  # type: ignore
+
+            y = self.model_design.regression_fn(u, sampler.psi)
+            y_pred.extend(y[i] for i in range(y.size(0)))
+            sampler.run(self.n_subsample)
+
+        # Restore parameters
+        if double_monte_carlo:
+            self.params_ = init_params  # type: ignore
+        self._cache.clear()
+        return torch.stack(y_pred[:n_samples])
+
+    @validate_params(
+        {
+            "data": [ModelData],
+            "u": [torch.Tensor],
+            "n_samples": [Interval(Integral, 1, None, closed="left")],
+            "double_monte_carlo": [bool],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def predict_surv_logps(
+        self,
+        data: ModelData,
+        u: torch.Tensor,
+        *,
+        n_samples: int = 1000,
+        double_monte_carlo: bool = False,
+    ) -> torch.Tensor:
+        r"""Function to predict survival log probability values.
+
+        For every drawing of a random effect :math:`b`, this computes at the prediction
+        times :math:`u` the values of the log survival probabilities given input data
+        and conditionally to survival up to time :math:`c`:
+
+        .. math::
+            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt.
+
+        When multiple transitions are allowed, :math:`\lambda(t)` is a sum over all
+            possible transitions, that is to say if an individual is in the state
+            :math:`k` from time :math:`t_0`, this gives:
+
+            .. math::
+                -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt.
+
+        Please note this makes use of the Chasles property in order to avoid the
+        computation of two integrals and make computations more precise.
+
+        The variable `u` is expected to be a matrix with the same number of rows as
+        individuals, and the same number of columns as prediction times.
+
+        Args:
+            data (ModelData): The data to predict.
+            u (torch.Tensor): The matrix containing prediction times.
+            n_samples (int, optional): The number of samples to draw from the
+                posterior. Defaults to 1000.
+            double_monte_carlo (bool, optional): Whether to use double Monte Carlo.
+                Defaults to False.
+
+        Raises:
+            ValueError: If `double_monte_carlo` is True and the Fisher Information
+                Matrix has not been computed.
+            ValueError: If `u` contains inf or NaN values.
+            ValueError: If `u` has incompatible shape.
+
+        Returns:
+            torch.Tensor: The predicted survival log probabilities.
+        """
+        assert_all_finite(u, input_name="u")
+        check_consistent_length(u, data)
+
+        # Load and complete data
+        data = CompleteModelData(
+            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
+        )
+        data.prepare(self.model_design, self.params_)
+
+        # Initialize variables
+        surv_logps_pred: list[torch.Tensor] = []
+        n_iter = math.ceil(n_samples / self.n_chains)
+
+        if double_monte_carlo:
+            init_params = self.params_
+            params_list = self.sample_params(n_iter)
+
+        # Initialize optimizer and MCMC
+        sampler = self._init_mcmc(data)
+        sampler.run(self.n_warmup)
+
+        for _ in trange(
+            n_iter,
+            desc="Predicting survival log probabilities",
+            disable=not self.verbose,
+        ):
+            if double_monte_carlo:
+                self.params_ = params_list.pop()  # type: ignore
+
+            sample_data = SampleData(
+                data.x,
+                data.trajectories,
+                sampler.psi,
+                data.c,
+                skip_validation=True,
+            )
+            surv_logps = self.compute_surv_logps(sample_data, u)
+            surv_logps_pred.extend(surv_logps[i] for i in range(surv_logps.size(0)))
+            sampler.run(self.n_subsample)
+
+        if double_monte_carlo:
+            self.params_ = init_params  # type: ignore
+        self._cache.clear()
+        return torch.stack(surv_logps_pred[:n_samples])
+
+    @validate_params(
+        {
+            "data": [ModelData],
+            "c_max": [torch.Tensor],
+            "max_length": [Interval(Integral, 1, None, closed="left")],
+            "n_samples": [Interval(Integral, 1, None, closed="left")],
+            "double_monte_carlo": [bool],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def predict_trajectories(
+        self,
+        data: ModelData,
+        c_max: torch.Tensor,
+        *,
+        max_length: int = 10,
+        n_samples: int = 1000,
+        double_monte_carlo: bool = False,
+    ) -> list[list[Trajectory]]:
+        r"""Function to predict trajectories.
+
+        For every drawing of a random effect :math:`b`, this simulates the trajectories
+        up to time `c_max` with a maximum length of `max_length` to avoid infinite
+        loops. This uses a variant of Gillepsie's algorithm.
+
+        The variable `c_max` is expected to be a column vector with the same number of
+        rows as individuals.
+
+        Args:
+            data (ModelData): The data to predict.
+            c_max (torch.Tensor): The matrix containing prediction times.
+            max_length (int, optional): The maximum length of the trajectories.
+                Defaults to 10.
+            n_samples (int, optional): The number of samples to draw from the
+                posterior. Defaults to 1000.
+            double_monte_carlo (bool, optional): Whether to use double Monte Carlo.
+                Defaults to False.
+
+        Raises:
+            ValueError: If `double_monte_carlo` is True and the Fisher Information
+                Matrix has not been computed.
+            ValueError: If `c_max` contains inf or NaN values.
+            ValueError: If `c_max` has incompatible shape.
+
+        Returns:
+            torch.Tensor: The predicted trajectories.
+        """
+        assert_all_finite(c_max, input_name="c_max")
+        check_consistent_length(c_max, data)
+
+        data = CompleteModelData(
+            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
+        )
+        data.prepare(self.model_design, self.params_)
+
+        trajectories_pred: list[list[Trajectory]] = []
+        n_iter = math.ceil(n_samples / self.n_chains)
+
+        if double_monte_carlo:
+            init_params = self.params_
+            params_list = self.sample_params(n_iter)
+
+        sampler = self._init_mcmc(data)
+        sampler.run(self.n_warmup)
+
+        for _ in trange(
+            n_iter,
+            desc="Predicting trajectories",
+            disable=not self.verbose,
+        ):
+            if double_monte_carlo:
+                self.params_ = params_list.pop()  # type: ignore
+
+            for i in range(sampler.psi.size(0)):
+                sample_data = SampleData(
+                    data.x,
+                    data.trajectories,
+                    sampler.psi[i],
+                    data.c,
+                    skip_validation=True,
+                )
+                trajectories_pred.append(
+                    self.sample_trajectories(sample_data, c_max, max_length=max_length)
+                )
+            sampler.run(self.n_subsample)
+
+        if double_monte_carlo:
+            self.params_ = init_params  # type: ignore
+        self._cache.clear()
+        return trajectories_pred[:n_samples]

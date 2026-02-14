@@ -1,58 +1,15 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from types import SimpleNamespace
-from typing import (
-    TYPE_CHECKING,
-    Annotated,
-    Any,
-    Final,
-    NamedTuple,
-    Protocol,
-    Self,
-    TypeAlias,
-    runtime_checkable,
-)
+from typing import Any, Final, NamedTuple, Protocol, TypeAlias
 
 import torch
-from pydantic import AfterValidator
 from torch import nn
 from xxhash import xxh3_64_intdigest
 
-from ._validators import is_col, is_ndim, is_non_neg, is_prob, is_strict_pos
-
-if TYPE_CHECKING:
-    from ..model._base import MultiStateJointModel
-    from ..model._sampler import MetropolisHastingsSampler
-    from ._data import ModelData
-    from ._params import ModelParams
-
-
 # Type Aliases
-Num = int | float
-Trajectory: TypeAlias = list[tuple[Num, Any]]
-
-
-# Pydantic annotations
-Tensor0D = Annotated[torch.Tensor, AfterValidator(is_ndim(0))]
-Tensor1D = Annotated[torch.Tensor, AfterValidator(is_ndim(1))]
-Tensor2D = Annotated[torch.Tensor, AfterValidator(is_ndim(2))]
-Tensor3D = Annotated[torch.Tensor, AfterValidator(is_ndim(3))]
-Tensor4D = Annotated[torch.Tensor, AfterValidator(is_ndim(4))]
-TensorCol = Annotated[Tensor2D, AfterValidator(is_col)]
-Tensor1DPositive = Annotated[Tensor1D, AfterValidator(is_non_neg)]
-
-IntNonNegative = Annotated[int, AfterValidator(is_non_neg)]
-IntStrictlyPositive = Annotated[int, AfterValidator(is_strict_pos)]
-
-NumNonNegative = Annotated[Num, AfterValidator(is_non_neg)]
-NumStrictlyPositive = Annotated[Num, AfterValidator(is_strict_pos)]
-NumProbability = Annotated[Num, AfterValidator(is_prob)]
+Trajectory: TypeAlias = list[tuple[float, Any]]
 
 
 # Protocols
-@runtime_checkable
 class IndividualEffectsFn(Protocol):
     """The individual effects function protocol.
 
@@ -64,22 +21,21 @@ class IndividualEffectsFn(Protocol):
 
     Args:
         gamma (torch.Tensor | None): The population parameters.
-        x (Tensor2D | None): The fixed covariates matrix.
-        b (Tensor2D | Tensor3D): The random effects.
+        x (torch.Tensor | None): The fixed covariates matrix.
+        b (torch.Tensor): The random effects.
 
     Returns:
-        Tensor2D | Tensor3D: The individual parameters `psi`.
+        torch.Tensor: The individual parameters `psi`.
 
     Examples:
         >>> individual_effects_fn = lambda gamma, x, b: gamma + b
     """
 
     def __call__(
-        self, gamma: torch.Tensor | None, x: Tensor2D | None, b: Tensor2D | Tensor3D
-    ) -> Tensor2D | Tensor3D: ...
+        self, gamma: torch.Tensor | None, x: torch.Tensor | None, b: torch.Tensor
+    ) -> torch.Tensor: ...
 
 
-@runtime_checkable
 class RegressionFn(Protocol):
     """The regression function protocol.
 
@@ -92,11 +48,11 @@ class RegressionFn(Protocol):
         It is identical to LinkFn.
 
     Args:
-        t (Tensor1D | Tensor2D): The evaluation times.
-        psi (Tensor2D | Tensor3D): The individual parameters.
+        t (torch.Tensor): The evaluation times.
+        psi (torch.Tensor): The individual parameters.
 
     Returns:
-        Tensor3D | Tensor4D: The response variable values.
+        torch.Tensor: The response variable values.
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
@@ -106,12 +62,9 @@ class RegressionFn(Protocol):
         >>> regression_fn = sigmoid
     """
 
-    def __call__(
-        self, t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D
-    ) -> Tensor3D | Tensor4D: ...
+    def __call__(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor: ...
 
 
-@runtime_checkable
 class LinkFn(Protocol):
     """The link function protocol.
 
@@ -124,11 +77,11 @@ class LinkFn(Protocol):
         It is identical to RegressionFn.
 
     Args:
-        t (Tensor1D | Tensor2D): The evaluation times.
-        psi (Tensor2D | Tensor3D): The individual parameters.
+        t (torch.Tensor): The evaluation times.
+        psi (torch.Tensor): The individual parameters.
 
     Returns:
-        Tensor3D | Tensor4D: The response variable values.
+        torch.Tensor: The response variable values.
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
@@ -138,12 +91,9 @@ class LinkFn(Protocol):
         >>> link_fn = sigmoid
     """
 
-    def __call__(
-        self, t: Tensor1D | Tensor2D, psi: Tensor2D | Tensor3D
-    ) -> Tensor3D | Tensor4D: ...
+    def __call__(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor: ...
 
 
-@runtime_checkable
 class ClockMethod(Protocol):
     r"""The clock method protocol.
 
@@ -155,115 +105,7 @@ class ClockMethod(Protocol):
         \text{(clock forward)} \end{cases}.
     """
 
-    def __call__(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
-
-
-# Named tuples
-class BucketData(NamedTuple):
-    """A simple `NamedTuple` containing transition information.
-
-    Attributes:
-        idxs (torch.Tensor): The individual indices.
-        t0 (torch.Tensor): A column vector of previous transition times.
-        t1 (torch.Tensor): A column vecotr of next transition times.
-    """
-
-    idxs: torch.Tensor
-    t0: torch.Tensor
-    t1: torch.Tensor
-
-
-class HazardInfo(NamedTuple):
-    """A simple internal `NamedTuple` required for hazard computation.
-
-    Attributes:
-        t0 (torch.Tensor): A column vector of previous transition times.
-        t1 (torch.Tensor): A matrix of next transition times.
-        x (torch.Tensor | None): The covariates.
-        psi (torch.Tensor | torch.Tensor): The individual parameters.
-        alpha (torch.Tensor): The baseline hazard parameters.
-        beta (torch.Tensor | None): The regression parameters.
-        base_hazard_fn (BaseHazardFn): The base hazard function.
-        link_fn (LinkFn): The link function.
-    """
-
-    t0: torch.Tensor
-    t1: torch.Tensor
-    x: torch.Tensor | None
-    psi: torch.Tensor | torch.Tensor
-    alpha: torch.Tensor
-    beta: torch.Tensor | None
-    base_hazard_fn: BaseHazardFn
-    link_fn: LinkFn
-
-
-# SimpleNamespaces
-class Info(SimpleNamespace):
-    """A `SimpleNamespace` containing information used for the jobs.
-
-    This may be used by the user as a custom bus.
-
-    Attributes:
-        data (ModelData): Learnable model data passed to `do` method.
-        logpdfs_aux_fn (Callable[[ModelParams, torch.Tensor], tuple[torch.Tensor,
-            torch.Tensor]]): The log probability function with some aux containing
-            individual effects as well as the log likelihoods. Used in optimization
-            steps.
-        iteration (int): The current iteration value. -1 at start and max at end.
-        max_iterations (int): The maximum number of iterations allowed.
-        model (MultiStateJointModel): The multistate joint model.
-        sampler (MetropolisHastingsSampler): The current MCMC sampler.
-        opt (torch.optim.Optimizer): The current optimizer (might not be set).
-        b (Tensor3D): The random effects. The first dimension is equal to `n_chains`.
-        logliks (Tensor2D): The log likelihoods.
-        psi (Tensor3D): The individual effects. The first dimension is equal to
-            `n_chains`.
-    """
-
-    data: ModelData
-    logpdfs_aux_fn: Callable[
-        [ModelParams, torch.Tensor], tuple[torch.Tensor, torch.Tensor]
-    ]
-    iteration: int
-    max_iterations: int
-    model: MultiStateJointModel
-    sampler: MetropolisHastingsSampler
-    opt: torch.optim.Optimizer
-
-
-class Metrics(SimpleNamespace):
-    """A `SimpleNamespace` containing metrics computed by the jobs.
-
-    This may be used by the user as a custom bus.
-
-    Attributes:
-        fim (torch.Tensor): The Fisher Information Matrix.
-        ebes (torch.Tensor): The Empirical Bayes Estimators of the rand effects.
-        loglik (float): The log likelihood.
-        nloglik_pen (float): The penalized negative log likelihood.
-        aic (float): The AIC criterion.
-        bic (float): The BIC criterion.
-        pred_y (list[torch.Tensor]): The predicted response variables for each drawing
-            of random effects.
-        pred_surv_logps (list[torch.Tensor]): The predicted log survival probabilities
-            for each drawing of random effects.
-        pred_trajectories (list[list[Trajectory]]): The predicted (sampled) trajectories
-            for each drawing of random effects.
-        params_history (list[ModelParams]): The parameters' evolution list.
-        mcmc_diagnostics (list[dict[str, Any]]): The list of MCMC diagnostic dicts.
-    """
-
-    fim: torch.Tensor
-    ebes: torch.Tensor
-    loglik: float
-    nloglik_pen: float
-    aic: float
-    bic: float
-    pred_y: list[torch.Tensor]
-    pred_surv_logps: list[torch.Tensor]
-    pred_trajectories: list[list[Trajectory]]
-    params_history: list[ModelParams]
-    mcmc_diagnostics: list[dict[str, Any]]
+    def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
 
 
 # Abstract classes
@@ -302,79 +144,51 @@ class BaseHazardFn(nn.Module, ABC):
         return (ident, xxh3_64_intdigest(params_flat.detach().numpy()))  # type: ignore
 
     @abstractmethod
-    def forward(self, t0: TensorCol, t1: Tensor2D) -> Tensor2D: ...
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
 
 
-class _Base_Job:
-    def __new__(cls, *args: Any, **kwargs: Any) -> Callable[[Info], Self]:
-        """Creates a partial in order to be initialized later.
+# Named tuples
+class BucketData(NamedTuple):
+    """A simple `NamedTuple` containing transition information.
 
-        Returns:
-            Callable[[Info], Self]: The object or a partial.
-        """
-
-        def _job_factory(info: Info):
-            return cls._create_obj(*args, info=info, **kwargs)
-
-        _job_factory.cls = cls  # type: ignore
-
-        return _job_factory
-
-    @classmethod
-    def _create_obj(cls, *args: Any, **kwargs: Any) -> Self:
-        """Creates a factory to wrap the creation.
-
-        Returns:
-            Self: The initialized job.
-        """
-        obj = super().__new__(cls)
-        obj.__init__(*args, **kwargs)
-        return obj
-
-
-class Job(_Base_Job):
-    """This is the public base class for any Job.
-
-    Please note the behaviour of this class is quite special and inherited from the
-    private class `_Base_Job`. When `__new__` is called, the class will return a factory
-    that is a `Callable[[Info], Job]`, and the `__init__` is not run until the main MCMC
-    loop calls it.
+    Attributes:
+        idxs (torch.Tensor): The individual indices.
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A column vecotr of next transition times.
     """
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> Callable[[Info], Job]:
-        """Returns the Job factory needed by the `do` method.
+    idxs: torch.Tensor
+    t0: torch.Tensor
+    t1: torch.Tensor
 
-        Returns:
-            Callable[[Info], Job]: The job factory.
-        """
-        return super().__new__(cls, *args, **kwargs)
 
-    def __init__(self, *args: Any, **kwargs: Any):
-        """Initializes the class.
+class HazardInfo(NamedTuple):
+    """A simple internal `NamedTuple` required for hazard computation.
 
-        This must accept `info` as a keyword or **kwargs.
-        """
+    Attributes:
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A matrix of next transition times.
+        x (torch.Tensor | None): The covariates.
+        psi (torch.Tensor): The individual parameters.
+        alpha (torch.Tensor): The baseline hazard parameters.
+        beta (torch.Tensor | None): The regression parameters.
+        base_hazard_fn (BaseHazardFn): The base hazard function.
+        link_fn (LinkFn): The link function.
+    """
 
-    def run(self, *args: Any, **kwargs: Any) -> bool | None:
-        """Run operations.
-
-        This must accept `info` as a keyword or **kwargs.
-
-        Returns:
-            bool | None: None or False if not requiring to stop. True to require stop.
-                When all non None returning jobs are returning True, then the main loop
-                will be stopped.
-        """
-
-    def end(self, *args: Any, **kwargs: Any):
-        """End operations.
-
-        This must accept `info` and `metrics` as keywords or **kwargs.
-        """
+    t0: torch.Tensor
+    t1: torch.Tensor
+    x: torch.Tensor | None
+    psi: torch.Tensor
+    alpha: torch.Tensor
+    beta: torch.Tensor | None
+    base_hazard_fn: BaseHazardFn
+    link_fn: LinkFn
 
 
 # Constants
-LOG_TWO_PI: Final[Tensor0D] = torch.log(torch.tensor(2.0 * torch.pi))
+LOG_TWO_PI: Final[torch.Tensor] = torch.log(torch.tensor(2.0 * torch.pi))
+HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
 SIGNIFICANCE_LEVELS: Final[tuple[float, ...]] = (
     0.001,
     0.01,

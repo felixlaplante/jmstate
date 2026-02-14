@@ -1,15 +1,30 @@
+from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import torch
 from numpy import atleast_1d
+from sklearn.utils._param_validation import validate_params  # type: ignore
 
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_params_align
 
+if TYPE_CHECKING:
+    from ..model._base import MultiStateJointModel
 
+
+@validate_params(
+    {
+        "true_params": [ModelParams, None],
+        "figsize": [tuple],
+        "show": [bool],
+    },
+    prefer_skip_nested_validation=True,
+)
 def plot_params_history(
-    params_history: list[ModelParams],
+    model: MultiStateJointModel,
     *,
     true_params: ModelParams | None = None,
     figsize: tuple[int, int] = (10, 8),
@@ -20,29 +35,38 @@ def plot_params_history(
     This function plots the history of the parameters in a grid of subplots.
 
     Args:
-        params_history (list[ModelParams]): The parameter history as given in
-            `Metrics.params_history`.
+        model (MultiStateJointModel): The model to plot the parameters history of.
         true_params (ModelParams | None, optional): The real parameters. Defaults to
             None.
         figsize (tuple[int, int], optional): The figure size. Defaults to (10, 8).
         show (bool, optional): Whether to show the plot. Defaults to True.
 
     Raises:
+        ValueError: If the model has less than two parameter history.
         ValueError: If the parameters do not have the same names.
         ValueError: If the parameters do not have the same shapes.
     """
-    if not params_history:
-        raise ValueError("Empty parameters' history provided")
+    from ..model._base import MultiStateJointModel  # noqa: PLC0415
+
+    validate_params(
+        {
+            "model": [MultiStateJointModel],
+        },
+        prefer_skip_nested_validation=True,
+    )
+
+    if len(model.params_history_) <= 1:
+        raise ValueError("Only one parameter history provided")
 
     # Get the names
-    params_dict = params_history[0].as_dict
+    params_dict = model.params_.as_dict
     nsubplots = len(params_dict)
     ncols = math.ceil(math.sqrt(nsubplots))
     nrows = math.ceil(nsubplots / ncols)
 
-    # Check alignment between true params and history
+    # Check alignment between model params and true params
     if true_params is not None:
-        check_params_align(params_history[0], true_params)
+        check_params_align(model.params_, true_params)
 
     # Create subplots
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)  # type: ignore
@@ -50,7 +74,7 @@ def plot_params_history(
 
     for ax, name in zip(axes, params_dict.keys(), strict=True):
         history = torch.cat(
-            [p.as_dict[name].reshape(1, -1) for p in params_history], dim=0
+            [p.as_dict[name].reshape(1, -1) for p in model.params_history_], dim=0
         )
         labels = [f"{name}[{i}]" for i in range(history.size(1))]
 

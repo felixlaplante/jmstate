@@ -2,10 +2,6 @@ from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import ConfigDict, validate_call
-
-from ..typedefs._defs import IntNonNegative
-
 
 class Cache:
     """Cache data."""
@@ -14,13 +10,11 @@ class Cache:
     keys: tuple[str, ...]
     cache: dict[str, OrderedDict[tuple[int, ...], Any]]  # type: ignore
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def __init__(self, cache_limit: IntNonNegative | None, keys: tuple[str, ...]):
+    def __init__(self, cache_limit: int | None, keys: tuple[str, ...]):
         """Inits the cache.
 
         Args:
-            cache_limit (IntNonNegative | None): The cache limit, if None, means
-                infinite.
+            cache_limit (int | None): The cache limit, if None, means infinite.
             keys (tuple[str]): The keys of the cache.
 
         Raises:
@@ -54,6 +48,6 @@ class Cache:
 
         return cache[key]
 
-    def clear_cache(self):
+    def clear(self):
         """Clears the cache."""
         self.cache = {key: OrderedDict() for key in self.keys}

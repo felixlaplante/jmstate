@@ -1,8 +1,10 @@
+from numbers import Integral
+
 import torch
-from pydantic import ConfigDict, validate_call
+from sklearn.utils._param_validation import validate_params  # type: ignore
 from torch import nn
 
-from ..typedefs._defs import IntNonNegative, LinkFn, RegressionFn
+from ..typedefs._defs import LinkFn, RegressionFn
 
 
 def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
@@ -32,6 +34,7 @@ class Net(nn.Module):
     sequentials. When not knowing which link or regression function to use, try Net.
     You can use derivatives of arbitrary order for the link function using the
     derivatives method.
+
     If the input layer is in :math:`\mathbb{R}^d`, then one dimension is used for the
     input :math:`t`, and the rest for the individual parameters.
 
@@ -46,9 +49,9 @@ class Net(nn.Module):
 
     net: nn.Module
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
     def __init__(self, net: nn.Module):
         super().__init__()  # type: ignore
+
         self.net = net
         self.requires_grad_(False)
 
@@ -67,12 +70,17 @@ class Net(nn.Module):
         x = torch.cat([t_ext, psi_ext], dim=-1)
         return self.net(x)
 
-    @validate_call(config=ConfigDict(arbitrary_types_allowed=True))
-    def derivatives(self, degs: tuple[IntNonNegative, ...]) -> RegressionFn | LinkFn:
+    @validate_params(
+        {
+            "degs": [tuple[Integral, ...]],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def derivatives(self, degs: tuple[int, ...]) -> RegressionFn | LinkFn:
         """Gets a function returning multiple derivatives of the neural network.
 
         Args:
-            degs (tuple[IntNonNegative, ...]): The degrees.
+            degs (tuple[int, ...]): The degrees.
 
         Returns:
             RegressionFn | LinkFn: A regresion/link function.

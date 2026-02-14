@@ -11,6 +11,7 @@ def identity(
     r"""The standard identity transformation.
 
     It is useful when only random effects are considered as individual parameters.
+
     This is simply the mapping:
 
     .. math::
@@ -34,6 +35,7 @@ def gamma_x_plus_b(
 
     It is useful when a linear combination of covariates and random effects are
     considered as individual parameters.
+
     This is simply the mapping:
 
     .. math::
@@ -59,6 +61,7 @@ def gamma_plus_b(
 
     It is useful when a linear combination of population parameters and random effects
     are considered as individual parameters.
+
     This is simply the mapping:
 
     .. math::

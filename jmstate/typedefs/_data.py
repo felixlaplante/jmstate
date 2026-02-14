@@ -1,20 +1,19 @@
-import warnings
 from collections.abc import Mapping
-from dataclasses import field
-from functools import cached_property
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
-from pydantic import ConfigDict, dataclasses
 from rich.tree import Tree
+from sklearn.utils._param_validation import validate_params  # type: ignore
+from sklearn.utils.validation import (  # type: ignore
+    assert_all_finite,  # type: ignore
+    check_consistent_length,  # type: ignore
+)
 
 from ..utils._checks import (
-    check_consistent_size,
-    check_inf,
-    check_nan,
-    check_trajectory_c,
-    check_trajectory_empty,
-    check_trajectory_sorting,
+    check_trajectories_c,
+    check_trajectories_empty,
+    check_trajectories_sorting,
 )
 from ..utils._surv import build_all_buckets
 from ..visualization._print import (
@@ -26,22 +25,12 @@ from ..visualization._print import (
     add_y,
     rich_str,
 )
-from ._defs import (
-    BaseHazardFn,
-    IndividualEffectsFn,
-    LinkFn,
-    RegressionFn,
-    Tensor1D,
-    Tensor2D,
-    Tensor3D,
-    TensorCol,
-    Trajectory,
-)
+from ._defs import BaseHazardFn, IndividualEffectsFn, LinkFn, RegressionFn, Trajectory
 from ._params import ModelParams
 
 
 # Dataclasses
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class ModelDesign:
     """Class containing model design.
 
@@ -107,11 +96,11 @@ class ModelDesign:
         return rich_str(tree)
 
 
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class ModelData:
     r"""Dataclass containing learnable multistate joint model data.
 
-    Not `y` is expected to be a 3D tensor of dimension :math:`(n, m, d)` if there are
+    Note `y` is expected to be a 3D tensor of dimension :math:`(n, m, d)` if there are
     :math:`n` individual, with a maximum number of :math:`m` measurements in
     :math:`\mathbb{R}^d`. Its values should not be all NaNs.
 
@@ -125,26 +114,26 @@ class ModelData:
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
-        x (Tensor2D | None): The fixed covariates.
-        t (Tensor1D | Tensor2D): The measurement times. Either a 1D tensor if the
-            times are shared by all individual, or a matrix of individual times.
-            Use padding with NaNs when necessary.
-        y (Tensor3D): The measurements. A 3D tensor of dimension :math:`(n, m, d)`
+        x (torch.Tensor | None): The fixed covariates.
+        t (torch.Tensor): The measurement times. Either a 1D tensor if the times are
+            shared by all individual, or a matrix of individual times. Use padding with
+            NaNs when necessary.
+        y (torch.Tensor): The measurements. A 3D tensor of dimension :math:`(n, m, d)`
             if there are :math:`n` individual, with a maximum number of :math:`m`
             measurements in :math:`\mathbb{R}^d`. Use padding with NaNs when
             necessary.
         trajectories (list[Trajectory]): The list of the individual trajectories.
             A `Trajectory` is a list of tuples containing time and state.
-        c (TensorCol): The censoring times as a column vector. They must not
+        c (torch.Tensor): The censoring times as a column vector. They must not
             be less than the trajectory maximum times.
         skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
-    x: Tensor2D | None
-    t: Tensor1D | Tensor2D
-    y: Tensor3D
+    x: torch.Tensor | None
+    t: torch.Tensor
+    y: torch.Tensor
     trajectories: list[Trajectory]
-    c: TensorCol
+    c: torch.Tensor
     skip_validation: bool = field(default=False, repr=False)
 
     def __str__(self) -> str:
@@ -162,41 +151,7 @@ class ModelData:
 
         return rich_str(tree)
 
-    def __post_init__(self):
-        """Runs the post init conversions.
-
-        Raises:
-            ValueError: If the trajectories are not sorted by time.
-            ValueError: If the censoring time is lower than the maximum transition time.
-            ValueError: If any of the inputs contain inf values.
-            ValueError: If any of the inputs contain NaN values.
-            ValueError: If the size is not consistent between inputs.
-        """
-        if self.skip_validation:
-            return
-
-        check_trajectory_empty(self.trajectories)
-        check_trajectory_sorting(self.trajectories)
-        check_trajectory_c(self.trajectories, self.c)
-
-        check_inf(((self.x, "x"), (self.t, "t"), (self.y, "y"), (self.c, "c")))
-        check_nan(((self.x, "x"), (self.c, "c")))
-        check_consistent_size(
-            (
-                (self.x, 0, "x"),
-                (self.y, 0, "y"),
-                (self.c, 0, "c"),
-                (self.size, None, "trajectories"),
-            )
-        )
-        check_consistent_size(((self.t, -1, "t"), (self.y, -2, "y")))
-
-        # Check NaNs between t and y
-        if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
-            raise ValueError("NaN time values on non NaN y values")
-
-    @cached_property
-    def size(self) -> int:
+    def __len__(self) -> int:
         """Gets the number of individuals.
 
         Returns:
@@ -204,52 +159,76 @@ class ModelData:
         """
         return len(self.trajectories)
 
+    def __post_init__(self):
+        """Runs the post init conversions.
+
+        Raises:
+            ValueError: If the trajectories are not sorted by time.
+            ValueError: If the censoring time is lower than the maximum transition time.
+            ValueError: If any of the inputs contain inf or NaN values except `t` and
+                `y`.
+            ValueError: If the size is not consistent between inputs.
+        """
+        if self.skip_validation:
+            return
+
+        validate_params(
+            {
+                "x": [torch.Tensor],
+                "t": [torch.Tensor],
+                "y": [torch.Tensor],
+                "trajectories": [list],
+                "c": [torch.Tensor],
+                "skip_validation": [bool],
+            },
+            prefer_skip_nested_validation=True,
+        )
+
+        check_trajectories_empty(self.trajectories)
+        check_trajectories_sorting(self.trajectories)
+        check_trajectories_c(self.trajectories, self.c)
+
+        assert_all_finite(self.x, input_name="x")
+        assert_all_finite(self.t, input_name="t", allow_nan=True)
+        assert_all_finite(self.y, input_name="y", allow_nan=True)
+        assert_all_finite(self.c, input_name="c")
+
+        check_consistent_length(self.x, self.y, self.c, self.trajectories)
+        check_consistent_length(self.t.transpose(0, -1), self.y.transpose(0, -2))
+
+        # Check NaNs between t and y
+        if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
+            raise ValueError("NaN time values on non NaN y values")
+
 
 class CompleteModelData(ModelData):
     """Complete model data class."""
 
-    valid_mask: Tensor3D = field(init=False)
-    n_valid: Tensor2D = field(init=False)
-    valid_t: Tensor1D | Tensor2D = field(init=False)
-    valid_y: Tensor2D | Tensor3D = field(init=False)
+    valid_mask: torch.Tensor = field(init=False)
+    n_valid: torch.Tensor = field(init=False)
+    valid_t: torch.Tensor = field(init=False)
+    valid_y: torch.Tensor = field(init=False)
     buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
 
     def prepare(self, model_design: ModelDesign, params: ModelParams):
         """Sets the missing representation.
 
-        Raises:
-            ValueError: If y and R are not compatible in shape.
-
         Args:
             model_design (ModelDesign): The design of the model.
             params (ModelParams): The model parameters.
         """
-        check_consistent_size(((params.R.dim, None, "R"), (self.y, -1, "y")))
+        check_consistent_length(params.R.cov, self.y.transpose(0, -1))
 
-        nan_mask = self.y.isnan()
-        valid_mask = ~nan_mask
-        self.valid_mask = valid_mask
-        self.n_valid = self.valid_mask.sum(dim=-2)
+        self.valid_mask = ~self.y.isnan()
+        self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_all_buckets(
             self.trajectories, self.c, tuple(model_design.surv.keys())
         )
 
-        if (
-            params.R.method == "full"
-            and (valid_mask.any(dim=-1) & nan_mask.any(dim=-1)).any()
-        ):
-            warnings.warn(
-                (
-                    "R method should not be full when having mixed NaNs as incorrect "
-                    "likelihood will be computed"
-                ),
-                stacklevel=2,
-            )
 
-
-@dataclasses.dataclass(config=ConfigDict(arbitrary_types_allowed=True), frozen=True)
+@dataclass
 class SampleData:
     """Dataclass for data used in sampling.
 
@@ -263,24 +242,24 @@ class SampleData:
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
-        x (Tensor2D | None): The fixed covariates.
+        x (torch.Tensor | None): The fixed covariates.
         trajectories (list[Trajectory]): The list of the individual trajectories.
             A `Trajectory` is a list of tuples containing time and state.
-        psi (Tensor2D | Tensor3D): The individual parameters. Define it as a matrix with
+        psi (torch.Tensor): The individual parameters. Define it as a matrix with
             the same number of rows as there are `len(trajectories)`. Only use a 3D
             tensor if you fully understand the codebase and the mechanisms. Trajectory
             sampling may only be used with matrices.
-        c (TensorCol | None, optional): The censoring times as a column vector. They
+        c (torch.Tensor | None, optional): The censoring times as a column vector. They
             must not be less than the trajectory maximum times. This corresponds to
             the last times of observation of the individuals or prediction current
             times.
         skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
-    x: Tensor2D | None
+    x: torch.Tensor | None
     trajectories: list[Trajectory]
-    psi: Tensor2D | Tensor3D
-    c: TensorCol | None = None
+    psi: torch.Tensor
+    c: torch.Tensor | None = None
     skip_validation: bool = field(default=False, repr=False)
 
     def __str__(self):
@@ -297,6 +276,14 @@ class SampleData:
 
         return rich_str(tree)
 
+    def __len__(self) -> int:
+        """Gets the number of individuals.
+
+        Returns:
+            int: The number of individuals.
+        """
+        return len(self.trajectories)
+
     def __post_init__(self):
         """Runs the post init conversions and checks.
 
@@ -310,26 +297,23 @@ class SampleData:
         if self.skip_validation:
             return
 
-        check_trajectory_empty(self.trajectories)
-        check_trajectory_sorting(self.trajectories)
-        check_trajectory_c(self.trajectories, self.c)
-
-        check_inf(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
-        check_nan(((self.x, "x"), (self.psi, "psi"), (self.c, "c")))
-        check_consistent_size(
-            (
-                (self.x, -2, "x"),
-                (self.psi, -2, "psi"),
-                (self.c, -2, "c"),
-                (self.size, None, "trajectories"),
-            )
+        validate_params(
+            {
+                "trajectories": [list],
+                "psi": [torch.Tensor],
+                "c": [torch.Tensor],
+            },
+            prefer_skip_nested_validation=True,
         )
 
-    @cached_property
-    def size(self) -> int:
-        """Gets the number of individuals.
+        check_trajectories_empty(self.trajectories)
+        check_trajectories_sorting(self.trajectories)
+        check_trajectories_c(self.trajectories, self.c)
 
-        Returns:
-            int: The number of individuals.
-        """
-        return len(self.trajectories)
+        assert_all_finite(self.x, input_name="x")
+        assert_all_finite(self.psi, input_name="psi")
+        assert_all_finite(self.c, input_name="c")
+
+        check_consistent_length(
+            self.x, self.psi.transpose(0, -2), self.c, self.trajectories
+        )

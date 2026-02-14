@@ -11,59 +11,7 @@ if TYPE_CHECKING:
     from ..typedefs._params import ModelParams
 
 
-def check_inf(tensors: tuple[tuple[torch.Tensor | None, str], ...]):
-    """Check if any of the tensors contain infinity.
-
-    Args:
-        tensors (tuple[tuple[torch.Tensor | None, str] ,...]): The tuples to check.
-
-    Raises:
-        ValueError: If any of the tensors contain infinity.
-    """
-    for t, name in tensors:
-        if t is not None and t.isinf().any():
-            raise ValueError(f"Tensor {name} cannot contain inf values")
-
-
-def check_nan(tensors: tuple[tuple[torch.Tensor | None, str], ...]):
-    """Check if any of the tensors contain NaNs.
-
-    Args:
-        tensors (tuple[tuple[torch.Tensor | None, str] ,...]): The tuples to check.
-
-    Raises:
-        ValueError: If any of the tensors contain NaNs.
-    """
-    for t, name in tensors:
-        if t is not None and t.isnan().any():
-            raise ValueError(f"Tensor {name} cannot contain NaN values")
-
-
-def check_consistent_size(
-    groups: tuple[tuple[torch.Tensor | int | None, int | None, str], ...],
-):
-    """Checks if all the tensors are consistent in size.
-
-    Args:
-        groups (tuple[tuple[torch.Tensor | int | None, int | None, str], ...]):
-            The tuples to check.
-
-    Raises:
-        ValueError: If any of the sizes are inconsistent.
-    """
-    for (t0, d0, name0), (t1, d1, name1) in itertools.pairwise(groups):
-        if t0 is None or t1 is None:
-            continue
-        dim0 = t0 if isinstance(t0, int) else t0.size(d0)
-        dim1 = t1 if isinstance(t1, int) else t1.size(d1)
-
-        if dim0 != dim1:
-            raise ValueError(
-                f"{dim0} != {dim1} at dims {d0, d1} for args {name0, name1}"
-            )
-
-
-def check_trajectory_empty(trajectories: list[Trajectory]):
+def check_trajectories_empty(trajectories: list[Trajectory]):
     """Check if the trajectories are not empty.
 
     Args:
@@ -76,7 +24,7 @@ def check_trajectory_empty(trajectories: list[Trajectory]):
         raise ValueError("Trajectories must not be empty")
 
 
-def check_trajectory_sorting(trajectories: list[Trajectory]):
+def check_trajectories_sorting(trajectories: list[Trajectory]):
     """Check if the trajectories are well sorted.
 
     Args:
@@ -95,7 +43,7 @@ def check_trajectory_sorting(trajectories: list[Trajectory]):
         )
 
 
-def check_trajectory_c(trajectories: list[Trajectory], c: torch.Tensor | None):
+def check_trajectories_c(trajectories: list[Trajectory], c: torch.Tensor | None):
     """Check if the trajectories are compatible with censoring times.
 
     Args:
