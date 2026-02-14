@@ -21,9 +21,6 @@ With **jmstate**, you can model longitudinal data jointly with multi-state trans
 - **Automatic Differentiation**  
   Powered by PyTorch for efficient gradient computation and vectorization.
 
-- **Analysis & Visualization**  
-  Tools for state occupancy probabilities, hazard estimation, and residual diagnostics.
-
 ---
 
 ## 🚀 Installation
