@@ -13,11 +13,11 @@ Functions
    Exponential
    Gompertz
    LogNormal
-   Net
    Weibull
    clock_forward
    clock_reset
    gamma_plus_b
    gamma_x_plus_b
    identity
+
    linear
