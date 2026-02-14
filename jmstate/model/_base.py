@@ -354,8 +354,8 @@ class MultiStateJointModel(
         the MLE:
 
         .. math::
-            \text{sd} = \sqrt{\operatorname{diag}\left( \mathcal{I}(\hat{\theta})^{-1}
-            \right)}
+            \mathrm{stderr} = \sqrt{\operatorname{diag}\left( \hat{\mathcal{I}}_n
+            (\hat{\theta})^{-1} \right)}
 
         Raises:
             ValueError: If Fisher Information Matrix has not been computed.
