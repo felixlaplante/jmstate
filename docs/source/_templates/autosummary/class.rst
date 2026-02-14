@@ -4,6 +4,7 @@
 
 .. autoclass:: {{ objname }}
    :members:
-   :inherited-members: HazardMixin, FitMixin, PredictMixin
+   :inherited-members:
+   :exclude-members: BaseEstimator, nn.Module
 
    .. automethod:: __init__

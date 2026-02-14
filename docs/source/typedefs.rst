@@ -13,7 +13,7 @@ Typedefs
    BaseHazardFn
    BucketData
    ClockMethod
-   CovParams
+   CovParam
    IndividualEffectsFn
    LinkFn
    ModelData
