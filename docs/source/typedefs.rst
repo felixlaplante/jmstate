@@ -15,10 +15,7 @@ Typedefs
    ClockMethod
    CovParams
    IndividualEffectsFn
-   Info
-   Job
    LinkFn
-   Metrics
    ModelData
    ModelDesign
    ModelParams
