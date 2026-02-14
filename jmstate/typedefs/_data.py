@@ -3,35 +3,22 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
-from rich.tree import Tree
+from sklearn.base import BaseEstimator  # type: ignore
 from sklearn.utils._param_validation import validate_params  # type: ignore
 from sklearn.utils.validation import (  # type: ignore
     assert_all_finite,  # type: ignore
     check_consistent_length,  # type: ignore
 )
 
-from ..utils._checks import (
-    check_trajectories_c,
-    check_trajectories_empty,
-    check_trajectories_sorting,
-)
+from ..utils._checks import check_trajectories
 from ..utils._surv import build_all_buckets
-from ..visualization._print import (
-    add_c,
-    add_psi,
-    add_t,
-    add_trajectories,
-    add_x,
-    add_y,
-    rich_str,
-)
 from ._defs import BaseHazardFn, IndividualEffectsFn, LinkFn, RegressionFn, Trajectory
 from ._params import ModelParams
 
 
 # Dataclasses
 @dataclass
-class ModelDesign:
+class ModelDesign(BaseEstimator):
     """Class containing model design.
 
     For all functions, please use broadcasting as much as possible. It is almost always
@@ -56,7 +43,7 @@ class ModelDesign:
             to be careful. The last dimension is the dimension of the response variable;
             second last is the repeated measurements; third last is individual based;
             possible fourth last is for parallelization of the MCMC sampler.
-        surv (Mapping[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]): A mapping of
+        surv_map (Mapping[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]): A mapping of
             transition keys that can be typed however you want. The tuple contains a
             base hazard function in log scale, as well as a link function that shares
             the same requirements as `regression_fn`. Base hazard function is expected
@@ -70,47 +57,30 @@ class ModelDesign:
         >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
         >>> individual_effects_fn = lambda gamma, x, b: gamma + b
         >>> regression_fn = sigmoid
-        >>> surv = {("alive", "dead"): (Exponential(1.2), sigmoid)}
+        >>> surv_map = {("alive", "dead"): (Exponential(1.2), sigmoid)}
     """
 
     individual_effects_fn: IndividualEffectsFn
     regression_fn: RegressionFn
-    surv: Mapping[
+    surv_map: Mapping[
         tuple[Any, Any],
         tuple[BaseHazardFn, LinkFn],
     ]
 
-    def __str__(self) -> str:
-        """Return a string representation of the model design.
-
-        Returns:
-            str: The string representation.
-        """
-        tree = Tree("ModelDesign")
-        tree.add(f"individual_effects_fn: {self.individual_effects_fn}")
-        tree.add(f"regression_fn: {self.regression_fn}")
-        surv = tree.add("surv:")
-        for k, v in self.surv.items():
-            surv.add(f"{k[0]} --> {k[1]}: ({v[0]}, {v[1]})")
-
-        return rich_str(tree)
-
 
 @dataclass
-class ModelData:
+class ModelData(BaseEstimator):
     r"""Dataclass containing learnable multistate joint model data.
 
     Note `y` is expected to be a 3D tensor of dimension :math:`(n, m, d)` if there are
     :math:`n` individual, with a maximum number of :math:`m` measurements in
     :math:`\mathbb{R}^d`. Its values should not be all NaNs.
 
-    Bypass checks by activating the `skip_validation` flag.
-
     Raises:
-        ValueError: If the trajectories are not sorted by time.
-        ValueError: If the censoring time is lower than the maximum transition time.
-        ValueError: If any of the inputs contain inf values.
-        ValueError: If any of the inputs contain NaN values except `y`.
+        ValueError: If some trajectory is empty.
+        ValueError: If some trajectory is not sorted.
+        ValueError: If some trajectory is not compatible with the censoring times.
+        ValueError: If any of the inputs contain inf or NaN values except `y`.
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
@@ -126,7 +96,6 @@ class ModelData:
             A `Trajectory` is a list of tuples containing time and state.
         c (torch.Tensor): The censoring times as a column vector. They must not
             be less than the trajectory maximum times.
-        skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
     x: torch.Tensor | None
@@ -134,22 +103,6 @@ class ModelData:
     y: torch.Tensor
     trajectories: list[Trajectory]
     c: torch.Tensor
-    skip_validation: bool = field(default=False, repr=False)
-
-    def __str__(self) -> str:
-        """Returns a string representation of the data.
-
-        Returns:
-            str: The string representation.
-        """
-        tree = Tree("ModelData")
-        add_x(self.x, tree)
-        add_t(self.t, tree)
-        add_y(self.y, tree)
-        add_trajectories(self.trajectories, tree)
-        add_c(self.c, tree)
-
-        return rich_str(tree)
 
     def __len__(self) -> int:
         """Gets the number of individuals.
@@ -163,15 +116,13 @@ class ModelData:
         """Runs the post init conversions.
 
         Raises:
-            ValueError: If the trajectories are not sorted by time.
-            ValueError: If the censoring time is lower than the maximum transition time.
+            ValueError: If some trajectory is empty.
+            ValueError: If some trajectory is not sorted.
+            ValueError: If some trajectory is not compatible with the censoring times.
             ValueError: If any of the inputs contain inf or NaN values except `t` and
                 `y`.
             ValueError: If the size is not consistent between inputs.
         """
-        if self.skip_validation:
-            return
-
         validate_params(
             {
                 "x": [torch.Tensor],
@@ -184,9 +135,7 @@ class ModelData:
             prefer_skip_nested_validation=True,
         )
 
-        check_trajectories_empty(self.trajectories)
-        check_trajectories_sorting(self.trajectories)
-        check_trajectories_c(self.trajectories, self.c)
+        check_trajectories(self.trajectories, self.c)
 
         assert_all_finite(self.x, input_name="x")
         assert_all_finite(self.t, input_name="t", allow_nan=True)
@@ -202,7 +151,19 @@ class ModelData:
 
 
 class CompleteModelData(ModelData):
-    """Complete model data class."""
+    """Complete model data class.
+
+    Use this to compute the log pdfs by hand if necessary. It is possible to simply
+    call the `MultiStateJointModel` class as it inherits from `nn.Module`.
+
+    Attributes:
+        valid_mask (torch.Tensor): The mask of the valid measurements.
+        n_valid (torch.Tensor): The number of valid measurements.
+        valid_t (torch.Tensor): The valid times.
+        valid_y (torch.Tensor): The valid measurements.
+        buckets (dict[tuple[Any, Any], tuple[torch.Tensor, ...]]): The buckets for the
+            trajectories.
+    """
 
     valid_mask: torch.Tensor = field(init=False)
     n_valid: torch.Tensor = field(init=False)
@@ -210,6 +171,13 @@ class CompleteModelData(ModelData):
     valid_y: torch.Tensor = field(init=False)
     buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
 
+    @validate_params(
+        {
+            "model_design": [ModelDesign],
+            "params": [ModelParams],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def prepare(self, model_design: ModelDesign, params: ModelParams):
         """Sets the missing representation.
 
@@ -217,28 +185,26 @@ class CompleteModelData(ModelData):
             model_design (ModelDesign): The design of the model.
             params (ModelParams): The model parameters.
         """
-        check_consistent_length(params.R.cov, self.y.transpose(0, -1))
+        check_consistent_length(params.r.cov, self.y.transpose(0, -1))
 
         self.valid_mask = ~self.y.isnan()
         self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_all_buckets(
-            self.trajectories, self.c, tuple(model_design.surv.keys())
+            self.trajectories, self.c, tuple(model_design.surv_map.keys())
         )
 
 
 @dataclass
-class SampleData:
+class SampleData(BaseEstimator):
     """Dataclass for data used in sampling.
 
-    Bypass checks by activating the `skip_validation` flag.
-
     Raises:
-        ValueError: If the trajectories are not sorted by time.
-        ValueError: If the censoring time is lower than the maximum transition time.
-        ValueError: If any of the inputs contain inf values.
-        ValueError: If any of the inputs contain NaN values.
+        ValueError: If some trajectory is empty.
+        ValueError: If some trajectory is not sorted.
+        ValueError: If some trajectory is not compatible with the censoring times.
+        ValueError: If any of the inputs contain inf or NaN values.
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
@@ -253,28 +219,12 @@ class SampleData:
             must not be less than the trajectory maximum times. This corresponds to
             the last times of observation of the individuals or prediction current
             times.
-        skip_validation (bool): Whether to skip validatoin or not. Defaults to False.
     """
 
     x: torch.Tensor | None
     trajectories: list[Trajectory]
     psi: torch.Tensor
     c: torch.Tensor | None = None
-    skip_validation: bool = field(default=False, repr=False)
-
-    def __str__(self):
-        """Returns a string representation of the data.
-
-        Returns:
-            str: The string representation.
-        """
-        tree = Tree("SampleData")
-        add_x(self.x, tree)
-        add_trajectories(self.trajectories, tree)
-        add_psi(self.psi, tree)
-        add_c(self.c, tree)
-
-        return rich_str(tree)
 
     def __len__(self) -> int:
         """Gets the number of individuals.
@@ -288,15 +238,12 @@ class SampleData:
         """Runs the post init conversions and checks.
 
         Raises:
-            ValueError: If the trajectories are not sorted by time.
-            ValueError: If the censoring time is lower than the maximum transition time.
-            ValueError: If any of the inputs contain inf values.
-            ValueError: If any of the inputs contain NaN values.
+            ValueError: If some trajectory is empty.
+            ValueError: If some trajectory is not sorted.
+            ValueError: If some trajectory is not compatible with the censoring times.
+            ValueError: If any of the inputs contain inf or NaN values.
             ValueError: If the size is not consistent between inputs.
         """
-        if self.skip_validation:
-            return
-
         validate_params(
             {
                 "trajectories": [list],
@@ -306,9 +253,7 @@ class SampleData:
             prefer_skip_nested_validation=True,
         )
 
-        check_trajectories_empty(self.trajectories)
-        check_trajectories_sorting(self.trajectories)
-        check_trajectories_c(self.trajectories, self.c)
+        check_trajectories(self.trajectories, self.c)
 
         assert_all_finite(self.x, input_name="x")
         assert_all_finite(self.psi, input_name="psi")

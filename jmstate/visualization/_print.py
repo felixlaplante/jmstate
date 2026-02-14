@@ -1,102 +1,65 @@
+from bisect import bisect_left
+
 import torch
-from rich.console import Console
-from rich.tree import Tree
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.table import Table
+from rich.text import Text
+from torch.distributions import Normal
+from torch.nn.utils import parameters_to_vector
 
-from ..typedefs._defs import Any, Trajectory
-from ..utils._surv import build_buckets
+from ..model._base import MultiStateJointModel
+from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
 
 
-# Utils
-def rich_str(obj: Any) -> str:
-    """Get the rich string representation of an object.
+def summary(model: MultiStateJointModel):
+    """Prints a summary of the fitted model.
 
-    Args:
-        obj (Any): The object to get the string representation of.
+    This function prints the p-values of the parameters as well as values and
+    standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
 
-    Returns:
-        str: The string representation.
+    Raises:
+        ValueError: If the model is not fitted.
     """
-    console = Console()
-    return console._render_buffer(console.render(obj))[:-1]  # type: ignore
+    values = parameters_to_vector(model.params.parameters())
+    stderrs = parameters_to_vector(model.stderr.parameters())
+    zvalues = torch.abs(values / stderrs)
+    pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
 
+    table = Table()
+    table.add_column("Parameter name", justify="left")
+    table.add_column("Value", justify="center")
+    table.add_column("Standard Error", justify="center")
+    table.add_column("z-value", justify="center")
+    table.add_column("p-value", justify="center")
+    table.add_column("Significance level", justify="center")
 
-# Descriptors
-def add_x(x: torch.Tensor | None, tree: Tree):
-    """Add the fixed covariates to the tree.
+    i = 0
+    for name, val in model.params.named_parameters():
+        for j in range(val.numel()):
+            code = SIGNIFICANCE_CODES[
+                bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())
+            ]
 
-    Args:
-        x (torch.Tensor | None): The fixed covariates.
-        tree (Tree): The tree to add to.
-    """
-    if x is not None:
-        tree.add(f"x: {x.size(0)} individual(s) x {x.size(1)} covariate(s)")
+            table.add_row(
+                f"{name}[{j}]",
+                f"{values[i].item():.3f}",
+                f"{stderrs[i].item():.3f}",
+                f"{zvalues[i].item():.3f}",
+                f"{pvalues[i].item():.3f}",
+                code,
+            )
+            i += 1
 
-
-def add_t(t: torch.Tensor, tree: Tree):
-    """Add the measurement times.
-
-    Args:
-        t (torch.Tensor): The measurement times.
-        tree (Tree): The tree to add to.
-    """
-    if t.ndim == 1:
-        tree.add(f"t: {t.size(0)} shared measurement(s)")
-    else:
-        tree.add(f"t: {t.size(0)} individual(s) x {t.size(1)} measurement(s)")
-
-
-def add_y(y: torch.Tensor, tree: Tree):
-    """Add the measurements.
-
-    Args:
-        y (torch.Tensor): The measurements.
-        tree (Tree): The tree to add to.
-    """
-    tree.add(
-        f"y: {y.size(0)} individual(s) x {y.size(1)} measurement(s) x {y.size(2)} "
-        "dimension(s)"
+    criteria = Text(
+        f"Log-likelihood: {model.loglik_:.3f}\n"
+        f"AIC: {model.aic_:.3f}\n"
+        f"BIC: {model.bic_:.3f}",
+        style="bold cyan",
     )
 
+    content = Group(table, Rule(style="dim"), criteria, Rule(style="dim"))
+    panel = Panel(content, title="Model Summary", border_style="green", expand=False)
 
-def add_psi(psi: torch.Tensor, tree: Tree):
-    """Add the individual parameters.
-
-    Args:
-        psi (torch.Tensor): The individual parameters.
-        tree (Tree): The tree to add to.
-    """
-    if psi.ndim == 2:  # noqa: PLR2004
-        tree.add(f"psi: {psi.size(0)} individual(s) x {psi.size(1)} parameter(s)")
-    else:
-        tree.add(
-            f"psi: {psi.size(0)} sample(s) x {psi.size(1)} individual(s) x "
-            f"{psi.size(2)} parameter(s)"
-        )
-
-
-def add_trajectories(trajectories: list[Trajectory], tree: Tree):
-    """Add the trajectories.
-
-    Args:
-        trajectories (list[Trajectory]): The trajectories.
-        tree (Tree): The tree to add to.
-    """
-    buckets = build_buckets(trajectories)
-
-    node = tree.add(
-        f"trajectories: {len(trajectories)} individual(s) with "
-        f"{sum(len(t) - 1 for t in trajectories)} observed transitions"
-    )
-    for k, v in buckets.items():
-        node.add(f"{k[0]} --> {k[1]}: {v.idxs.numel()}")
-
-
-def add_c(c: torch.Tensor | None, tree: Tree):
-    """Add the censoring times.
-
-    Args:
-        c (torch.Tensor | None): The censoring times.
-        tree (Tree): The tree to add to.
-    """
-    if c is not None:
-        tree.add(f"c: {c.size(0)} censoring time(s)")
+    Console().print(panel)

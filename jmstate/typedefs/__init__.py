@@ -1,6 +1,6 @@
 """Type definitions for the jmstate package."""
 
-from ._data import ModelData, ModelDesign, SampleData
+from ._data import CompleteModelData, ModelData, ModelDesign, SampleData
 from ._defs import (
     BaseHazardFn,
     BucketData,
@@ -9,13 +9,14 @@ from ._defs import (
     LinkFn,
     RegressionFn,
 )
-from ._params import CovParams, ModelParams
+from ._params import CovParam, ModelParams
 
 __all__ = [
     "BaseHazardFn",
     "BucketData",
     "ClockMethod",
-    "CovParams",
+    "CompleteModelData",
+    "CovParam",
     "IndividualEffectsFn",
     "LinkFn",
     "ModelData",

@@ -15,9 +15,9 @@ def build_buckets(
     """Builds buckets from trajectories for user convenience.
 
     This yeilds a `NamedTuple` containing transition information containing:
-        idxs (Tensor1D): The individual indices.
-        t0 (TensorCol): A column vector of previous transition times.
-        t1 (TensorCol): A column vector of next transition times.
+        idxs (torch.Tensor): The individual indices.
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A column vector of next transition times.
 
     Args:
         trajectories (list[Trajectory]): The list of individual trajectories.
@@ -57,7 +57,7 @@ def build_buckets(
         for key, (idxs, t0s, t1s) in buckets.items()
     }
 
-    return dict(sorted(result.items(), key=lambda kv: str(kv[0])))
+    return dict(sorted(result.items()))
 
 
 @lru_cache

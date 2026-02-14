@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Any, Final, NamedTuple, Protocol, TypeAlias
+from typing import Final, NamedTuple, Protocol, TypeAlias
 
 import torch
 from torch import nn
 from xxhash import xxh3_64_intdigest
 
 # Type Aliases
-Trajectory: TypeAlias = list[tuple[float, Any]]
+Trajectory: TypeAlias = list[tuple[float, str]]
 
 
 # Protocols

@@ -12,3 +12,4 @@ Visualization
 
 
    plot_params_history
+   summary

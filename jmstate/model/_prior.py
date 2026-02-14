@@ -8,22 +8,22 @@ from ..typedefs._params import ModelParams
 class PriorMixin:
     """Mixin class for prior model computations."""
 
+    params: ModelParams
+
     def __init__(self, *args: Any, **kwargs: Any):
         """Initializes the prior mixin."""
         super().__init__(*args, **kwargs)
 
-    @staticmethod
-    def _prior_logliks(params: ModelParams, b: torch.Tensor) -> torch.Tensor:
+    def _prior_logliks(self, b: torch.Tensor) -> torch.Tensor:
         """Computes the prior log likelihoods.
 
         Args:
-            params (ModelParams): The model parameters.
             b (torch.Tensor): The 3D tensor of random effects.
 
         Returns:
             torch.Tensor: The computed log likelihoods.
         """
-        Q_inv_cholesky, Q_nlog_eigvals = params.Q._inv_cholesky_and_log_eigvals  # type: ignore
+        Q_inv_cholesky, Q_nlog_eigvals = self.params.q._inv_cholesky_and_log_eigvals  # type: ignore
         Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
         Q_norm_factor = Q_nlog_eigvals.sum()
 

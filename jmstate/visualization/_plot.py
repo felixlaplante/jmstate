@@ -55,32 +55,36 @@ def plot_params_history(
         prefer_skip_nested_validation=True,
     )
 
-    if len(model.params_history_) <= 1:
+    if len(model.vector_params_history_) <= 1:
         raise ValueError("Only one parameter history provided")
 
     # Get the names
-    params_dict = model.params_.as_dict
-    nsubplots = len(params_dict)
+    named_params_dict = dict(model.params.named_parameters())
+    nsubplots = len(named_params_dict)
     ncols = math.ceil(math.sqrt(nsubplots))
     nrows = math.ceil(nsubplots / ncols)
 
     # Check alignment between model params and true params
     if true_params is not None:
-        check_params_align(model.params_, true_params)
+        check_params_align(model.params, true_params)
+        named_true_params_dict = dict(true_params.named_parameters())
 
     # Create subplots
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)  # type: ignore
     axes = atleast_1d(axes).flat
 
-    for ax, name in zip(axes, params_dict.keys(), strict=True):
-        history = torch.cat(
-            [p.as_dict[name].reshape(1, -1) for p in model.params_history_], dim=0
-        )
-        labels = [f"{name}[{i}]" for i in range(history.size(1))]
+    params_matrix_history = torch.stack(model.vector_params_history_)
+    i = 0
+    for ax, (name, val) in zip(axes, named_params_dict.items(), strict=True):
+        history = params_matrix_history[:, i : (i := i + val.numel())]
+        lines = ax.plot(history, label=[f"{name}[{j}]" for j in range(val.numel())])
 
         if true_params is not None:
-            lines = ax.plot(history, label=labels)
-            for line, p in zip(lines, true_params.as_dict[name], strict=True):
+            for line, p in zip(
+                lines,
+                named_true_params_dict[name].detach(),  # type: ignore
+                strict=True,
+            ):
                 ax.axhline(p, linestyle="--", color=line.get_color())
 
         ax.set(title=name, xlabel="Iteration", ylabel="Value")
