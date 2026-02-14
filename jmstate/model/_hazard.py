@@ -1,19 +1,21 @@
 from dataclasses import replace
-from typing import Any, Final, cast
+from numbers import Integral
+from typing import Any, cast
 
 import numpy as np
 import torch
+from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
+from sklearn.utils.validation import (  #  type: ignore
+    assert_all_finite,  #  type: ignore
+    check_consistent_length,  #  type: ignore
+)
 from xxhash import xxh3_64_intdigest
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
-from ..typedefs._defs import HazardInfo, Trajectory
+from ..typedefs._defs import HAZARD_CACHE_KEYS, HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._cache import Cache
-from ..utils._checks import check_consistent_size, check_inf, check_nan
 from ..utils._surv import build_possible_buckets, build_remaining_buckets
-
-# Constants
-HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
 
 
 class HazardMixin:
@@ -84,7 +86,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log hazard.
         """
-        # Unpack data
         t0, t1, x, psi, alpha, beta, base_hazard_fn, link_fn = hazard_info
 
         # Compute baseline hazard
@@ -125,7 +126,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed cumulative hazard.
         """
-        # Unpack data
         t0, t1, *_ = hazard_info
         c = t0 if c is None else c
 
@@ -182,7 +182,6 @@ class HazardMixin:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: The log and cum hazard.
         """
-        # Unpack data
         t0, t1, *_ = hazard_info
 
         # Transform to quadrature interval
@@ -231,7 +230,6 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed pre transition times.
         """
-        # Unpack data
         t0, t1, *_ = hazard_info
 
         # Initialize for bisection search
@@ -268,7 +266,6 @@ class HazardMixin:
         Returns:
             bool: If the sampling is done.
         """
-        # Unpack data
         x = sample_data.x
         psi = sample_data.psi
         c = sample_data.c
@@ -283,12 +280,11 @@ class HazardMixin:
 
         # Initialize candidate transition times
         n_transitions = len(current_buckets)
-        t_candidates = torch.full((sample_data.size, n_transitions), torch.inf)
+        t_candidates = torch.full((len(sample_data), n_transitions), torch.inf)
 
         for j, (key, bucket) in enumerate(current_buckets.items()):
             idxs, t0, t1 = bucket
 
-            # Create info
             hazard_info = HazardInfo(
                 t0,
                 t1,
@@ -304,7 +300,6 @@ class HazardMixin:
                 hazard_info,
                 None if c is None else c.index_select(-2, idxs),
             )
-
             t_candidates[idxs, j] = t_sample.reshape(-1)
 
         # Find earliest transition
@@ -319,6 +314,14 @@ class HazardMixin:
 
         return False
 
+    @validate_params(
+        {
+            "sample_data": [SampleData],
+            "c_max": [torch.Tensor],
+            "max_length": [Interval(Integral, 1, None, closed="left")],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def sample_trajectories(
         self,
         sample_data: SampleData,
@@ -341,19 +344,15 @@ class HazardMixin:
                 Defaults to 10.
 
         Raises:
-            ValueError: If c_max contains inf values.
-            ValueError: If c_max contains NaN values.
+            ValueError: If c_max contains inf or NaN values.
             ValueError: If c_max has incorrect shape.
 
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
         if not sample_data.skip_validation:
-            check_inf(((c_max, "c_max"),))
-            check_nan(((c_max, "c_max"),))
-            check_consistent_size(
-                ((c_max, 0, "c_max"), (sample_data.size, None, "sample_data.size"))
-            )
+            assert_all_finite(c_max, input_name="c_max")
+            check_consistent_length(c_max, sample_data)
         sample_data_copied = replace(sample_data, skip_validation=True)
 
         # Sample future transitions iteratively
@@ -367,6 +366,13 @@ class HazardMixin:
             for i, trajectory in enumerate(sample_data_copied.trajectories)
         ]
 
+    @validate_params(
+        {
+            "sample_data": [SampleData],
+            "u": [torch.Tensor],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def compute_surv_logps(
         self, sample_data: SampleData, u: torch.Tensor
     ) -> torch.Tensor:
@@ -400,21 +406,16 @@ class HazardMixin:
             u (torch.Tensor): The time at which to evaluate the probabilities.
 
         Raises:
-            ValueError: If u contains inf values.
-            ValueError: If u contains NaN values.
-            ValueError: If u has incorrect shape.
+            ValueError: If `u` contains inf or NaN values.
+            ValueError: If `u` has incorrect shape.
 
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
         if not sample_data.skip_validation:
-            check_inf(((u, "u"),))
-            check_nan(((u, "u"),))
-            check_consistent_size(
-                ((u, 0, "u"), (sample_data.size, None, "sample_data.size"))
-            )
+            assert_all_finite(u, input_name="u")
+            check_consistent_length(u, sample_data)
 
-        # Unpack data
         x = sample_data.x
         psi = sample_data.psi
         c = sample_data.c
@@ -424,13 +425,11 @@ class HazardMixin:
             sample_data.trajectories, tuple(self.model_design.surv.keys())
         )
 
-        nlogps = torch.zeros(*psi.shape[:-1], u.size(1))
-
         # Compute the log probabilities summing over transitions
+        nlogps = torch.zeros(*psi.shape[:-1], u.size(1))
         for key, bucket in buckets.items():
             idxs, t0 = bucket
 
-            # Create info
             hazard_info = HazardInfo(
                 t0,
                 u.index_select(0, idxs),
@@ -445,7 +444,6 @@ class HazardMixin:
             alts_logliks = self._cum_hazard(
                 hazard_info, None if c is None else c.index_select(0, idxs)
             )
-
             nlogps.index_add_(-2, idxs, alts_logliks)
 
         return -nlogps.clamp(min=0.0)
@@ -468,7 +466,6 @@ class HazardMixin:
         for key, bucket in data.buckets.items():
             idxs, t0, t1, obs = bucket
 
-            # Create info
             hazard_info = HazardInfo(
                 t0,
                 t1,
@@ -483,7 +480,6 @@ class HazardMixin:
                 hazard_info,
                 self.cache_limit != 0,
             )
-
             vals = (-alts_logliks).addcmul(obs, obs_logliks)
             logliks.index_add_(-1, idxs, vals)
 

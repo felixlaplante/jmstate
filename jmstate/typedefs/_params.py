@@ -2,13 +2,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from itertools import chain
+from numbers import Integral
 from typing import Any, Self, cast
 
 import torch
 from numpy import array2string
 from rich.tree import Tree
+from sklearn.utils._param_validation import (  # type: ignore
+    Interval,  # type: ignore
+    StrOptions,  # type: ignore
+    validate_params,  # type: ignore
+)
+from sklearn.utils.validation import assert_all_finite  # type: ignore
 
-from ..utils._checks import check_inf, check_matrix_dim, check_nan
+from ..utils._checks import check_matrix_dim
 from ..utils._linalg import flat_from_log_cholesky, log_cholesky_from_flat
 from ..visualization._print import rich_str
 
@@ -124,6 +131,16 @@ class CovParams:
         if self.skip_validation:
             return
 
+        validate_params(
+            {
+                "flat": [torch.Tensor],
+                "dim": [Interval(Integral, 1, None, closed="left")],
+                "method": [StrOptions({"full", "diag", "ball"})],
+                "skip_validation": [bool],
+            },
+            prefer_skip_nested_validation=True,
+        )
+
         check_matrix_dim(self.flat, self.dim, self.method)
 
     @property
@@ -234,8 +251,7 @@ class ModelParams:
         """Validate all tensors.
 
         Raises:
-            ValueError: If any of the tensors contains inf values.
-            ValueError: If any of the tensors contains NaN values.
+            ValueError: If any of the tensors contains inf or NaN values.
         """
         if self.skip_validation:
             return
@@ -251,8 +267,7 @@ class ModelParams:
             object.__setattr__(self, "betas", _sort_dict(self.betas))
 
         for key, val in self.as_dict.items():
-            check_inf(((val, key),))
-            check_nan(((val, key),))
+            assert_all_finite(val, input_name=key)
 
     def _map_fn_params(
         self,
@@ -348,6 +363,12 @@ class ModelParams:
             for t in self.extra:
                 t.requires_grad_(req)
 
+    @validate_params(
+        {
+            "flat": [torch.Tensor],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def from_flat_tensor(self, flat: torch.Tensor) -> Self:
         """Gets a ModelParams object based on the flat representation.
 

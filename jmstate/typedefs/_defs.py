@@ -188,6 +188,7 @@ class HazardInfo(NamedTuple):
 
 # Constants
 LOG_TWO_PI: Final[torch.Tensor] = torch.log(torch.tensor(2.0 * torch.pi))
+HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
 SIGNIFICANCE_LEVELS: Final[tuple[float, ...]] = (
     0.001,
     0.01,

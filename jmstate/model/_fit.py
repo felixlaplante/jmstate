@@ -3,6 +3,7 @@ from typing import Any, Self, cast
 from warnings import warn
 
 import torch
+from sklearn.utils._param_validation import validate_params  # type: ignore
 from tqdm import trange
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
@@ -128,7 +129,7 @@ class FitMixin(MCMCMixin):
             params = self.params_.from_flat_tensor(params_flat_tensor)
             return self._logpdfs_aux_fn(params, data, b)[0].mean(dim=0)
 
-        return torch.zeros(data.size, self.params_.numel), cast(
+        return torch.zeros(len(data), self.params_.numel), cast(
             Callable[[torch.Tensor, torch.Tensor], torch.Tensor], _jac_fn
         )
 
@@ -173,8 +174,8 @@ class FitMixin(MCMCMixin):
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
         """
         logpdf = torch.tensor(0.0)
-        mb = torch.zeros(data.size, self.params_.Q.dim)
-        mb2 = torch.zeros(data.size, self.params_.Q.dim, self.params_.Q.dim)
+        mb = torch.zeros(len(data), self.params_.Q.dim)
+        mb2 = torch.zeros(len(data), self.params_.Q.dim, self.params_.Q.dim)
         return logpdf, mb, mb2
 
     def _update_criteria(
@@ -223,6 +224,12 @@ class FitMixin(MCMCMixin):
         bic = -2 * loglik + torch.logdet(fim).item()
         return loglik, aic, bic
 
+    @validate_params(
+        {
+            "data": [ModelData],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def fit(self, data: ModelData) -> Self:
         r"""Fits the model to the data.
 
@@ -240,13 +247,11 @@ class FitMixin(MCMCMixin):
         Returns:
             Self: The fitted model.
         """
-        # Load and complete data
         data = CompleteModelData(
             data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
         data.prepare(self.model_design, self.params_)
 
-        # Initialize optimizer and MCMC
         optimizer = self._init_optimizer()
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
@@ -261,21 +266,20 @@ class FitMixin(MCMCMixin):
                 break
             sampler.run(self.n_subsample)
 
-        # Warn if not converged
         if not self._is_converged():
             warn(
                 "Model may not have converged in the specified number of iterations.",
                 stacklevel=2,
             )
 
-        # Initialize Jacobian matrix and criteria
+        # Initialize Jacobian matrix and criteria variables
         mjac, jac_fn = self._init_jac(data)
         logpdf, mb, mb2 = self._init_criteria(data)
 
         # FIM and Criteria loop
         for _ in trange(
             self.n_iter_summary,
-            desc="Computing FIM and Criteria",
+            desc="Computing FIM and Model Selection Criteria",
             disable=not self.verbose,
         ):
             self._update_jac(mjac, jac_fn, sampler)

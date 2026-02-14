@@ -1,4 +1,5 @@
 from bisect import bisect_left
+from numbers import Integral, Real
 
 import torch
 from rich.console import Console, Group
@@ -7,6 +8,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
+from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from torch.distributions import Normal
 
 from ..typedefs._data import CompleteModelData, ModelDesign
@@ -53,8 +55,10 @@ class MultiStateJointModel(
     For fitting, use `n_iter_fit` to specify the number of iterations for stochastic
     gradient ascent, `n_iter_summary` to specify the number of iterations to compute
     Fisher Information Matrix and criteria, `lr` to specify the learning rate for the
-    optimizer, `tol` to specify the tolerance for the R2 convergence, and
-    `window_size` to specify the window size for the R2 convergence.
+    optimizer, `tol` to specify the tolerance for the R2 convergence, and `window_size`
+    to specify the window size for the R2 convergence. The longer, the more stable
+    the R2 convergence. The default value seems a sweet spot, and the stopping criterion
+    is scale-agnostic.
 
     For printing, use `verbose` to specify whether to print the progress of the model
     fitting and predicting.
@@ -110,6 +114,28 @@ class MultiStateJointModel(
     aic_: float | None
     bic_: float | None
 
+    @validate_params(
+        {
+            "model_design": [ModelDesign],
+            "init_params": [ModelParams],
+            "n_quad": [Interval(Integral, 1, None, closed="left")],
+            "n_bisect": [Interval(Integral, 1, None, closed="left")],
+            "cache_limit": [Interval(Integral, 0, None, closed="left"), None],
+            "n_chains": [Interval(Integral, 1, None, closed="left")],
+            "init_step_size": [Interval(Real, 0, None, closed="neither")],
+            "adapt_rate": [Interval(Real, 0, None, closed="left")],
+            "target_accept_rate": [Interval(Real, 0, 1, closed="neither")],
+            "n_warmup": [Interval(Integral, 0, None, closed="left")],
+            "n_subsample": [Interval(Integral, 0, None, closed="left")],
+            "n_iter_fit": [Interval(Integral, 1, None, closed="left")],
+            "n_iter_summary": [Interval(Integral, 1, None, closed="left")],
+            "lr": [Interval(Real, 0, None, closed="neither")],
+            "tol": [Interval(Real, 0, 1, closed="both")],
+            "window_size": [Interval(Integral, 1, None, closed="left")],
+            "verbose": [bool],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def __init__(
         self,
         model_design: ModelDesign,
@@ -240,11 +266,11 @@ class MultiStateJointModel(
 
         return rich_str(tree)
 
-    def summary(self):
-        """Prints a summary of the model.
+    def print_summary(self):
+        """Prints a summary of the fitted model.
 
         This function prints the p-values of the parameters as well as values and
-        standard error. Also prints the log likelihood, AIC, BIC with lovely colors!
+        standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
         """
         values = self.params_.as_flat_tensor
         stderrs = self.stderr.as_flat_tensor
@@ -291,6 +317,12 @@ class MultiStateJointModel(
 
         Console().print(panel)
 
+    @validate_params(
+        {
+            "sample_size": [Interval(Integral, 1, None, closed="left")],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def sample_params(self, sample_size: int) -> list[ModelParams]:
         """Sample parameters based on asymptotic behavior of the MLE.
 

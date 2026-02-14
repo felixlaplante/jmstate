@@ -1,6 +1,8 @@
+from numbers import Real
 from typing import cast
 
 import torch
+from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from torch import nn
 
 from ..typedefs._defs import LOG_TWO_PI, BaseHazardFn, ClockMethod
@@ -74,14 +76,17 @@ class Exponential(BaseHazardFn):
 
     log_lmda: nn.Parameter
 
+    @validate_params(
+        {
+            "lmda": [Interval(Real, 0, None, closed="neither")],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def __init__(self, lmda: float):
         """Initializes the Exponential hazard.
 
         Args:
             lmda (float): The rate factor.
-
-        Raises:
-            ValueError: If lmda is not strictly positive.
         """
         super().__init__()  # type: ignore
 
@@ -133,21 +138,24 @@ class Weibull(BaseHazardFn):
     """
 
     clock_method: ClockMethod
-    log_k: nn.Parameter
     log_lmda: nn.Parameter
+    log_k: nn.Parameter
 
-    def __init__(self, k: float, lmda: float, clock_method: ClockMethod = clock_reset):
+    @validate_params(
+        {
+            "lmda": [Interval(Real, 0, None, closed="neither")],
+            "k": [Interval(Real, 0, None, closed="neither")],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def __init__(self, lmda: float, k: float, clock_method: ClockMethod = clock_reset):
         """Initializes the Weibull base hazard.
 
         Args:
-            k (float): The shape parameter.
             lmda (float): The scale parameter.
+            k (float): The shape parameter.
             clock_method (ClockMethod, optional): The ClockMethod transformation.
                 Defaults to clock_reset.
-
-        Raises:
-            ValueError: If k is not strictly positive.
-            ValueError: If lmda is not strictly positive.
         """
         super().__init__()  # type: ignore
 
@@ -211,6 +219,13 @@ class Gompertz(BaseHazardFn):
     clock_method: ClockMethod
     log_a: nn.Parameter
 
+    @validate_params(
+        {
+            "a": [Interval(Real, 0, None, closed="neither")],
+            "b": [Interval(Real, None, None, closed="neither")],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def __init__(self, a: float, b: float, clock_method: ClockMethod = clock_reset):
         """Initializes the Gompertz base hazard.
 
@@ -279,6 +294,13 @@ class LogNormal(BaseHazardFn):
     clock_method: ClockMethod
     log_scale: nn.Parameter
 
+    @validate_params(
+        {
+            "mu": [Interval(Real, None, None, closed="neither")],
+            "scale": [Interval(Real, 0, None, closed="neither")],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def __init__(
         self, mu: float, scale: float, clock_method: ClockMethod = clock_reset
     ):
@@ -289,9 +311,6 @@ class LogNormal(BaseHazardFn):
             scale (float): The log time scale.
             clock_method (ClockMethod, optional): The ClockMethod transformation.
                 Defaults to clock_reset.
-
-        Raises:
-            ValueError: If scale is not strictly positive.
 
         Returns:
             BaseHazardFn: Returns the log normal base hazard function.

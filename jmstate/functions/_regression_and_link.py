@@ -1,4 +1,7 @@
+from numbers import Integral
+
 import torch
+from sklearn.utils._param_validation import validate_params  # type: ignore
 from torch import nn
 
 from ..typedefs._defs import LinkFn, RegressionFn
@@ -48,6 +51,7 @@ class Net(nn.Module):
 
     def __init__(self, net: nn.Module):
         super().__init__()  # type: ignore
+
         self.net = net
         self.requires_grad_(False)
 
@@ -66,6 +70,12 @@ class Net(nn.Module):
         x = torch.cat([t_ext, psi_ext], dim=-1)
         return self.net(x)
 
+    @validate_params(
+        {
+            "degs": [tuple[Integral, ...]],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def derivatives(self, degs: tuple[int, ...]) -> RegressionFn | LinkFn:
         """Gets a function returning multiple derivatives of the neural network.
 

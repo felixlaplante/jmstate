@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import torch
 from numpy import atleast_1d
+from sklearn.utils._param_validation import validate_params  # type: ignore
 
 from ..typedefs._params import ModelParams
 from ..utils._checks import check_params_align
@@ -14,6 +15,14 @@ if TYPE_CHECKING:
     from ..model._base import MultiStateJointModel
 
 
+@validate_params(
+    {
+        "true_params": [ModelParams, None],
+        "figsize": [tuple],
+        "show": [bool],
+    },
+    prefer_skip_nested_validation=True,
+)
 def plot_params_history(
     model: MultiStateJointModel,
     *,
@@ -37,6 +46,15 @@ def plot_params_history(
         ValueError: If the parameters do not have the same names.
         ValueError: If the parameters do not have the same shapes.
     """
+    from ..model._base import MultiStateJointModel  # noqa: PLC0415
+
+    validate_params(
+        {
+            "model": [MultiStateJointModel],
+        },
+        prefer_skip_nested_validation=True,
+    )
+
     if len(model.params_history_) <= 1:
         raise ValueError("Only one parameter history provided")
 

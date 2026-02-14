@@ -1,14 +1,19 @@
 import math
+from numbers import Integral
 from typing import Any
 
 import torch
+from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
+from sklearn.utils.validation import (  # type: ignore
+    assert_all_finite,  # type: ignore
+    check_consistent_length,  # type: ignore
+)
 from tqdm import trange
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
 from ..typedefs._defs import Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._cache import Cache
-from ..utils._checks import check_consistent_size, check_inf, check_nan
 from ._sampler import MCMCMixin
 
 
@@ -43,6 +48,15 @@ class PredictionMixin(MCMCMixin):
         """Initialize the prediction mixin."""
         super().__init__(*args, **kwargs)
 
+    @validate_params(
+        {
+            "data": [ModelData],
+            "u": [torch.Tensor],
+            "n_samples": [Interval(Integral, 1, None, closed="left")],
+            "double_monte_carlo": [bool],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def predict_y(
         self,
         data: ModelData,
@@ -76,16 +90,14 @@ class PredictionMixin(MCMCMixin):
         Raises:
             ValueError: If `double_monte_carlo` is True and the Fisher Information
                 Matrix has not been computed.
-            ValueError: If `u` contains inf values.
-            ValueError: If `u` contains NaN values.
+            ValueError: If `u` contains inf or NaN values.
             ValueError: If `u` has incompatible shape.
 
         Returns:
             torch.Tensor: The predicted longitudinal values.
         """
-        check_inf(((u, "u"),))
-        check_nan(((u, "u"),))
-        check_consistent_size(((u, 0, "u"), (data.size, None, "data.size")))
+        assert_all_finite(u, input_name="u")
+        check_consistent_length(u, data)
 
         # Load and complete data
         data = CompleteModelData(
@@ -121,6 +133,15 @@ class PredictionMixin(MCMCMixin):
         self._cache.clear()
         return torch.stack(y_pred[:n_samples])
 
+    @validate_params(
+        {
+            "data": [ModelData],
+            "u": [torch.Tensor],
+            "n_samples": [Interval(Integral, 1, None, closed="left")],
+            "double_monte_carlo": [bool],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def predict_surv_logps(
         self,
         data: ModelData,
@@ -162,16 +183,14 @@ class PredictionMixin(MCMCMixin):
         Raises:
             ValueError: If `double_monte_carlo` is True and the Fisher Information
                 Matrix has not been computed.
-            ValueError: If `u` contains inf values.
-            ValueError: If `u` contains NaN values.
+            ValueError: If `u` contains inf or NaN values.
             ValueError: If `u` has incompatible shape.
 
         Returns:
             torch.Tensor: The predicted survival log probabilities.
         """
-        check_inf(((u, "u"),))
-        check_nan(((u, "u"),))
-        check_consistent_size(((u, 0, "u"), (data.size, None, "data.size")))
+        assert_all_finite(u, input_name="u")
+        check_consistent_length(u, data)
 
         # Load and complete data
         data = CompleteModelData(
@@ -210,12 +229,21 @@ class PredictionMixin(MCMCMixin):
             surv_logps_pred.extend(surv_logps[i] for i in range(surv_logps.size(0)))
             sampler.run(self.n_subsample)
 
-        # Restore parameters
         if double_monte_carlo:
             self.params_ = init_params  # type: ignore
         self._cache.clear()
         return torch.stack(surv_logps_pred[:n_samples])
 
+    @validate_params(
+        {
+            "data": [ModelData],
+            "c_max": [torch.Tensor],
+            "max_length": [Interval(Integral, 1, None, closed="left")],
+            "n_samples": [Interval(Integral, 1, None, closed="left")],
+            "double_monte_carlo": [bool],
+        },
+        prefer_skip_nested_validation=True,
+    )
     def predict_trajectories(
         self,
         data: ModelData,
@@ -229,7 +257,7 @@ class PredictionMixin(MCMCMixin):
 
         For every drawing of a random effect :math:`b`, this simulates the trajectories
         up to time `c_max` with a maximum length of `max_length` to avoid infinite
-        loops.
+        loops. This uses a variant of Gillepsie's algorithm.
 
         The variable `c_max` is expected to be a column vector with the same number of
         rows as individuals.
@@ -247,24 +275,20 @@ class PredictionMixin(MCMCMixin):
         Raises:
             ValueError: If `double_monte_carlo` is True and the Fisher Information
                 Matrix has not been computed.
-            ValueError: If `c_max` contains inf values.
-            ValueError: If `c_max` contains NaN values.
+            ValueError: If `c_max` contains inf or NaN values.
             ValueError: If `c_max` has incompatible shape.
 
         Returns:
             torch.Tensor: The predicted trajectories.
         """
-        check_inf(((c_max, "c_max"),))
-        check_nan(((c_max, "c_max"),))
-        check_consistent_size(((c_max, 0, "c_max"), (data.size, None, "data.size")))
+        assert_all_finite(c_max, input_name="c_max")
+        check_consistent_length(c_max, data)
 
-        # Load and complete data
         data = CompleteModelData(
             data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
         )
         data.prepare(self.model_design, self.params_)
 
-        # Initialize variables
         trajectories_pred: list[list[Trajectory]] = []
         n_iter = math.ceil(n_samples / self.n_chains)
 
@@ -272,7 +296,6 @@ class PredictionMixin(MCMCMixin):
             init_params = self.params_
             params_list = self.sample_params(n_iter)
 
-        # Initialize optimizer and MCMC
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 
@@ -297,7 +320,6 @@ class PredictionMixin(MCMCMixin):
                 )
             sampler.run(self.n_subsample)
 
-        # Restore parameters
         if double_monte_carlo:
             self.params_ = init_params  # type: ignore
         self._cache.clear()
