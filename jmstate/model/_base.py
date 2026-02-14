@@ -11,10 +11,10 @@ from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from ..typedefs._data import CompleteModelData, ModelDesign
 from ..typedefs._params import ModelParams
 from ._fit import FitMixin
-from ._prediction import PredictionMixin
+from ._predict import PredictMixin
 
 
-class MultiStateJointModel(BaseEstimator, FitMixin, PredictionMixin):
+class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     r"""A class of the nonlinear multistate joint model.
 
     Please note this class encompasses both the linear joint model and the standard

@@ -20,7 +20,7 @@ from ._hazard import HazardMixin
 from ._sampler import MCMCMixin
 
 
-class PredictionMixin(HazardMixin, MCMCMixin):
+class PredictMixin(HazardMixin, MCMCMixin):
     """Mixin class for prediction."""
 
     model_design: ModelDesign

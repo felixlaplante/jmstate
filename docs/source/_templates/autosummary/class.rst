@@ -4,6 +4,6 @@
 
 .. autoclass:: {{ objname }}
    :members:
-   :inherited-members:
+   :inherited-members: HazardMixin, FitMixin, PredictMixin
 
    .. automethod:: __init__
