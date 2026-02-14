@@ -91,7 +91,7 @@ class Exponential(BaseHazardFn):
         super().__init__()  # type: ignore
 
         lmda_ = torch.tensor(lmda)
-        self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
+        self.log_lmda = nn.Parameter(torch.log(lmda_))
 
     def forward(
         self,
@@ -162,8 +162,8 @@ class Weibull(BaseHazardFn):
         k_ = torch.tensor(k)
         lmda_ = torch.tensor(lmda)
         self.clock_method = clock_method
-        self.log_k = nn.Parameter(torch.log(k_), requires_grad=False)
-        self.log_lmda = nn.Parameter(torch.log(lmda_), requires_grad=False)
+        self.log_k = nn.Parameter(torch.log(k_))
+        self.log_lmda = nn.Parameter(torch.log(lmda_))
 
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the Weibull base hazard.
@@ -238,9 +238,9 @@ class Gompertz(BaseHazardFn):
         super().__init__()  # type: ignore
 
         a_ = torch.tensor(a)
-        self.b = nn.Parameter(torch.tensor(b), requires_grad=False)
+        self.b = nn.Parameter(torch.tensor(b))
         self.clock_method = clock_method
-        self.log_a = nn.Parameter(torch.log(a_), requires_grad=False)
+        self.log_a = nn.Parameter(torch.log(a_))
 
     def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the Gompertz base hazard.
@@ -317,10 +317,10 @@ class LogNormal(BaseHazardFn):
         """
         super().__init__()  # type: ignore
 
-        self.mu = nn.Parameter(torch.tensor(mu), requires_grad=False)
+        self.mu = nn.Parameter(torch.tensor(mu))
         scale_ = torch.tensor(scale)
         self.clock_method = clock_method
-        self.log_scale = nn.Parameter(torch.log(scale_), requires_grad=False)
+        self.log_scale = nn.Parameter(torch.log(scale_))
 
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the log normal base hazard.

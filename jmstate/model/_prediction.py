@@ -8,16 +8,18 @@ from sklearn.utils.validation import (  # type: ignore
     assert_all_finite,  # type: ignore
     check_consistent_length,  # type: ignore
 )
+from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from tqdm import trange
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
 from ..typedefs._defs import Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._cache import Cache
+from ._hazard import HazardMixin
 from ._sampler import MCMCMixin
 
 
-class PredictionMixin(MCMCMixin):
+class PredictionMixin(HazardMixin, MCMCMixin):
     """Mixin class for prediction."""
 
     model_design: ModelDesign
@@ -26,27 +28,37 @@ class PredictionMixin(MCMCMixin):
     n_warmup: int
     n_subsample: int
     verbose: bool
+    fim_: torch.Tensor | None
     _cache: Cache
-
-    def sample_params(self, sample_size: int) -> list[ModelParams]: ...
-
-    def compute_surv_logps(
-        self,
-        sample_data: SampleData,
-        u: torch.Tensor,
-    ) -> torch.Tensor: ...
-
-    def sample_trajectories(
-        self,
-        sample_data: SampleData,
-        c_max: torch.Tensor,
-        *,
-        max_length: int,
-    ) -> list[Trajectory]: ...
 
     def __init__(self, *args: Any, **kwargs: Any):
         """Initialize the prediction mixin."""
         super().__init__(*args, **kwargs)
+
+    def _sample_params_vectors(self, sample_size: int) -> torch.Tensor:
+        """Sample parameters based on asymptotic behavior of the MLE.
+
+        This uses Bernstein-von Mises theorem to approximate the posterior distribution
+        of the parameters as a multivariate normal distribution with mean equal to the
+        MLE and covariance matrix equal to the inverse of the Fisher Information Matrix.
+
+        Args:
+            sample_size (int): The desired sample size.
+
+        Raises:
+            ValueError: If Fisher Information Matrix has not been computed.
+
+        Returns:
+            torch.Tensor: A tensor of shape (sample_size, n_params) of sampled model
+                parameters as vectors.
+        """
+        if self.fim_ is None:
+            raise ValueError("Fisher Information Matrix must be previously computed.")
+
+        dist = torch.distributions.MultivariateNormal(
+            parameters_to_vector(self.params_.parameters()), self.fim_.inverse()
+        )
+        return dist.sample((sample_size,))
 
     @validate_params(
         {
@@ -100,9 +112,7 @@ class PredictionMixin(MCMCMixin):
         check_consistent_length(u, data)
 
         # Load and complete data
-        data = CompleteModelData(
-            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
-        )
+        data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
         data.prepare(self.model_design, self.params_)
 
         # Initialize variables
@@ -110,18 +120,18 @@ class PredictionMixin(MCMCMixin):
         n_iter = math.ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
-            init_params = self.params_
-            params_list = self.sample_params(n_iter)
+            init_param_vector = parameters_to_vector(self.params_.parameters())
+            param_vectors = self._sample_params_vectors(n_iter)
 
         # Initialize optimizer and MCMC
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 
-        for _ in trange(
+        for i in trange(
             n_iter, desc="Predicting longitudinal values", disable=not self.verbose
         ):
             if double_monte_carlo:
-                self.params_ = params_list.pop()  # type: ignore
+                vector_to_parameters(param_vectors[i], self.params_.parameters())  # type: ignore
 
             y = self.model_design.regression_fn(u, sampler.psi)
             y_pred.extend(y[i] for i in range(y.size(0)))
@@ -129,7 +139,7 @@ class PredictionMixin(MCMCMixin):
 
         # Restore parameters
         if double_monte_carlo:
-            self.params_ = init_params  # type: ignore
+            vector_to_parameters(init_param_vector, self.params_.parameters())  # type: ignore
         self._cache.clear()
         return torch.stack(y_pred[:n_samples])
 
@@ -172,6 +182,9 @@ class PredictionMixin(MCMCMixin):
         The variable `u` is expected to be a matrix with the same number of rows as
         individuals, and the same number of columns as prediction times.
 
+        If `double_monte_carlo` is True, then the prediction is computed using double
+        Monte Carlo Rizopoulos-style (2011).
+
         Args:
             data (ModelData): The data to predict.
             u (torch.Tensor): The matrix containing prediction times.
@@ -193,9 +206,7 @@ class PredictionMixin(MCMCMixin):
         check_consistent_length(u, data)
 
         # Load and complete data
-        data = CompleteModelData(
-            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
-        )
+        data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
         data.prepare(self.model_design, self.params_)
 
         # Initialize variables
@@ -203,34 +214,28 @@ class PredictionMixin(MCMCMixin):
         n_iter = math.ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
-            init_params = self.params_
-            params_list = self.sample_params(n_iter)
+            init_param_vector = parameters_to_vector(self.params_.parameters())
+            param_vectors = self._sample_params_vectors(n_iter)
 
         # Initialize optimizer and MCMC
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 
-        for _ in trange(
+        for i in trange(
             n_iter,
             desc="Predicting survival log probabilities",
             disable=not self.verbose,
         ):
             if double_monte_carlo:
-                self.params_ = params_list.pop()  # type: ignore
+                vector_to_parameters(param_vectors[i], self.params_.parameters())  # type: ignore
 
-            sample_data = SampleData(
-                data.x,
-                data.trajectories,
-                sampler.psi,
-                data.c,
-                skip_validation=True,
-            )
+            sample_data = SampleData(data.x, data.trajectories, sampler.psi, data.c)
             surv_logps = self.compute_surv_logps(sample_data, u)
             surv_logps_pred.extend(surv_logps[i] for i in range(surv_logps.size(0)))
             sampler.run(self.n_subsample)
 
         if double_monte_carlo:
-            self.params_ = init_params  # type: ignore
+            vector_to_parameters(init_param_vector, self.params_.parameters())  # type: ignore
         self._cache.clear()
         return torch.stack(surv_logps_pred[:n_samples])
 
@@ -262,6 +267,9 @@ class PredictionMixin(MCMCMixin):
         The variable `c_max` is expected to be a column vector with the same number of
         rows as individuals.
 
+        If `double_monte_carlo` is True, then the prediction is computed using double
+        Monte Carlo Rizopoulos-style (2011).
+
         Args:
             data (ModelData): The data to predict.
             c_max (torch.Tensor): The matrix containing prediction times.
@@ -284,36 +292,30 @@ class PredictionMixin(MCMCMixin):
         assert_all_finite(c_max, input_name="c_max")
         check_consistent_length(c_max, data)
 
-        data = CompleteModelData(
-            data.x, data.t, data.y, data.trajectories, data.c, skip_validation=True
-        )
+        data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
         data.prepare(self.model_design, self.params_)
 
         trajectories_pred: list[list[Trajectory]] = []
         n_iter = math.ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
-            init_params = self.params_
-            params_list = self.sample_params(n_iter)
+            init_param_vector = parameters_to_vector(self.params_.parameters())
+            param_vectors = self._sample_params_vectors(n_iter)
 
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 
-        for _ in trange(
+        for i in trange(
             n_iter,
             desc="Predicting trajectories",
             disable=not self.verbose,
         ):
             if double_monte_carlo:
-                self.params_ = params_list.pop()  # type: ignore
+                vector_to_parameters(param_vectors[i], self.params_.parameters())  # type: ignore
 
-            for i in range(sampler.psi.size(0)):
+            for j in range(sampler.psi.size(0)):
                 sample_data = SampleData(
-                    data.x,
-                    data.trajectories,
-                    sampler.psi[i],
-                    data.c,
-                    skip_validation=True,
+                    data.x, data.trajectories, sampler.psi[j], data.c
                 )
                 trajectories_pred.append(
                     self.sample_trajectories(sample_data, c_max, max_length=max_length)
@@ -321,6 +323,6 @@ class PredictionMixin(MCMCMixin):
             sampler.run(self.n_subsample)
 
         if double_monte_carlo:
-            self.params_ = init_params  # type: ignore
+            vector_to_parameters(init_param_vector, self.params_.parameters())  # type: ignore
         self._cache.clear()
         return trajectories_pred[:n_samples]

@@ -9,15 +9,27 @@ import torch
 from ..typedefs._defs import BucketData, Trajectory
 
 
+def key_to_str(key: tuple[Any, Any]) -> str:
+    """Converts a key to a string.
+
+    Args:
+        key (tuple[Any, Any]): The key to convert.
+
+    Returns:
+        str: The string representation of the key.
+    """
+    return f"{key[0]}_{key[1]}"
+
+
 def build_buckets(
     trajectories: list[Trajectory],
 ) -> dict[tuple[Any, Any], BucketData]:
     """Builds buckets from trajectories for user convenience.
 
     This yeilds a `NamedTuple` containing transition information containing:
-        idxs (Tensor1D): The individual indices.
-        t0 (TensorCol): A column vector of previous transition times.
-        t1 (TensorCol): A column vector of next transition times.
+        idxs (torch.Tensor): The individual indices.
+        t0 (torch.Tensor): A column vector of previous transition times.
+        t1 (torch.Tensor): A column vector of next transition times.
 
     Args:
         trajectories (list[Trajectory]): The list of individual trajectories.
@@ -57,7 +69,7 @@ def build_buckets(
         for key, (idxs, t0s, t1s) in buckets.items()
     }
 
-    return dict(sorted(result.items(), key=lambda kv: str(kv[0])))
+    return dict(sorted(result.items()))
 
 
 @lru_cache

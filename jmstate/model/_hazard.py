@@ -15,7 +15,7 @@ from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import HAZARD_CACHE_KEYS, HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._cache import Cache
-from ..utils._surv import build_possible_buckets, build_remaining_buckets
+from ..utils._surv import build_possible_buckets, build_remaining_buckets, key_to_str
 
 
 class HazardMixin:
@@ -290,8 +290,10 @@ class HazardMixin:
                 t1,
                 None if x is None else x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params_.alphas[key],
-                None if self.params_.betas is None else self.params_.betas[key],
+                self.params_.alphas[key_to_str(key)],
+                None
+                if self.params_.betas is None
+                else self.params_.betas[key_to_str(key)],
                 *self.model_design.surv[key],
             )
 
@@ -334,14 +336,10 @@ class HazardMixin:
         The sampling is done usign a bisection algorithm by inversing the log cdf of the
         transitions inside a Gillespie-like algorithm.
 
-        Checks are run only if the `skip_validation` attribute of `sample_date` is not
-        set to `True`.
-
         Args:
             sample_data (SampleData): Prediction data.
-            c_max (TensorCol): The maximum trajectory censoring times.
-            max_length (IntStrictlyPositive, optional): Maximum iterations or sampling.
-                Defaults to 10.
+            c_max (torch.Tensor): The maximum trajectory censoring times.
+            max_length (int, optional): Maximum iterations or sampling. Defaults to 10.
 
         Raises:
             ValueError: If c_max contains inf or NaN values.
@@ -350,10 +348,9 @@ class HazardMixin:
         Returns:
             list[Trajectory]: The sampled trajectories.
         """
-        if not sample_data.skip_validation:
-            assert_all_finite(c_max, input_name="c_max")
-            check_consistent_length(c_max, sample_data)
-        sample_data_copied = replace(sample_data, skip_validation=True)
+        assert_all_finite(c_max, input_name="c_max")
+        check_consistent_length(c_max, sample_data)
+        sample_data_copied = replace(sample_data)
 
         # Sample future transitions iteratively
         for _ in range(max_length):
@@ -398,9 +395,6 @@ class HazardMixin:
         The variable `u` is expected to be a matrix with the same number of rows as
         individuals, and the same number of columns as prediction times.
 
-        Checks are run only if the `skip_validation` attribute of `sample_date` is not
-        set to `True`.
-
         Args:
             sample_data (SampleData): The data on which to compute the probabilities.
             u (torch.Tensor): The time at which to evaluate the probabilities.
@@ -412,9 +406,8 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed survival log probabilities.
         """
-        if not sample_data.skip_validation:
-            assert_all_finite(u, input_name="u")
-            check_consistent_length(u, sample_data)
+        assert_all_finite(u, input_name="u")
+        check_consistent_length(u, sample_data)
 
         x = sample_data.x
         psi = sample_data.psi
@@ -435,8 +428,10 @@ class HazardMixin:
                 u.index_select(0, idxs),
                 None if x is None else x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params_.alphas[key],
-                None if self.params_.betas is None else self.params_.betas[key],
+                self.params_.alphas[key_to_str(key)],
+                None
+                if self.params_.betas is None
+                else self.params_.betas[key_to_str(key)],
                 *self.model_design.surv[key],
             )
 
@@ -449,12 +444,11 @@ class HazardMixin:
         return -nlogps.clamp(min=0.0)
 
     def _hazard_logliks(
-        self, params: ModelParams, data: CompleteModelData, psi: torch.Tensor
+        self, data: CompleteModelData, psi: torch.Tensor
     ) -> torch.Tensor:
         """Computes the hazard log likelihoods.
 
         Args:
-            params (ModelParams): The model parameters.
             data (CompleteModelData): Dataset on which likelihood is computed.
             psi (torch.Tensor): A matrix of individual parameters.
 
@@ -471,8 +465,10 @@ class HazardMixin:
                 t1,
                 None if data.x is None else data.x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                params.alphas[key],
-                None if params.betas is None else params.betas[key],
+                self.params_.alphas[key_to_str(key)],
+                None
+                if self.params_.betas is None
+                else self.params_.betas[key_to_str(key)],
                 *self.model_design.surv[key],
             )
 

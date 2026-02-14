@@ -1,4 +1,5 @@
 from bisect import bisect_left
+from copy import deepcopy
 from numbers import Integral, Real
 
 import torch
@@ -7,24 +8,18 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
-from rich.tree import Tree
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from torch.distributions import Normal
+from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 from ..typedefs._data import CompleteModelData, ModelDesign
 from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
 from ..typedefs._params import ModelParams
-from ..visualization._print import rich_str
 from ._fit import FitMixin
-from ._hazard import HazardMixin
-from ._longitudinal import LongitudinalMixin
 from ._prediction import PredictionMixin
-from ._prior import PriorMixin
 
 
-class MultiStateJointModel(
-    PriorMixin, LongitudinalMixin, HazardMixin, FitMixin, PredictionMixin
-):
+class MultiStateJointModel(FitMixin, PredictionMixin):
     r"""A class of the nonlinear multistate joint model.
 
     Please note this class encompasses both the linear joint model and the standard
@@ -54,11 +49,13 @@ class MultiStateJointModel(
 
     For fitting, use `n_iter_fit` to specify the number of iterations for stochastic
     gradient ascent, `n_iter_summary` to specify the number of iterations to compute
-    Fisher Information Matrix and criteria, `lr` to specify the learning rate for the
-    optimizer, `tol` to specify the tolerance for the R2 convergence, and `window_size`
-    to specify the window size for the R2 convergence. The longer, the more stable
-    the R2 convergence. The default value seems a sweet spot, and the stopping criterion
-    is scale-agnostic.
+    Fisher Information Matrix and criteria, `tol` to specify the tolerance for the R2
+    convergence, and `window_size` to specify the window size for the R2 convergence.
+    The longer, the more stable the R2 convergence. The default value seems a sweet
+    spot, and the stopping criterion is scale-agnostic. Any optimizer can be used,
+    through the `optimizer` parameter. If set to `None`, then fitting is not possible.
+    Recommended to use `torch.optim.Adam` with a learning rate of 0.1 to 1.0. A value
+    of 0.5 is a good starting point.
 
     For printing, use `verbose` to specify whether to print the progress of the model
     fitting and predicting.
@@ -66,6 +63,7 @@ class MultiStateJointModel(
     Attributes:
         model_design (ModelDesign): The model design.
         params_ (ModelParams): The (variable) model parameters.
+        optimizer_ (torch.optim.Optimizer | None): The optimizer.
         n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
         n_bisect (int): The number of bisection steps for the bisection algorithm.
         cache_limit (int | None): The limit of the cache used in hazard computation,
@@ -80,11 +78,10 @@ class MultiStateJointModel(
         n_iter_fit (int): The number of iterations for stochastic gradient ascent.
         n_iter_summary (int): The number of iterations to compute Fisher Information
             Matrix and criteria.
-        lr (float): The learning rate for the optimizer.
         tol (float): The tolerance for the R2 convergence.
         window_size (int): The window size for the R2 convergence.
         verbose (bool): Whether to print the progress of the model fitting.
-        params_history_ (list[ModelParams]): The history of model parameters.
+        params_vector_history_ (list[torch.Tensor]): The history of model parameters.
         fim_ (torch.Tensor | None): The Fisher Information Matrix.
         loglik_ (float | None): The log likelihood.
         aic_ (float | None): The Akaike Information Criterion.
@@ -93,6 +90,7 @@ class MultiStateJointModel(
 
     model_design: ModelDesign
     params_: ModelParams
+    optimizer: torch.optim.Optimizer | None
     n_quad: int
     n_bisect: int
     cache_limit: int | None
@@ -104,11 +102,10 @@ class MultiStateJointModel(
     n_subsample: int
     n_iter_fit: int
     n_iter_summary: int
-    lr: float
     tol: float
     window_size: int
     verbose: bool
-    params_history_: list[ModelParams]
+    params_vector_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
     loglik_: float | None
     aic_: float | None
@@ -118,6 +115,7 @@ class MultiStateJointModel(
         {
             "model_design": [ModelDesign],
             "init_params": [ModelParams],
+            "optimizer": [torch.optim.Optimizer, None],
             "n_quad": [Interval(Integral, 1, None, closed="left")],
             "n_bisect": [Interval(Integral, 1, None, closed="left")],
             "cache_limit": [Interval(Integral, 0, None, closed="left"), None],
@@ -129,7 +127,6 @@ class MultiStateJointModel(
             "n_subsample": [Interval(Integral, 0, None, closed="left")],
             "n_iter_fit": [Interval(Integral, 1, None, closed="left")],
             "n_iter_summary": [Interval(Integral, 1, None, closed="left")],
-            "lr": [Interval(Real, 0, None, closed="neither")],
             "tol": [Interval(Real, 0, 1, closed="both")],
             "window_size": [Interval(Integral, 1, None, closed="left")],
             "verbose": [bool],
@@ -140,6 +137,7 @@ class MultiStateJointModel(
         self,
         model_design: ModelDesign,
         init_params: ModelParams,
+        optimizer: torch.optim.Optimizer | None = None,
         *,
         n_quad: int = 32,
         n_bisect: int = 32,
@@ -152,7 +150,6 @@ class MultiStateJointModel(
         n_subsample: int = 10,
         n_iter_fit: int = 500,
         n_iter_summary: int = 100,
-        lr: float = 0.5,
         tol: float = 0.1,
         window_size: int = 100,
         verbose: bool = True,
@@ -162,6 +159,8 @@ class MultiStateJointModel(
         Args:
             model_design (ModelDesign): Model design containing modeling information.
             init_params (ModelParams): Initial values for the parameters.
+            optimizer (torch.optim.Optimizer | None, optional): The optimizer   used for
+                fitting. Defaults to None.
             n_quad (int, optional): The used number of points for Gauss-Legendre
                 quadrature. Defaults to 32.
             n_bisect (int, optional): The number of bisection steps used in transition
@@ -183,7 +182,6 @@ class MultiStateJointModel(
                 gradient ascent. Defaults to 500.
             n_iter_summary (int, optional): The number of iterations to compute Fisher
                 Information Matrix and criteria. Defaults to 100.
-            lr (float, optional): The learning rate for the optimizer. Defaults to 0.5.
             tol (float, optional): The tolerance for the convergence. Defaults to 0.1.
             window_size (int, optional): The window size for the convergence. Defaults
                 to 100.
@@ -192,6 +190,7 @@ class MultiStateJointModel(
         """
         # Info of the Mixin Classes
         super().__init__(
+            optimizer=optimizer,
             n_quad=n_quad,
             n_bisect=n_bisect,
             cache_limit=cache_limit,
@@ -199,72 +198,48 @@ class MultiStateJointModel(
             init_step_size=init_step_size,
             adapt_rate=adapt_rate,
             target_accept_rate=target_accept_rate,
-            lr=lr,
+            n_iter_fit=n_iter_fit,
+            n_iter_summary=n_iter_summary,
             tol=tol,
             window_size=window_size,
         )
 
         # Store model components
         self.model_design = model_design
-        self.params_ = init_params.clone().detach()
+        self.params_ = init_params
         self.n_warmup = n_warmup
         self.n_subsample = n_subsample
         self.n_iter_fit = n_iter_fit
         self.n_iter_summary = n_iter_summary
         self.verbose = verbose
-        self.params_history_ = [self.params_.clone()]
+        self.vector_params_history_ = [
+            parameters_to_vector(self.params_.parameters()).detach()
+        ]
         self.fim_ = None
         self.loglik_ = None
         self.aic_ = None
         self.bic_ = None
 
-    def _logpdfs_aux_fn(  # type: ignore
-        self, params: ModelParams, data: CompleteModelData, b: torch.Tensor
+    def _logpdfs_aux_fn(
+        self, data: CompleteModelData, b: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Gets the log pdfs with individual effects and log likelihoods.
 
         Args:
-            params (ModelParams): The model parameters.
             data (CompleteModelData): Dataset on which likelihood is computed.
             b (torch.Tensor): The random effects.
 
         Returns:
            tuple[torch.Tensor, torch.Tensor]: The log pdfs and aux.
         """
-        psi = self.model_design.individual_effects_fn(params.gamma, data.x, b)
+        psi = self.model_design.individual_effects_fn(self.params_.gamma, data.x, b)
         logpdfs = (
-            super()._long_logliks(params, data, psi)
-            + super()._hazard_logliks(params, data, psi)
-            + super()._prior_logliks(params, b)
+            super()._long_logliks(data, psi)
+            + super()._hazard_logliks(data, psi)
+            + super()._prior_logliks(b)
         )
 
         return logpdfs, psi
-
-    def __str__(self) -> str:
-        """Returns a string representation of the model.
-
-        Returns:
-            str: The string representation.
-        """
-        tree = Tree("MultiStateJointModel")
-        tree.add(f"model_design: {self.model_design}")
-        tree.add(f"params_: {self.params_}")
-        tree.add(f"n_quad: {self.n_quad}")
-        tree.add(f"n_bisect: {self.n_bisect}")
-        tree.add(f"cache_limit: {self.cache_limit}")
-        tree.add(f"n_warmup: {self.n_warmup}")
-        tree.add(f"n_subsample: {self.n_subsample}")
-        tree.add(f"n_iter_fit: {self.n_iter_fit}")
-        tree.add(f"n_iter_summary: {self.n_iter_summary}")
-        tree.add(f"tol: {self.tol}")
-        tree.add(f"window_size: {self.window_size}")
-        tree.add(f"params_history_: {len(self.params_history_)} element(s)")
-        tree.add(f"fim_: {self.fim_}")
-        tree.add(f"loglik_: {self.loglik_}")
-        tree.add(f"aic_: {self.aic_}")
-        tree.add(f"bic_: {self.bic_}")
-
-        return rich_str(tree)
 
     def print_summary(self):
         """Prints a summary of the fitted model.
@@ -272,8 +247,8 @@ class MultiStateJointModel(
         This function prints the p-values of the parameters as well as values and
         standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
         """
-        values = self.params_.as_flat_tensor
-        stderrs = self.stderr.as_flat_tensor
+        values = parameters_to_vector(self.params_.parameters())
+        stderrs = parameters_to_vector(self.stderr.parameters())
         zvalues = torch.abs(values / stderrs)
         pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
 
@@ -286,7 +261,7 @@ class MultiStateJointModel(
         table.add_column("Significance level", justify="center")
 
         i = 0
-        for name, value in self.params_.as_dict.items():
+        for name, value in self.params_.named_parameters():
             for j in range(value.numel()):
                 code = SIGNIFICANCE_CODES[
                     bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())
@@ -317,37 +292,9 @@ class MultiStateJointModel(
 
         Console().print(panel)
 
-    @validate_params(
-        {
-            "sample_size": [Interval(Integral, 1, None, closed="left")],
-        },
-        prefer_skip_nested_validation=True,
-    )
-    def sample_params(self, sample_size: int) -> list[ModelParams]:
-        """Sample parameters based on asymptotic behavior of the MLE.
-
-        Args:
-            sample_size (int): The desired sample size.
-
-        Raises:
-            ValueError: If Fisher Information Matrix has not been computed.
-
-        Returns:
-            list[ModelParams]: A list of sampled model parameters.
-        """
-        if self.fim_ is None:
-            raise ValueError("Fisher Information Matrix must be previously computed.")
-
-        dist = torch.distributions.MultivariateNormal(
-            self.params_.as_flat_tensor, self.fim_.inverse()
-        )
-        flat_samples = dist.sample((sample_size,))
-
-        return [self.params_.from_flat_tensor(sample) for sample in flat_samples]
-
     @property
     def stderr(self) -> ModelParams:
-        r"""Returns the standard error of the parameters.
+        r"""Returns the standard error of the parameters as a `ModelParams` object.
 
         They can be used to draw confidence intervals. The standard errors are computed
         using the diagonal of the inverse of the inverse Fisher Information Matrix at
@@ -366,4 +313,8 @@ class MultiStateJointModel(
         if self.fim_ is None:
             raise ValueError("Fisher Information Matrix must be previously computed.")
 
-        return self.params_.from_flat_tensor(self.fim_.inverse().diag().sqrt())
+        params_copied = deepcopy(self.params_)
+        vector_to_parameters(
+            self.fim_.inverse().diag().sqrt(), params_copied.parameters()
+        )
+        return params_copied
