@@ -1,13 +1,14 @@
 Model
 =====
 
-.. automodule:: jmstate.model
-   :members:
-   :undoc-members:
+.. automodule:: jmstate.typedefs
+   :no-members:
+   :no-undoc-members:
    :no-index:
 
 .. autosummary::
    :toctree: generated/
    :recursive:
+
 
    MultiStateJointModel
