@@ -1,25 +1,20 @@
-from bisect import bisect_left
 from copy import deepcopy
 from numbers import Integral, Real
+from typing import cast
 
 import torch
-from rich.console import Console, Group
-from rich.panel import Panel
-from rich.rule import Rule
-from rich.table import Table
-from rich.text import Text
+from sklearn.base import BaseEstimator  # type: ignore
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
-from torch.distributions import Normal
+from sklearn.utils.validation import check_is_fitted  # type: ignore
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 from ..typedefs._data import CompleteModelData, ModelDesign
-from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
 from ..typedefs._params import ModelParams
 from ._fit import FitMixin
 from ._prediction import PredictionMixin
 
 
-class MultiStateJointModel(FitMixin, PredictionMixin):
+class MultiStateJointModel(BaseEstimator, FitMixin, PredictionMixin):
     r"""A class of the nonlinear multistate joint model.
 
     Please note this class encompasses both the linear joint model and the standard
@@ -62,8 +57,8 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
 
     Attributes:
         model_design (ModelDesign): The model design.
-        params_ (ModelParams): The (variable) model parameters.
-        optimizer_ (torch.optim.Optimizer | None): The optimizer.
+        params (ModelParams): The (variable) model parameters.
+        optimizer (torch.optim.Optimizer | None): The optimizer.
         n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
         n_bisect (int): The number of bisection steps for the bisection algorithm.
         cache_limit (int | None): The limit of the cache used in hazard computation,
@@ -86,10 +81,19 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
         loglik_ (float | None): The log likelihood.
         aic_ (float | None): The Akaike Information Criterion.
         bic_ (float | None): The Bayesian Information Criterion.
+
+    Examples:
+        >>> # Declares initial model
+        >>> optimizer = torch.optim.Adam(init_params.parameters(), lr=0.5)
+        >>> model = MultiStateJointModel(model_design, init_params, optimizer)
+        >>> # Runs optimization process
+        >>> model.fit(data)
+        >>> # Prints a summary of the model
+        >>> model.summary()
     """
 
     model_design: ModelDesign
-    params_: ModelParams
+    params: ModelParams
     optimizer: torch.optim.Optimizer | None
     n_quad: int
     n_bisect: int
@@ -114,7 +118,7 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
     @validate_params(
         {
             "model_design": [ModelDesign],
-            "init_params": [ModelParams],
+            "params": [ModelParams],
             "optimizer": [torch.optim.Optimizer, None],
             "n_quad": [Interval(Integral, 1, None, closed="left")],
             "n_bisect": [Interval(Integral, 1, None, closed="left")],
@@ -136,7 +140,7 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
     def __init__(
         self,
         model_design: ModelDesign,
-        init_params: ModelParams,
+        params: ModelParams,
         optimizer: torch.optim.Optimizer | None = None,
         *,
         n_quad: int = 32,
@@ -158,7 +162,7 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
 
         Args:
             model_design (ModelDesign): Model design containing modeling information.
-            init_params (ModelParams): Initial values for the parameters.
+            params (ModelParams): (Initial) values for the parameters.
             optimizer (torch.optim.Optimizer | None, optional): The optimizer   used for
                 fitting. Defaults to None.
             n_quad (int, optional): The used number of points for Gauss-Legendre
@@ -206,14 +210,14 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
 
         # Store model components
         self.model_design = model_design
-        self.params_ = init_params
+        self.params = params
         self.n_warmup = n_warmup
         self.n_subsample = n_subsample
         self.n_iter_fit = n_iter_fit
         self.n_iter_summary = n_iter_summary
         self.verbose = verbose
         self.vector_params_history_ = [
-            parameters_to_vector(self.params_.parameters()).detach()
+            parameters_to_vector(self.params.parameters()).detach()
         ]
         self.fim_ = None
         self.loglik_ = None
@@ -232,7 +236,7 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
         Returns:
            tuple[torch.Tensor, torch.Tensor]: The log pdfs and aux.
         """
-        psi = self.model_design.individual_effects_fn(self.params_.gamma, data.x, b)
+        psi = self.model_design.individual_effects_fn(self.params.gamma, data.x, b)
         logpdfs = (
             super()._long_logliks(data, psi)
             + super()._hazard_logliks(data, psi)
@@ -240,57 +244,6 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
         )
 
         return logpdfs, psi
-
-    def print_summary(self):
-        """Prints a summary of the fitted model.
-
-        This function prints the p-values of the parameters as well as values and
-        standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
-        """
-        values = parameters_to_vector(self.params_.parameters())
-        stderrs = parameters_to_vector(self.stderr.parameters())
-        zvalues = torch.abs(values / stderrs)
-        pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
-
-        table = Table()
-        table.add_column("Parameter name", justify="left")
-        table.add_column("Value", justify="center")
-        table.add_column("Standard Error", justify="center")
-        table.add_column("z-value", justify="center")
-        table.add_column("p-value", justify="center")
-        table.add_column("Significance level", justify="center")
-
-        i = 0
-        for name, value in self.params_.named_parameters():
-            for j in range(value.numel()):
-                code = SIGNIFICANCE_CODES[
-                    bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())
-                ]
-
-                table.add_row(
-                    f"{name}[{j}]",
-                    f"{values[i].item():.3f}",
-                    f"{stderrs[i].item():.3f}",
-                    f"{zvalues[i].item():.3f}",
-                    f"{pvalues[i].item():.3f}",
-                    code,
-                )
-                i += 1
-
-        criteria = Text(
-            f"Log-likelihood: {self.loglik_:.3f}\n"
-            f"AIC: {self.aic_:.3f}\n"
-            f"BIC: {self.bic_:.3f}",
-            style="bold cyan",
-        )
-
-        content = Group(table, Rule(style="dim"), criteria, Rule(style="dim"))
-
-        panel = Panel(
-            content, title="Model Summary", border_style="green", expand=False
-        )
-
-        Console().print(panel)
 
     @property
     def stderr(self) -> ModelParams:
@@ -305,16 +258,16 @@ class MultiStateJointModel(FitMixin, PredictionMixin):
             (\hat{\theta})^{-1} \right)}
 
         Raises:
-            ValueError: If Fisher Information Matrix has not been computed.
+            ValueError: If the model is not fitted.
 
         Returns:
             ModelParams: The standard error in the same format as the parameters.
         """
-        if self.fim_ is None:
-            raise ValueError("Fisher Information Matrix must be previously computed.")
+        check_is_fitted(self, "fim_")
 
-        params_copied = deepcopy(self.params_)
+        params_copied = deepcopy(self.params)
         vector_to_parameters(
-            self.fim_.inverse().diag().sqrt(), params_copied.parameters()
+            cast(torch.Tensor, self.fim_).inverse().diag().sqrt(),
+            params_copied.parameters(),
         )
         return params_copied

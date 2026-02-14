@@ -15,14 +15,14 @@ from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import HAZARD_CACHE_KEYS, HazardInfo, Trajectory
 from ..typedefs._params import ModelParams
 from ..utils._cache import Cache
-from ..utils._surv import build_possible_buckets, build_remaining_buckets, key_to_str
+from ..utils._surv import build_possible_buckets, build_remaining_buckets
 
 
 class HazardMixin:
     """Mixin class for hazard model computations."""
 
     model_design: ModelDesign
-    params_: ModelParams
+    params: ModelParams
     n_quad: int
     n_bisect: int
     cache_limit: int | None
@@ -176,9 +176,6 @@ class HazardMixin:
             hazard_info (HazardInfo): All necessary information for computation.
             enable_cache (bool): Enables caching.
 
-        Raises:
-            RuntimeError: If the computation fails.
-
         Returns:
             tuple[torch.Tensor, torch.Tensor]: The log and cum hazard.
         """
@@ -272,7 +269,7 @@ class HazardMixin:
 
         # Get buckets from last states
         current_buckets = build_possible_buckets(
-            sample_data.trajectories, c_max, tuple(self.model_design.surv.keys())
+            sample_data.trajectories, c_max, tuple(self.model_design.surv_map.keys())
         )
 
         if not current_buckets:
@@ -290,11 +287,9 @@ class HazardMixin:
                 t1,
                 None if x is None else x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params_.alphas[key_to_str(key)],
-                None
-                if self.params_.betas is None
-                else self.params_.betas[key_to_str(key)],
-                *self.model_design.surv[key],
+                self.params.alphas[str(key)],
+                None if self.params.betas is None else self.params.betas[str(key)],
+                *self.model_design.surv_map[key],
             )
 
             # Sample transition times
@@ -342,8 +337,8 @@ class HazardMixin:
             max_length (int, optional): Maximum iterations or sampling. Defaults to 10.
 
         Raises:
-            ValueError: If c_max contains inf or NaN values.
-            ValueError: If c_max has incorrect shape.
+            ValueError: If `c_max` contains inf or NaN values.
+            ValueError: If `c_max` has incorrect shape.
 
         Returns:
             list[Trajectory]: The sampled trajectories.
@@ -415,7 +410,7 @@ class HazardMixin:
 
         # Get buckets from last states
         buckets = build_remaining_buckets(
-            sample_data.trajectories, tuple(self.model_design.surv.keys())
+            sample_data.trajectories, tuple(self.model_design.surv_map.keys())
         )
 
         # Compute the log probabilities summing over transitions
@@ -428,11 +423,9 @@ class HazardMixin:
                 u.index_select(0, idxs),
                 None if x is None else x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params_.alphas[key_to_str(key)],
-                None
-                if self.params_.betas is None
-                else self.params_.betas[key_to_str(key)],
-                *self.model_design.surv[key],
+                self.params.alphas[str(key)],
+                None if self.params.betas is None else self.params.betas[str(key)],
+                *self.model_design.surv_map[key],
             )
 
             # Compute negative log survival
@@ -465,11 +458,9 @@ class HazardMixin:
                 t1,
                 None if data.x is None else data.x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params_.alphas[key_to_str(key)],
-                None
-                if self.params_.betas is None
-                else self.params_.betas[key_to_str(key)],
-                *self.model_design.surv[key],
+                self.params.alphas[str(key)],
+                None if self.params.betas is None else self.params.betas[str(key)],
+                *self.model_design.surv_map[key],
             )
 
             obs_logliks, alts_logliks = self._log_and_cum_hazard(

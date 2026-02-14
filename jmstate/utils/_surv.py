@@ -9,18 +9,6 @@ import torch
 from ..typedefs._defs import BucketData, Trajectory
 
 
-def key_to_str(key: tuple[Any, Any]) -> str:
-    """Converts a key to a string.
-
-    Args:
-        key (tuple[Any, Any]): The key to convert.
-
-    Returns:
-        str: The string representation of the key.
-    """
-    return f"{key[0]}_{key[1]}"
-
-
 def build_buckets(
     trajectories: list[Trajectory],
 ) -> dict[tuple[Any, Any], BucketData]:

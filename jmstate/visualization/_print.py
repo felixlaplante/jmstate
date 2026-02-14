@@ -1,0 +1,65 @@
+from bisect import bisect_left
+
+import torch
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.table import Table
+from rich.text import Text
+from torch.distributions import Normal
+from torch.nn.utils import parameters_to_vector
+
+from ..model._base import MultiStateJointModel
+from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
+
+
+def summary(model: MultiStateJointModel):
+    """Prints a summary of the fitted model.
+
+    This function prints the p-values of the parameters as well as values and
+    standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
+
+    Raises:
+        ValueError: If the model is not fitted.
+    """
+    values = parameters_to_vector(model.params.parameters())
+    stderrs = parameters_to_vector(model.stderr.parameters())
+    zvalues = torch.abs(values / stderrs)
+    pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
+
+    table = Table()
+    table.add_column("Parameter name", justify="left")
+    table.add_column("Value", justify="center")
+    table.add_column("Standard Error", justify="center")
+    table.add_column("z-value", justify="center")
+    table.add_column("p-value", justify="center")
+    table.add_column("Significance level", justify="center")
+
+    i = 0
+    for name, val in model.params.named_parameters():
+        for j in range(val.numel()):
+            code = SIGNIFICANCE_CODES[
+                bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())
+            ]
+
+            table.add_row(
+                f"{name}[{j}]",
+                f"{values[i].item():.3f}",
+                f"{stderrs[i].item():.3f}",
+                f"{zvalues[i].item():.3f}",
+                f"{pvalues[i].item():.3f}",
+                code,
+            )
+            i += 1
+
+    criteria = Text(
+        f"Log-likelihood: {model.loglik_:.3f}\n"
+        f"AIC: {model.aic_:.3f}\n"
+        f"BIC: {model.bic_:.3f}",
+        style="bold cyan",
+    )
+
+    content = Group(table, Rule(style="dim"), criteria, Rule(style="dim"))
+    panel = Panel(content, title="Model Summary", border_style="green", expand=False)
+
+    Console().print(panel)

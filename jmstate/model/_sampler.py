@@ -10,7 +10,7 @@ from ..typedefs._params import ModelParams
 class MCMCMixin:
     """Mixin for MCMC sampling."""
 
-    params_: ModelParams
+    params: ModelParams
     n_chains: int
     init_step_size: float
     adapt_rate: float
@@ -57,7 +57,7 @@ class MCMCMixin:
         """
         return MetropolisHastingsSampler(
             lambda b: self._logpdfs_aux_fn(data, b),
-            torch.zeros(self.n_chains, len(data), self.params_.q.dim),
+            torch.zeros(self.n_chains, len(data), self.params.q.dim),
             self.n_chains,
             self.init_step_size,
             self.adapt_rate,

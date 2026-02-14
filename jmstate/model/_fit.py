@@ -22,7 +22,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
     """Mixin for fitting the model."""
 
     model_design: ModelDesign
-    params_: ModelParams
+    params: ModelParams
     optimizer: torch.optim.Optimizer | None
     n_warmup: int
     n_subsample: int
@@ -92,6 +92,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Args:
             sampler (MetropolisHastingsSampler): The sampler.
             data (CompleteModelData): The data.
+
+        Raises:
+            ValueError: If the optimizer is not initialized.
         """
         if self.optimizer is None:
             raise ValueError("Optimizer is not initialized.")
@@ -153,13 +156,13 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         """
 
         @jacfwd  # type: ignore
-        def _dict_jac_fn(params_dict: dict[str, torch.Tensor], b: torch.Tensor):
-            return functional_call(self, params_dict, args=(data, b))
+        def _dict_jac_fn(paramsdict: dict[str, torch.Tensor], b: torch.Tensor):
+            return functional_call(self, paramsdict, args=(data, b))
 
-        def _jac_fn(params_dict: dict[str, torch.Tensor], b: torch.Tensor):
-            return torch.cat(list(_dict_jac_fn(params_dict, b).values()), dim=-1)  # type: ignore
+        def _jac_fn(paramsdict: dict[str, torch.Tensor], b: torch.Tensor):
+            return torch.cat(list(_dict_jac_fn(paramsdict, b).values()), dim=-1)  # type: ignore
 
-        return torch.zeros(len(data), self.params_.numel()), cast(
+        return torch.zeros(len(data), self.params.numel()), cast(
             Callable[[dict[str, torch.Tensor], torch.Tensor], torch.Tensor], _jac_fn
         )
 
@@ -177,8 +180,8 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
                 function.
             sampler (MetropolisHastingsSampler): The sampler.
         """
-        params_dict = dict(self.named_parameters())
-        mjac += jac_fn(params_dict, sampler.b).detach() / self.n_iter_summary  # type: ignore
+        paramsdict = dict(self.named_parameters())
+        mjac += jac_fn(paramsdict, sampler.b).detach() / self.n_iter_summary  # type: ignore
 
     @staticmethod
     def _compute_fim(mjac: torch.Tensor) -> torch.Tensor:
@@ -202,8 +205,8 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
         """
         logpdf = torch.tensor(0.0)
-        mb = torch.zeros(len(data), self.params_.q.dim)
-        mb2 = torch.zeros(len(data), self.params_.q.dim, self.params_.q.dim)
+        mb = torch.zeros(len(data), self.params.q.dim)
+        mb2 = torch.zeros(len(data), self.params.q.dim, self.params.q.dim)
         return logpdf, mb, mb2
 
     def _update_criteria(
@@ -246,9 +249,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             tuple[float, float, float]: The criteria.
         """
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
-        entropy = 0.5 * (torch.logdet(covs) + self.params_.q.dim).sum().item()
+        entropy = 0.5 * (torch.logdet(covs) + self.params.q.dim).sum().item()
         loglik = logpdf.item() + entropy
-        aic = -2 * loglik + 2 * self.params_.numel()
+        aic = -2 * loglik + 2 * self.params.numel()
         bic = -2 * loglik + torch.logdet(fim).item()
         return loglik, aic, bic
 
@@ -276,7 +279,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             Self: The fitted model.
         """
         data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.params_)
+        data.prepare(self.model_design, self.params)
 
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
@@ -287,7 +290,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         ):
             self._step(sampler, data)
             self.vector_params_history_.append(
-                parameters_to_vector(self.params_.parameters()).detach()
+                parameters_to_vector(self.params.parameters()).detach()
             )
             if self._is_converged():
                 break
@@ -319,7 +322,5 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             logpdf, mb, mb2, self.fim_
         )
 
-        # Restore to default state
-        self.params_.requires_grad_(False)
         self._cache.clear()
         return self

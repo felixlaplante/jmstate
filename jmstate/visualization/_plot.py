@@ -59,14 +59,14 @@ def plot_params_history(
         raise ValueError("Only one parameter history provided")
 
     # Get the names
-    named_params_dict = dict(model.params_.named_parameters())
+    named_params_dict = dict(model.params.named_parameters())
     nsubplots = len(named_params_dict)
     ncols = math.ceil(math.sqrt(nsubplots))
     nrows = math.ceil(nsubplots / ncols)
 
     # Check alignment between model params and true params
     if true_params is not None:
-        check_params_align(model.params_, true_params)
+        check_params_align(model.params, true_params)
         named_true_params_dict = dict(true_params.named_parameters())
 
     # Create subplots
@@ -75,9 +75,9 @@ def plot_params_history(
 
     params_matrix_history = torch.stack(model.vector_params_history_)
     i = 0
-    for ax, (name, value) in zip(axes, named_params_dict.items(), strict=True):
-        history = params_matrix_history[:, i : (i := i + value.numel())]
-        lines = ax.plot(history, label=[f"{name}[{j}]" for j in range(value.numel())])
+    for ax, (name, val) in zip(axes, named_params_dict.items(), strict=True):
+        history = params_matrix_history[:, i : (i := i + val.numel())]
+        lines = ax.plot(history, label=[f"{name}[{j}]" for j in range(val.numel())])
 
         if true_params is not None:
             for line, p in zip(

@@ -15,7 +15,7 @@ class LongitudinalMixin:
     """
 
     model_design: ModelDesign
-    params_: ModelParams
+    params: ModelParams
 
     def __init__(self, *args: Any, **kwargs: Any):
         """Initializes the longitudinal mixin."""
@@ -35,7 +35,7 @@ class LongitudinalMixin:
         predicted = self.model_design.regression_fn(data.valid_t, psi)
         diffs = data.valid_y.addcmul(predicted, data.valid_mask, value=-1.0)
 
-        R_inv_cholesky, R_nlog_eigvals = self.params_.r._inv_cholesky_and_log_eigvals  # type: ignore
+        R_inv_cholesky, R_nlog_eigvals = self.params.r._inv_cholesky_and_log_eigvals  # type: ignore
         R_quad_forms = (diffs @ R_inv_cholesky).pow(2).sum(dim=(-2, -1))
         R_norm_factor = data.n_valid @ (R_nlog_eigvals - LOG_TWO_PI)
 

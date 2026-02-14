@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+from sklearn.base import BaseEstimator  # type: ignore
 from sklearn.utils._param_validation import validate_params  # type: ignore
 from sklearn.utils.validation import (  # type: ignore
     assert_all_finite,  # type: ignore
@@ -17,7 +18,7 @@ from ._params import ModelParams
 
 # Dataclasses
 @dataclass
-class ModelDesign:
+class ModelDesign(BaseEstimator):
     """Class containing model design.
 
     For all functions, please use broadcasting as much as possible. It is almost always
@@ -42,7 +43,7 @@ class ModelDesign:
             to be careful. The last dimension is the dimension of the response variable;
             second last is the repeated measurements; third last is individual based;
             possible fourth last is for parallelization of the MCMC sampler.
-        surv (Mapping[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]): A mapping of
+        surv_map (Mapping[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]): A mapping of
             transition keys that can be typed however you want. The tuple contains a
             base hazard function in log scale, as well as a link function that shares
             the same requirements as `regression_fn`. Base hazard function is expected
@@ -56,19 +57,19 @@ class ModelDesign:
         >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
         >>> individual_effects_fn = lambda gamma, x, b: gamma + b
         >>> regression_fn = sigmoid
-        >>> surv = {("alive", "dead"): (Exponential(1.2), sigmoid)}
+        >>> surv_map = {("alive", "dead"): (Exponential(1.2), sigmoid)}
     """
 
     individual_effects_fn: IndividualEffectsFn
     regression_fn: RegressionFn
-    surv: Mapping[
+    surv_map: Mapping[
         tuple[Any, Any],
         tuple[BaseHazardFn, LinkFn],
     ]
 
 
 @dataclass
-class ModelData:
+class ModelData(BaseEstimator):
     r"""Dataclass containing learnable multistate joint model data.
 
     Note `y` is expected to be a 3D tensor of dimension :math:`(n, m, d)` if there are
@@ -76,10 +77,10 @@ class ModelData:
     :math:`\mathbb{R}^d`. Its values should not be all NaNs.
 
     Raises:
-        ValueError: If the trajectories are not sorted by time.
-        ValueError: If the censoring time is lower than the maximum transition time.
-        ValueError: If any of the inputs contain inf values.
-        ValueError: If any of the inputs contain NaN values except `y`.
+        ValueError: If some trajectory is empty.
+        ValueError: If some trajectory is not sorted.
+        ValueError: If some trajectory is not compatible with the censoring times.
+        ValueError: If any of the inputs contain inf or NaN values except `y`.
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
@@ -115,8 +116,9 @@ class ModelData:
         """Runs the post init conversions.
 
         Raises:
-            ValueError: If the trajectories are not sorted by time.
-            ValueError: If the censoring time is lower than the maximum transition time.
+            ValueError: If some trajectory is empty.
+            ValueError: If some trajectory is not sorted.
+            ValueError: If some trajectory is not compatible with the censoring times.
             ValueError: If any of the inputs contain inf or NaN values except `t` and
                 `y`.
             ValueError: If the size is not consistent between inputs.
@@ -190,19 +192,19 @@ class CompleteModelData(ModelData):
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_all_buckets(
-            self.trajectories, self.c, tuple(model_design.surv.keys())
+            self.trajectories, self.c, tuple(model_design.surv_map.keys())
         )
 
 
 @dataclass
-class SampleData:
+class SampleData(BaseEstimator):
     """Dataclass for data used in sampling.
 
     Raises:
-        ValueError: If the trajectories are not sorted by time.
-        ValueError: If the censoring time is lower than the maximum transition time.
-        ValueError: If any of the inputs contain inf values.
-        ValueError: If any of the inputs contain NaN values.
+        ValueError: If some trajectory is empty.
+        ValueError: If some trajectory is not sorted.
+        ValueError: If some trajectory is not compatible with the censoring times.
+        ValueError: If any of the inputs contain inf or NaN values.
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
@@ -236,10 +238,10 @@ class SampleData:
         """Runs the post init conversions and checks.
 
         Raises:
-            ValueError: If the trajectories are not sorted by time.
-            ValueError: If the censoring time is lower than the maximum transition time.
-            ValueError: If any of the inputs contain inf values.
-            ValueError: If any of the inputs contain NaN values.
+            ValueError: If some trajectory is empty.
+            ValueError: If some trajectory is not sorted.
+            ValueError: If some trajectory is not compatible with the censoring times.
+            ValueError: If any of the inputs contain inf or NaN values.
             ValueError: If the size is not consistent between inputs.
         """
         validate_params(

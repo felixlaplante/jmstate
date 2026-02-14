@@ -2,6 +2,7 @@ from numbers import Integral
 from typing import Any, Self, cast
 
 import torch
+from sklearn.base import BaseEstimator  # type: ignore
 from sklearn.utils._param_validation import (  # type: ignore
     Interval,  # type: ignore
     StrOptions,  # type: ignore
@@ -12,10 +13,9 @@ from torch import nn
 
 from ..utils._checks import check_matrix_dim
 from ..utils._linalg import flat_from_log_cholesky, log_cholesky_from_flat
-from ..utils._surv import key_to_str
 
 
-class CovParam(nn.Module):
+class CovParam(BaseEstimator, nn.Module):
     r"""nn.Module containing covariance parameters.
 
     Note three types of covariance matrices parametrization are provided: scalar
@@ -128,7 +128,7 @@ class CovParam(nn.Module):
         return L, log_eigvals
 
 
-class ModelParams(nn.Module):
+class ModelParams(BaseEstimator, nn.Module):
     r"""nn.Module containing model parameters.
 
     Note three types of covariance matrices parametrization are provided: scalar
@@ -219,11 +219,11 @@ class ModelParams(nn.Module):
         self.gamma = None if gamma is None else nn.Parameter(gamma)
         self.q = q
         self.r = r
-        self.alphas = nn.ParameterDict({key_to_str(k): v for k, v in alphas.items()})
+        self.alphas = nn.ParameterDict({str(key): val for key, val in alphas.items()})
         self.betas = (
             None
             if betas is None
-            else nn.ParameterDict({key_to_str(k): v for k, v in betas.items()})
+            else nn.ParameterDict({str(key): val for key, val in betas.items()})
         )
         self.extra = None if extra is None else nn.ParameterDict(extra)
 
