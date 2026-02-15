@@ -67,7 +67,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
         self.n_samples_summary = n_samples_summary
 
     def forward(self, data: CompleteModelData, b: torch.Tensor) -> torch.Tensor:
-        """Computes the mean log pdfs for drawings of the random effects `b`.
+        """Computes the mean log pdfs for the random effects `b`.
 
         This is used to compute the Fisher Information Matrix, as
         `torch.func.functional_call` requires the function to implement a `forward`
@@ -269,12 +269,23 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
         r"""Fits the model to the data.
 
         It leverages the Fisher identity and stochastic gradient algorithm coupled
-        with a MCMC (Metropolis-Hastings) sampler:
+        with a MCMC (Metropolis-Hastings) sampler. The Fisher identity states that
 
         .. math::
             \nabla_\theta \log \mathcal{L}(\theta ; x) = \mathbb{E}_{b \sim p(\cdot
             \mid x, \theta)} \left( \nabla_\theta \log \mathcal{L}(\theta ; x, b)
             \right).
+
+        Many methods exist for computing the Fisher Information Matrix in latent
+        variable models. In particular, this class leverages the expected Fisher
+        Information Matrix using the identity
+
+        .. math::
+            \mathcal{I}_n(\theta) = \sum_{i=1}^n \mathbb{E}_{b \sim p(\cdot \mid x_i,
+            \theta)} \left(\nabla \log \mathcal{L}(\theta ; x_i, b) \nabla \log
+            \mathcal{L}(\theta ; x_i, b)^T \right).
+
+        For more information, see ISSN 2824-7795.
 
         Args:
             data (ModelData): The data to fit the model to.

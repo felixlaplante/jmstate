@@ -86,16 +86,16 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log hazard.
         """
-        t0, t1, x, psi, alpha, beta, base_hazard_fn, link_fn = hazard_info
+        t0, t1, x, psi, alpha, beta, log_base_hazard_fn, link_fn = hazard_info
 
         # Compute baseline hazard
         def _base_create():
-            return base_hazard_fn(t0, t1)
+            return log_base_hazard_fn(t0, t1)
 
         if self.cache_limit != 0:
             try:
                 key = (
-                    *hazard_info.base_hazard_fn.key,
+                    *hazard_info.log_base_hazard_fn.key,
                     xxh3_64_intdigest(t0.detach().contiguous().numpy()),  # type: ignore
                     xxh3_64_intdigest(t1.detach().contiguous().numpy()),  # type: ignore
                 )

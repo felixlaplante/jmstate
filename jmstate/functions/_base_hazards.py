@@ -5,7 +5,7 @@ import torch
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from torch import nn
 
-from ..typedefs._defs import LOG_TWO_PI, BaseHazardFn, ClockMethod
+from ..typedefs._defs import LOG_TWO_PI, ClockMethod, LogBaseHazardFn
 
 
 def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
@@ -58,7 +58,7 @@ def clock_reset(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
     return t1 - t0
 
 
-class Exponential(BaseHazardFn):
+class Exponential(LogBaseHazardFn):
     r"""Implements the Exponential base hazard.
 
     Exponential base hazard is time independent.
@@ -119,7 +119,7 @@ class Exponential(BaseHazardFn):
         return self.log_lmda.exp()
 
 
-class Weibull(BaseHazardFn):
+class Weibull(LogBaseHazardFn):
     r"""Implements the Weibull base hazard.
 
     Weibull base hazard is time dependent.
@@ -198,7 +198,7 @@ class Weibull(BaseHazardFn):
         return self.log_lmda.exp()
 
 
-class Gompertz(BaseHazardFn):
+class Gompertz(LogBaseHazardFn):
     r"""Implements the Gompertz base hazard.
 
     Gompertz base hazard is time dependent.
@@ -265,7 +265,7 @@ class Gompertz(BaseHazardFn):
         return self.log_a.exp()
 
 
-class LogNormal(BaseHazardFn):
+class LogNormal(LogBaseHazardFn):
     r"""Implements the log normal base hazard.
 
     Log normal base hazard is time dependent.
@@ -313,7 +313,7 @@ class LogNormal(BaseHazardFn):
                 Defaults to clock_reset.
 
         Returns:
-            BaseHazardFn: Returns the log normal base hazard function.
+            LogBaseHazardFn: Returns the log normal base hazard function.
         """
         super().__init__()  # type: ignore
 

@@ -12,7 +12,13 @@ from sklearn.utils.validation import (  # type: ignore
 
 from ..utils._checks import check_trajectories
 from ..utils._surv import build_all_buckets
-from ._defs import BaseHazardFn, IndividualEffectsFn, LinkFn, RegressionFn, Trajectory
+from ._defs import (
+    IndividualEffectsFn,
+    LinkFn,
+    LogBaseHazardFn,
+    RegressionFn,
+    Trajectory,
+)
 from ._params import ModelParams
 
 
@@ -43,18 +49,17 @@ class ModelDesign(BaseEstimator):
             to be careful. The last dimension is the dimension of the response variable;
             second last is the repeated measurements; third last is individual based;
             possible fourth last is for parallelization of the MCMC sampler.
-        surv_map (Mapping[tuple[Any, Any], tuple[BaseHazardFn, LinkFn]]): A mapping of
-            transition keys that can be typed however you want. The tuple contains a
-            base hazard function in log scale, as well as a link function that shares
-            the same requirements as `regression_fn`. Base hazard function is expected
-            to be pure if caching is enabled, otherwise it will lead to false
-            computations.
+        surv_map (Mapping[tuple[Any, Any], tuple[LogBaseHazardFn, LinkFn]]): A mapping
+            of transition keys that can be typed however you want. The tuple contains a
+            log base hazard function, as well as a link function that shares the same
+            requirements as `regression_fn`. Log base hazard function is expected to be
+            pure if caching is enabled, otherwise it will lead to false computations.
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-        >>>     scale, offset, slope = psi.chunk(3, dim=-1)
-        >>>     # Fully broadcasted
-        >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
+        ...     scale, offset, slope = psi.chunk(3, dim=-1)
+        ...     # Fully broadcasted
+        ...     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
         >>> individual_effects_fn = lambda gamma, x, b: gamma + b
         >>> regression_fn = sigmoid
         >>> surv_map = {("alive", "dead"): (Exponential(1.2), sigmoid)}
@@ -64,7 +69,7 @@ class ModelDesign(BaseEstimator):
     regression_fn: RegressionFn
     surv_map: Mapping[
         tuple[Any, Any],
-        tuple[BaseHazardFn, LinkFn],
+        tuple[LogBaseHazardFn, LinkFn],
     ]
 
 

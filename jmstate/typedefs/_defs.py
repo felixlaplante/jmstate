@@ -56,9 +56,9 @@ class RegressionFn(Protocol):
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-        >>>     scale, offset, slope = psi.chunk(3, dim=-1)
-        >>>     # Fully broadcasted
-        >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
+        ...     scale, offset, slope = psi.chunk(3, dim=-1)
+        ...     # Fully broadcasted
+        ...     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
         >>> regression_fn = sigmoid
     """
 
@@ -85,9 +85,9 @@ class LinkFn(Protocol):
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-        >>>     scale, offset, slope = psi.chunk(3, dim=-1)
-        >>>     # Fully broadcasted
-        >>>     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
+        ...     scale, offset, slope = psi.chunk(3, dim=-1)
+        ...     # Fully broadcasted
+        ...     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
         >>> link_fn = sigmoid
     """
 
@@ -109,16 +109,17 @@ class ClockMethod(Protocol):
 
 
 # Abstract classes
-class BaseHazardFn(nn.Module, ABC):
-    """The base hazard base class.
+class LogBaseHazardFn(nn.Module, ABC):
+    """The log base hazard base class.
 
     This is not a protocol because caching is done, and therefore a key is required.
     Making this a `nn.Module`, one can check the value of the parameters and store their
     hashed values at the same time as the
 
-    Note the base hazard function is in log scale, and expects a former transition time
-    column vector `t0` as well as other times points at which the base hazard is to be
-    computed. `t1` is a matrix with the same number of rows as `t0`.
+    Note that the log base hazard function is in log scale, and expects a former
+    transition time column vector `t0` as well as other times points at which the log
+    base hazard is to be computed. `t1` is a matrix with the same number of rows as
+    `t0`.
 
     Implement a `forward` and do not forget the `super().__init__()` when declaring your
     own class.
@@ -172,7 +173,7 @@ class HazardInfo(NamedTuple):
         psi (torch.Tensor): The individual parameters.
         alpha (torch.Tensor): The baseline hazard parameters.
         beta (torch.Tensor | None): The regression parameters.
-        base_hazard_fn (BaseHazardFn): The base hazard function.
+        log_base_hazard_fn (LogBaseHazardFn): The log base hazard function.
         link_fn (LinkFn): The link function.
     """
 
@@ -182,7 +183,7 @@ class HazardInfo(NamedTuple):
     psi: torch.Tensor
     alpha: torch.Tensor
     beta: torch.Tensor | None
-    base_hazard_fn: BaseHazardFn
+    log_base_hazard_fn: LogBaseHazardFn
     link_fn: LinkFn
 
 

@@ -215,6 +215,25 @@ class ModelParams(BaseEstimator, UniqueParams):
         betas (nn.ParameterDict | None): The covariates parameters.
         extra (nn.ParameterDict | None): A dictionary of parameters that is
             passed in addition to other mandatory parameters.
+
+    Examples:
+        >>> # To create a model with simple parameters
+        >>> init_params = ModelParams(
+        ...     torch.zeros_like(gamma),
+        ...     CovParam.from_cov(torch.eye(Q.size(0)), method="diag"),
+        ...     CovParam.from_cov(torch.eye(R.size(0)), method="ball"),
+        ...     {k: torch.zeros_like(v) for k, v in alphas.items()},
+        ...     {k: torch.zeros_like(v) for k, v in betas.items()},
+        ... )
+        >>> # To create a model with shared parameters
+        >>> alpha_shared = torch.zeros_like(list(alphas.values())[0])
+        >>> init_params_shared = ModelParams(
+        ...     torch.zeros_like(gamma),
+        ...     CovParam.from_cov(torch.eye(Q.size(0)), method="diag"),
+        ...     CovParam.from_cov(torch.eye(R.size(0)), method="ball"),
+        ...     {k: alpha_shared for k, v in alphas.items()},
+        ...     {k: torch.zeros_like(v) for k, v in betas.items()},
+        ... )
     """
 
     gamma: torch.Tensor | None

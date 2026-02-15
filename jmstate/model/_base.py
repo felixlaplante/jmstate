@@ -19,7 +19,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     Please note this class encompasses both the linear joint model and the standard
     joint model, but also allows for the modeling of multiple states assuming a semi
     Markov property. The model is defined by a set of longitudinal and hazard
-    functions, which are parameterized by a set of parameters.
+    functions in `ModelDesign`, which are parameterized by a set of parameters in
+    `ModelParams`. Parameters may also be shared (see the documentation).
 
     The model is fit using a stochastic gradient ascent algorithm, and the parameters
     are sampled using a Metropolis-Hastings algorithm.
@@ -249,7 +250,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
         They can be used to draw confidence intervals. The standard errors are computed
         using the diagonal of the inverse of the inverse Fisher Information Matrix at
-        the MLE:
+        the MLE
 
         .. math::
             \mathrm{stderr} = \sqrt{\operatorname{diag}\left( \hat{\mathcal{I}}_n

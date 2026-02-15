@@ -20,7 +20,7 @@ def summary(model: MultiStateJointModel):
     standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
 
     Raises:
-        RuntimeError: If the model is not fitted.
+        ValueError: If the model is not fitted.
     """
     vector = parameters_to_vector(model.params.parameters())
     stderr = model.stderr
