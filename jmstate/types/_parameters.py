@@ -66,18 +66,18 @@ class CovParameters(BaseEstimator, nn.Module):
     This is achieved through a log Cholesky parametrization of the inverse covariance
     matrix. Formally, consider :math:`P = \Sigma^{-1}` the precision matrix and let
     :math:`L` be the Cholesky factor with positive diagonal elements, the log Cholseky
-    is given by:
+    is given by
 
     .. math::
         \tilde{L}_{ij} = L_{ij}, \, i > j,
 
-    and:
+    and
 
     .. math::
         \tilde{L}_{ii} = \log L_{ii}.
 
     This is very numerically stable and fast, as it doesn't require inverting the
-    matrix when computing quadratic forms. The log determinant is then equal to:
+    matrix when computing quadratic forms. The log determinant is then equal to
 
     .. math::
 
