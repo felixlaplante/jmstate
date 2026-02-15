@@ -1,4 +1,4 @@
-import math
+from math import ceil
 from numbers import Integral
 from typing import Any, cast
 
@@ -118,7 +118,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         # Initialize variables
         y_pred: list[torch.Tensor] = []
-        n_iter = math.ceil(n_samples / self.n_chains)
+        n_iter = ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
             init_param_vector = parameters_to_vector(self.params.parameters())
@@ -212,7 +212,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         # Initialize variables
         surv_logps_pred: list[torch.Tensor] = []
-        n_iter = math.ceil(n_samples / self.n_chains)
+        n_iter = ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
             init_param_vector = parameters_to_vector(self.params.parameters())
@@ -297,7 +297,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
         data.prepare(self.model_design, self.params)
 
         trajectories_pred: list[list[Trajectory]] = []
-        n_iter = math.ceil(n_samples / self.n_chains)
+        n_iter = ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
             init_param_vector = parameters_to_vector(self.params.parameters())

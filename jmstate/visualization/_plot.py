@@ -75,7 +75,7 @@ def plot_params_history(
 
     params_matrix_history = torch.stack(model.vector_params_history_)
     i = 0
-    for ax, (name, val) in zip(axes, named_params_dict.items(), strict=True):
+    for ax, (name, val) in zip(axes, named_params_dict.items(), strict=False):
         history = params_matrix_history[:, i : (i := i + val.numel())]
         lines = ax.plot(history, label=[f"{name}[{j}]" for j in range(val.numel())])
 

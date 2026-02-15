@@ -20,11 +20,11 @@ def summary(model: MultiStateJointModel):
     standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
 
     Raises:
-        ValueError: If the model is not fitted.
+        RuntimeError: If the model is not fitted.
     """
-    values = parameters_to_vector(model.params.parameters())
-    stderrs = parameters_to_vector(model.stderr.parameters())
-    zvalues = torch.abs(values / stderrs)
+    vector = parameters_to_vector(model.params.parameters())
+    stderr = model.stderr
+    zvalues = torch.abs(vector / stderr)
     pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
 
     table = Table()
@@ -44,8 +44,8 @@ def summary(model: MultiStateJointModel):
 
             table.add_row(
                 f"{name}[{j}]",
-                f"{values[i].item():.3f}",
-                f"{stderrs[i].item():.3f}",
+                f"{vector[i].item():.3f}",
+                f"{stderr[i].item():.3f}",
                 f"{zvalues[i].item():.3f}",
                 f"{pvalues[i].item():.3f}",
                 code,

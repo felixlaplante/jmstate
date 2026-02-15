@@ -6,10 +6,14 @@ Model
    :no-undoc-members:
    :no-index:
 
-.. autosummary::
-   :toctree: generated/
-   :recursive:
-
-
-   MultiStateJointModel
-
+.. autoclass:: jmstate.model.MultiStateJointModel
+   :members: 
+      __init__,
+      forward,
+      compute_surv_logps,
+      sample_trajectories,
+      fit,
+      stderr,
+      predict_y,
+      predict_surv_logps,
+      predict_trajectories

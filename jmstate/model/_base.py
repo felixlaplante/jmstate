@@ -1,4 +1,3 @@
-from copy import deepcopy
 from numbers import Integral, Real
 from typing import cast
 
@@ -6,7 +5,7 @@ import torch
 from sklearn.base import BaseEstimator  # type: ignore
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from sklearn.utils.validation import check_is_fitted  # type: ignore
-from torch.nn.utils import parameters_to_vector, vector_to_parameters
+from torch.nn.utils import parameters_to_vector
 
 from ..typedefs._data import CompleteModelData, ModelDesign
 from ..typedefs._params import ModelParams
@@ -42,15 +41,15 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     acceptance rate, `n_warmup` to specify the number of warmup iterations, and
     `n_subsample` to specify the number of subsamples.
 
-    For fitting, use `n_iter_fit` to specify the number of iterations for stochastic
-    gradient ascent, `n_iter_summary` to specify the number of iterations to compute
-    Fisher Information Matrix and criteria, `tol` to specify the tolerance for the R2
-    convergence, and `window_size` to specify the window size for the R2 convergence.
-    The longer, the more stable the R2 convergence. The default value seems a sweet
-    spot, and the stopping criterion is scale-agnostic. Any optimizer can be used,
-    through the `optimizer` parameter. If set to `None`, then fitting is not possible.
-    Recommended to use `torch.optim.Adam` with a learning rate of 0.1 to 1.0. A value
-    of 0.5 is a good starting point.
+    For fitting, use `max_iter_fit` to specify the maximum number of iterations for
+    stochastic gradient ascent, `n_samples_summary` to specify the number of samples to
+    compute Fisher Information Matrix and model selection criteria, `tol` to specify the
+    tolerance for the R2 convergence, and `window_size` to specify the window size for
+    the R2 convergence. The longer, the more stable the R2 convergence. The default
+    value seems a sweet spot, and the stopping criterion is scale-agnostic. Any
+    optimizer can be through the `optimizer` parameter. If set to `None`, then fitting
+    is not possible. Recommended to use `torch.optim.Adam` with a learning rate of
+    0.1 to 1.0. A value of 0.5 is a good starting point.
 
     For printing, use `verbose` to specify whether to print the progress of the model
     fitting and predicting.
@@ -70,11 +69,12 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         target_accept_rate (float): Mean acceptance target.
         n_warmup (int): The number of warmup iterations for the MCMC sampler.
         n_subsample (int): The number of subsamples for the MCMC sampler.
-        n_iter_fit (int): The number of iterations for stochastic gradient ascent.
-        n_iter_summary (int): The number of iterations to compute Fisher Information
-            Matrix and criteria.
+        max_iter_fit (int): The maximum number of iterations for stochastic gradient
+            ascent.
         tol (float): The tolerance for the R2 convergence.
         window_size (int): The window size for the R2 convergence.
+        n_samples_summary (int): The number of samples used to compute Fisher
+            Information Matrix and model selection criteria.
         verbose (bool): Whether to print the progress of the model fitting.
         params_vector_history_ (list[torch.Tensor]): The history of model parameters.
         fim_ (torch.Tensor | None): The Fisher Information Matrix.
@@ -104,10 +104,10 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     target_accept_rate: float
     n_warmup: int
     n_subsample: int
-    n_iter_fit: int
-    n_iter_summary: int
+    max_iter_fit: int
     tol: float
     window_size: int
+    n_samples_summary: int
     verbose: bool
     params_vector_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
@@ -129,10 +129,10 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             "target_accept_rate": [Interval(Real, 0, 1, closed="neither")],
             "n_warmup": [Interval(Integral, 0, None, closed="left")],
             "n_subsample": [Interval(Integral, 0, None, closed="left")],
-            "n_iter_fit": [Interval(Integral, 1, None, closed="left")],
-            "n_iter_summary": [Interval(Integral, 1, None, closed="left")],
+            "max_iter_fit": [Interval(Integral, 1, None, closed="left")],
             "tol": [Interval(Real, 0, 1, closed="both")],
             "window_size": [Interval(Integral, 1, None, closed="left")],
+            "n_samples_summary": [Interval(Integral, 1, None, closed="left")],
             "verbose": [bool],
         },
         prefer_skip_nested_validation=True,
@@ -152,10 +152,10 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         target_accept_rate: float = 0.234,
         n_warmup: int = 100,
         n_subsample: int = 10,
-        n_iter_fit: int = 500,
-        n_iter_summary: int = 100,
+        max_iter_fit: int = 500,
         tol: float = 0.1,
         window_size: int = 100,
+        n_samples_summary: int = 500,
         verbose: bool = True,
     ):
         """Initializes the joint model based on the user defined design.
@@ -182,13 +182,13 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
                 sampler. Defaults to 100.
             n_subsample (int, optional): The number of subsamples for the MCMC sampler.
                 Defaults to 10.
-            n_iter_fit (int, optional): The number of iterations for stochastic
-                gradient ascent. Defaults to 500.
-            n_iter_summary (int, optional): The number of iterations to compute Fisher
-                Information Matrix and criteria. Defaults to 100.
+            max_iter_fit (int, optional): The maximum number of iterations for
+                stochastic gradient ascent. Defaults to 500.
             tol (float, optional): The tolerance for the convergence. Defaults to 0.1.
             window_size (int, optional): The window size for the convergence. Defaults
                 to 100.
+            n_samples_summary (int, optional): The number of samples used to compute
+                Fisher Information Matrix and model selection criteria. Defaults to 500.
             verbose (bool, optional): Whether to print the progress of the model
                 fitting. Defaults to True.
         """
@@ -202,10 +202,10 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             init_step_size=init_step_size,
             adapt_rate=adapt_rate,
             target_accept_rate=target_accept_rate,
-            n_iter_fit=n_iter_fit,
-            n_iter_summary=n_iter_summary,
+            max_iter_fit=max_iter_fit,
             tol=tol,
             window_size=window_size,
+            n_samples_summary=n_samples_summary,
         )
 
         # Store model components
@@ -213,8 +213,6 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         self.params = params
         self.n_warmup = n_warmup
         self.n_subsample = n_subsample
-        self.n_iter_fit = n_iter_fit
-        self.n_iter_summary = n_iter_summary
         self.verbose = verbose
         self.vector_params_history_ = [
             parameters_to_vector(self.params.parameters()).detach()
@@ -246,8 +244,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         return logpdfs, psi
 
     @property
-    def stderr(self) -> ModelParams:
-        r"""Returns the standard error of the parameters as a `ModelParams` object.
+    def stderr(self) -> torch.Tensor:
+        r"""Returns the estimated standard error of the parameters as a vector.
 
         They can be used to draw confidence intervals. The standard errors are computed
         using the diagonal of the inverse of the inverse Fisher Information Matrix at
@@ -261,13 +259,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             ValueError: If the model is not fitted.
 
         Returns:
-            ModelParams: The standard error in the same format as the parameters.
+            torch.Tensor: The estimated standard error as a vector.
         """
         check_is_fitted(self, "fim_")
 
-        params_copied = deepcopy(self.params)
-        vector_to_parameters(
-            cast(torch.Tensor, self.fim_).inverse().diag().sqrt(),
-            params_copied.parameters(),
-        )
-        return params_copied
+        return cast(torch.Tensor, self.fim_).inverse().diag().sqrt()

@@ -1,16 +1,16 @@
 from collections.abc import Callable
+from math import ceil
 from typing import Any, Self, cast
 from warnings import warn
 
 import torch
 from sklearn.utils._param_validation import validate_params  # type: ignore
-from torch import nn
 from torch.func import functional_call, jacfwd  # type: ignore
 from torch.nn.utils import parameters_to_vector
 from tqdm import trange
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
-from ..typedefs._params import ModelParams
+from ..typedefs._params import ModelParams, UniqueParams
 from ..utils._cache import Cache
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
@@ -18,7 +18,7 @@ from ._prior import PriorMixin
 from ._sampler import MCMCMixin, MetropolisHastingsSampler
 
 
-class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module):
+class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniqueParams):
     """Mixin for fitting the model."""
 
     model_design: ModelDesign
@@ -26,10 +26,10 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
     optimizer: torch.optim.Optimizer | None
     n_warmup: int
     n_subsample: int
-    n_iter_fit: int
-    n_iter_summary: int
+    max_iter_fit: int
     tol: float
     window_size: int
+    n_samples_summary: int
     verbose: bool
     vector_params_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
@@ -41,10 +41,10 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
     def __init__(
         self,
         optimizer: torch.optim.Optimizer | None,
-        n_iter_fit: int,
-        n_iter_summary: int,
+        max_iter_fit: int,
         tol: float,
         window_size: int,
+        n_samples_summary: int,
         *args: Any,
         **kwargs: Any,
     ):
@@ -52,18 +52,19 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
         Args:
             optimizer (torch.optim.Optimizer): The optimizer.
-            n_iter_fit (int): The number of iterations for fitting.
-            n_iter_summary (int): The number of iterations for summary.
+            max_iter_fit (int): The maximum number of iterations for fitting.
             tol (float): The tolerance for the convergence.
             window_size (int): The window size for the convergence.
+            n_samples_summary (int): The number of samples used to compute Fisher
+                Information Matrix and model selection criteria.
         """
         super().__init__(*args, **kwargs)
 
         self.optimizer = optimizer
-        self.n_iter_fit = n_iter_fit
-        self.n_iter_summary = n_iter_summary
+        self.max_iter_fit = max_iter_fit
         self.tol = tol
         self.window_size = window_size
+        self.n_samples_summary = n_samples_summary
 
     def forward(self, data: CompleteModelData, b: torch.Tensor) -> torch.Tensor:
         """Computes the mean log pdfs for drawings of the random effects `b`.
@@ -132,7 +133,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             y_centered = Y - Y.mean(dim=0)
             num = (i_centered @ y_centered) ** 2
             den = i_centered.pow(2).sum() * y_centered.pow(2).sum(dim=0)
-            return num / den
+            return (num / den).nan_to_num()
 
         if len(self.vector_params_history_) < self.window_size:
             return False
@@ -156,11 +157,11 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         """
 
         @jacfwd  # type: ignore
-        def _dict_jac_fn(paramsdict: dict[str, torch.Tensor], b: torch.Tensor):
-            return functional_call(self, paramsdict, args=(data, b))
+        def _dict_jac_fn(params_dict: dict[str, torch.Tensor], b: torch.Tensor):
+            return functional_call(self, params_dict, args=(data, b))
 
-        def _jac_fn(paramsdict: dict[str, torch.Tensor], b: torch.Tensor):
-            return torch.cat(list(_dict_jac_fn(paramsdict, b).values()), dim=-1)  # type: ignore
+        def _jac_fn(params_dict: dict[str, torch.Tensor], b: torch.Tensor):
+            return torch.cat(list(_dict_jac_fn(params_dict, b).values()), dim=-1)  # type: ignore
 
         return torch.zeros(len(data), self.params.numel()), cast(
             Callable[[dict[str, torch.Tensor], torch.Tensor], torch.Tensor], _jac_fn
@@ -180,11 +181,10 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
                 function.
             sampler (MetropolisHastingsSampler): The sampler.
         """
-        paramsdict = dict(self.named_parameters())
-        mjac += jac_fn(paramsdict, sampler.b).detach() / self.n_iter_summary  # type: ignore
+        params_dict = dict(self.named_parameters())
+        mjac += jac_fn(params_dict, sampler.b).detach()  # type: ignore
 
-    @staticmethod
-    def _compute_fim(mjac: torch.Tensor) -> torch.Tensor:
+    def _compute_fim(self, mjac: torch.Tensor) -> torch.Tensor:
         """Computes the Fisher Information Matrix.
 
         Args:
@@ -193,6 +193,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Returns:
             torch.Tensor: The Fisher Information Matrix.
         """
+        mjac /= ceil(self.n_samples_summary / self.n_chains)
         return mjac.T @ mjac
 
     def _init_criteria(self, data: CompleteModelData):
@@ -224,11 +225,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             mb2 (torch.Tensor): The mean of squared b.
             sampler (MetropolisHastingsSampler): The sampler.
         """
-        logpdf += sampler.logpdfs.mean() / self.n_iter_summary
-        mb += sampler.b.mean(dim=0) / self.n_iter_summary
-        mb2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b) / (
-            self.n_iter_summary * sampler.n_chains
-        )
+        logpdf += sampler.logpdfs.mean()
+        mb += sampler.b.mean(dim=0)
+        mb2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b)
 
     def _compute_criteria(
         self,
@@ -248,6 +247,11 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Returns:
             tuple[float, float, float]: The criteria.
         """
+        n_iter = ceil(self.n_samples_summary / self.n_chains)
+        logpdf /= n_iter
+        mb /= self.n_chains * n_iter
+        mb2 /= self.n_chains * n_iter
+
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
         entropy = 0.5 * (torch.logdet(covs) + self.params.q.dim).sum().item()
         loglik = logpdf.item() + entropy
@@ -286,7 +290,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
         # Main fitting loop
         for _ in trange(
-            self.n_iter_fit, desc="Fitting joint model", disable=not self.verbose
+            self.max_iter_fit, desc="Fitting joint model", disable=not self.verbose
         ):
             self._step(sampler, data)
             self.vector_params_history_.append(
@@ -307,8 +311,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         logpdf, mb, mb2 = self._init_criteria(data)
 
         # FIM and Criteria loop
+        n_iter = ceil(self.n_samples_summary / self.n_chains)
         for _ in trange(
-            self.n_iter_summary,
+            n_iter,
             desc="Computing FIM and Model Selection Criteria",
             disable=not self.verbose,
         ):

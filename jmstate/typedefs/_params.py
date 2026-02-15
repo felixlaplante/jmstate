@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from numbers import Integral
 from typing import Any, Self, cast
 
@@ -15,8 +16,50 @@ from ..utils._checks import check_matrix_dim
 from ..utils._linalg import flat_from_log_cholesky, log_cholesky_from_flat
 
 
+class UniqueParams(nn.Module):
+    """`nn.Module` that has unique parameters."""
+
+    def parameters(self, recurse: bool = True) -> Iterator[nn.Parameter]:
+        """Return an iterator over the unique parameters.
+
+        Args:
+            recurse (bool, optional): Whether to recurse into submodules. Defaults to
+                True.
+
+        Returns:
+            Iterator[nn.Parameter]: An iterator over the unique parameters.
+        """
+        seen: set[int] = set()
+        for param in super().parameters(recurse):
+            if (ptr := param.data_ptr()) not in seen:
+                seen.add(ptr)
+                yield param
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[tuple[str, nn.Parameter]]:
+        """Return an iterator over the unique parameters.
+
+        Args:
+            prefix (str, optional): The prefix to prepend to the parameter names.
+                Defaults to "".
+            recurse (bool, optional): Whether to recurse into submodules. Defaults to
+                True.
+            remove_duplicate (bool, optional): Whether to remove duplicate parameters.
+                Defaults to True.
+
+        Returns:
+            Iterator[nn.Parameter]: An iterator over the unique parameters.
+        """
+        seen: set[int] = set()
+        for name, param in super().named_parameters(prefix, recurse, remove_duplicate):
+            if (ptr := param.data_ptr()) not in seen:
+                seen.add(ptr)
+                yield name, param
+
+
 class CovParam(BaseEstimator, nn.Module):
-    r"""nn.Module containing covariance parameters.
+    r"""`nn.Module` containing covariance parameters.
 
     Note three types of covariance matrices parametrization are provided: scalar
     matrix; diagonal matrix; full matrix. Defaults to the full matrix parametrization.
@@ -128,8 +171,12 @@ class CovParam(BaseEstimator, nn.Module):
         return L, log_eigvals
 
 
-class ModelParams(BaseEstimator, nn.Module):
-    r"""nn.Module containing model parameters.
+class ModelParams(BaseEstimator, UniqueParams):
+    r"""`nn.Module` containing model parameters.
+
+    Shared parameters are possible by assigning the exact same object to multiple fields
+    so that the data pointer is the same. `self.parameters()` will not return duplicate
+    parameters and is safe to use.
 
     Note three types of covariance matrices parametrization are provided: scalar
     matrix; diagonal matrix; full matrix. Defaults to the full matrix parametrization.
