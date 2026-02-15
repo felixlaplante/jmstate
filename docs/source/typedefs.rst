@@ -12,6 +12,7 @@ Typedefs
 
    BucketData
    ClockMethod
+   CompleteModelData
    CovParam
    IndividualEffectsFn
    LinkFn
