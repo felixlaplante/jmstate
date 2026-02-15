@@ -12,4 +12,3 @@ This page provides an overview of the main modules and their members within the 
    functions
    utils
 
-   visualization

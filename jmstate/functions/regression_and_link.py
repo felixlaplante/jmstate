@@ -1,3 +1,7 @@
+"""Regression and link functions."""
+
+__all__ = ["linear"]
+
 import torch
 
 

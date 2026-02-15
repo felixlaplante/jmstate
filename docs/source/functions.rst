@@ -1,23 +1,9 @@
 Functions
 =========
 
-.. automodule:: jmstate.functions
-   :no-members:
-   :no-undoc-members:
-   :no-index:
+.. toctree::
+   :maxdepth: 2
 
-.. autosummary::
-   :toctree: generated/
-   :recursive:
-
-   Exponential
-   Gompertz
-   LogNormal
-   Weibull
-   clock_forward
-   clock_reset
-   gamma_plus_b
-   gamma_x_plus_b
-   identity
-
-   linear
+   base_hazards
+   individual_effects
+   regression_and_link

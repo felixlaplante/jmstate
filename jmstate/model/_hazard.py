@@ -13,7 +13,7 @@ from xxhash import xxh3_64_intdigest
 
 from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
 from ..typedefs._defs import HAZARD_CACHE_KEYS, HazardInfo, Trajectory
-from ..typedefs._params import ModelParams
+from ..typedefs._parameters import ModelParameters
 from ..utils._cache import Cache
 from ..utils._surv import build_possible_buckets, build_remaining_buckets
 
@@ -22,7 +22,7 @@ class HazardMixin:
     """Mixin class for hazard model computations."""
 
     model_design: ModelDesign
-    params: ModelParams
+    model_parameters: ModelParameters
     n_quad: int
     n_bisect: int
     cache_limit: int | None
@@ -287,8 +287,10 @@ class HazardMixin:
                 t1,
                 None if x is None else x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params.alphas[str(key)],
-                None if self.params.betas is None else self.params.betas[str(key)],
+                self.model_parameters.alphas[str(key)],
+                None
+                if self.model_parameters.betas is None
+                else self.model_parameters.betas[str(key)],
                 *self.model_design.surv_map[key],
             )
 
@@ -423,8 +425,10 @@ class HazardMixin:
                 u.index_select(0, idxs),
                 None if x is None else x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params.alphas[str(key)],
-                None if self.params.betas is None else self.params.betas[str(key)],
+                self.model_parameters.alphas[str(key)],
+                None
+                if self.model_parameters.betas is None
+                else self.model_parameters.betas[str(key)],
                 *self.model_design.surv_map[key],
             )
 
@@ -458,8 +462,10 @@ class HazardMixin:
                 t1,
                 None if data.x is None else data.x.index_select(-2, idxs),
                 psi.index_select(-2, idxs),
-                self.params.alphas[str(key)],
-                None if self.params.betas is None else self.params.betas[str(key)],
+                self.model_parameters.alphas[str(key)],
+                None
+                if self.model_parameters.betas is None
+                else self.model_parameters.betas[str(key)],
                 *self.model_design.surv_map[key],
             )
 

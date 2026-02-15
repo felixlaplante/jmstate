@@ -10,7 +10,7 @@ from torch.nn.utils import parameters_to_vector
 from tqdm import trange
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
-from ..typedefs._params import ModelParams, UniqueParams
+from ..typedefs._parameters import ModelParameters, UniqueParametersNNModule
 from ..utils._cache import Cache
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
@@ -18,11 +18,13 @@ from ._prior import PriorMixin
 from ._sampler import MCMCMixin, MetropolisHastingsSampler
 
 
-class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniqueParams):
+class FitMixin(
+    PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniqueParametersNNModule
+):
     """Mixin for fitting the model."""
 
     model_design: ModelDesign
-    params: ModelParams
+    model_parameters: ModelParameters
     optimizer: torch.optim.Optimizer | None
     n_warmup: int
     n_subsample: int
@@ -31,7 +33,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
     window_size: int
     n_samples_summary: int
     verbose: bool
-    vector_params_history_: list[torch.Tensor]
+    vector_model_parameters_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
     loglik_: float | None
     aic_: float | None
@@ -71,7 +73,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
 
         This is used to compute the Fisher Information Matrix, as
         `torch.func.functional_call` requires the function to implement a `forward`
-        method that takes the parameters as the first argument.
+        method that takes the parameters as the first argument. This can also be used
+        to compute the log likelihood of the model manually by integrating it over
+        the random effects with Gauss-Hermite quadrature.
 
         Args:
             data (CompleteModelData): Dataset on which likelihood is computed.
@@ -135,54 +139,55 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
             den = i_centered.pow(2).sum() * y_centered.pow(2).sum(dim=0)
             return (num / den).nan_to_num()
 
-        if len(self.vector_params_history_) < self.window_size:
+        if len(self.vector_model_parameters_history_) < self.window_size:
             return False
 
-        Y = torch.stack(self.vector_params_history_[-self.window_size :])
+        Y = torch.stack(self.vector_model_parameters_history_[-self.window_size :])
         return r2(Y).max().item() < self.tol
 
     def _init_jac(
         self, data: CompleteModelData
-    ) -> tuple[
-        torch.Tensor, Callable[[dict[str, torch.Tensor], torch.Tensor], torch.Tensor]
-    ]:
+    ) -> tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]:
         """Initializes the Jacobian matrix.
 
         Args:
             data (CompleteModelData): The complete model data.
 
         Returns:
-            tuple[torch.Tensor, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]]:
-                The Jacobian matrix and the Jacobian function.
+            tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]: The Jacobian
+                matrix and the Jacobian function.
         """
 
         @jacfwd  # type: ignore
-        def _dict_jac_fn(params_dict: dict[str, torch.Tensor], b: torch.Tensor):
-            return functional_call(self, params_dict, args=(data, b))
+        def _dict_jac_fn(
+            named_parameters_dict: dict[str, torch.Tensor], b: torch.Tensor
+        ) -> dict[str, torch.Tensor]:
+            return functional_call(self, named_parameters_dict, args=(data, b))
 
-        def _jac_fn(params_dict: dict[str, torch.Tensor], b: torch.Tensor):
-            return torch.cat(list(_dict_jac_fn(params_dict, b).values()), dim=-1)  # type: ignore
+        def _jac_fn(b: torch.Tensor) -> torch.Tensor:
+            return torch.cat(
+                list(_dict_jac_fn(dict(self.named_parameters()), b).values()),  # type: ignore
+                dim=-1,
+            )
 
-        return torch.zeros(len(data), self.params.numel()), cast(
-            Callable[[dict[str, torch.Tensor], torch.Tensor], torch.Tensor], _jac_fn
+        return torch.zeros(len(data), self.model_parameters.numel()), cast(
+            Callable[[torch.Tensor], torch.Tensor], _jac_fn
         )
 
     def _update_jac(
         self,
         mjac: torch.Tensor,
-        jac_fn: Callable[[dict[str, torch.Tensor], torch.Tensor], torch.Tensor],
+        jac_fn: Callable[[torch.Tensor], torch.Tensor],
         sampler: MetropolisHastingsSampler,
     ):
         """Updates the Jacobian matrix.
 
         Args:
             mjac (torch.Tensor): The mean Jacobian matrix.
-            jac_fn (Callable[[torch.Tensor, torch.Tensor], torch.Tensor]): The Jacobian
-                function.
-            sampler (MetropolisHastingsSampler): The sampler.
+            jac_fn (Callable[[torch.Tensor], torch.Tensor]): The Jacobian function.
+            sampler (MetropolisHasstingsSampler): The sampler.
         """
-        params_dict = dict(self.named_parameters())
-        mjac += jac_fn(params_dict, sampler.b).detach()  # type: ignore
+        mjac += jac_fn(sampler.b).detach()  # type: ignore
 
     def _compute_fim(self, mjac: torch.Tensor) -> torch.Tensor:
         """Computes the Fisher Information Matrix.
@@ -206,8 +211,10 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
         """
         logpdf = torch.tensor(0.0)
-        mb = torch.zeros(len(data), self.params.q.dim)
-        mb2 = torch.zeros(len(data), self.params.q.dim, self.params.q.dim)
+        mb = torch.zeros(len(data), self.model_parameters.q.dim)
+        mb2 = torch.zeros(
+            len(data), self.model_parameters.q.dim, self.model_parameters.q.dim
+        )
         return logpdf, mb, mb2
 
     def _update_criteria(
@@ -253,9 +260,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
         mb2 /= self.n_chains * n_iter
 
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
-        entropy = 0.5 * (torch.logdet(covs) + self.params.q.dim).sum().item()
+        entropy = 0.5 * (torch.logdet(covs) + self.model_parameters.q.dim).sum().item()
         loglik = logpdf.item() + entropy
-        aic = -2 * loglik + 2 * self.params.numel()
+        aic = -2 * loglik + 2 * self.model_parameters.numel()
         bic = -2 * loglik + torch.logdet(fim).item()
         return loglik, aic, bic
 
@@ -294,7 +301,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
             Self: The fitted model.
         """
         data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.params)
+        data.prepare(self.model_design, self.model_parameters)
 
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
@@ -304,8 +311,8 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniquePara
             self.max_iter_fit, desc="Fitting joint model", disable=not self.verbose
         ):
             self._step(sampler, data)
-            self.vector_params_history_.append(
-                parameters_to_vector(self.params.parameters()).detach()
+            self.vector_model_parameters_history_.append(
+                parameters_to_vector(self.model_parameters.parameters()).detach()
             )
             if self._is_converged():
                 break

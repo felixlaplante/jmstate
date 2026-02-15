@@ -9,19 +9,19 @@ from ._defs import (
     LogBaseHazardFn,
     RegressionFn,
 )
-from ._params import CovParam, ModelParams
+from ._parameters import CovParameters, ModelParameters
 
 __all__ = [
     "BucketData",
     "ClockMethod",
     "CompleteModelData",
-    "CovParam",
+    "CovParameters",
     "IndividualEffectsFn",
     "LinkFn",
     "LogBaseHazardFn",
     "ModelData",
     "ModelDesign",
-    "ModelParams",
+    "ModelParameters",
     "RegressionFn",
     "SampleData",
 ]

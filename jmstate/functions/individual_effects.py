@@ -1,3 +1,7 @@
+"""Individual effects functions."""
+
+__all__ = ["gamma_plus_b", "gamma_x_plus_b", "identity"]
+
 from typing import cast
 
 import torch

@@ -16,7 +16,7 @@ from ..utils._checks import check_matrix_dim
 from ..utils._linalg import flat_from_log_cholesky, log_cholesky_from_flat
 
 
-class UniqueParams(nn.Module):
+class UniqueParametersNNModule(nn.Module):
     """`nn.Module` that has unique parameters."""
 
     def parameters(self, recurse: bool = True) -> Iterator[nn.Parameter]:
@@ -58,8 +58,8 @@ class UniqueParams(nn.Module):
                 yield name, param
 
 
-class CovParam(BaseEstimator, nn.Module):
-    r"""`nn.Module` containing covariance parameters.
+class CovParameters(BaseEstimator, nn.Module):
+    r"""`nn.Module` containing covariance parameter.
 
     Note three types of covariance matrices parametrization are provided: scalar
     matrix; diagonal matrix; full matrix. Defaults to the full matrix parametrization.
@@ -138,7 +138,7 @@ class CovParam(BaseEstimator, nn.Module):
         Raises:
             ValueError: If the representation is invalid.
         """
-        super().__init__()
+        super().__init__()  # type: ignore
 
         self.flat = nn.Parameter(flat)
         self.dim = dim
@@ -171,7 +171,7 @@ class CovParam(BaseEstimator, nn.Module):
         return L, log_eigvals
 
 
-class ModelParams(BaseEstimator, UniqueParams):
+class ModelParameters(BaseEstimator, UniqueParametersNNModule):
     r"""`nn.Module` containing model parameters.
 
     Shared parameters are possible by assigning the exact same object to multiple fields
@@ -237,8 +237,8 @@ class ModelParams(BaseEstimator, UniqueParams):
     """
 
     gamma: torch.Tensor | None
-    q: CovParam
-    r: CovParam
+    q: CovParameters
+    r: CovParameters
     alphas: nn.ParameterDict
     betas: nn.ParameterDict | None
     extra: nn.ParameterDict | None
@@ -246,8 +246,8 @@ class ModelParams(BaseEstimator, UniqueParams):
     @validate_params(
         {
             "gamma": [torch.Tensor, None],
-            "q": [CovParam],
-            "r": [CovParam],
+            "q": [CovParameters],
+            "r": [CovParameters],
             "alphas": [dict],
             "betas": [dict],
             "extra": [dict, None],
@@ -257,8 +257,8 @@ class ModelParams(BaseEstimator, UniqueParams):
     def __init__(
         self,
         gamma: torch.Tensor | None,
-        q: CovParam,
-        r: CovParam,
+        q: CovParameters,
+        r: CovParameters,
         alphas: dict[tuple[Any, Any], torch.Tensor],
         betas: dict[tuple[Any, Any], torch.Tensor] | None,
         *,
@@ -268,8 +268,8 @@ class ModelParams(BaseEstimator, UniqueParams):
 
         Args:
             gamma (torch.Tensor | None): The population level parameters.
-            q (CovParam): The random effects precision matrix representation.
-            r (CovParam): The residuals precision matrix representation.
+            q (CovParameters): The random effects precision matrix representation.
+            r (CovParameters): The residuals precision matrix representation.
             alphas (dict[tuple[Any, Any], torch.Tensor]): The link linear parameters.
             betas (dict[tuple[Any, Any], torch.Tensor] | None): The covariates
                 parameters.
@@ -280,7 +280,7 @@ class ModelParams(BaseEstimator, UniqueParams):
         Raises:
             ValueError: If any of the tensors contains inf or NaN values.
         """
-        super().__init__()
+        super().__init__()  # type: ignore
 
         self.gamma = None if gamma is None else nn.Parameter(gamma)
         self.q = q

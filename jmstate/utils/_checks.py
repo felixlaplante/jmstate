@@ -1,14 +1,8 @@
-from __future__ import annotations
-
 import itertools
-from typing import TYPE_CHECKING
 
 import torch
 
 from ..typedefs._defs import Trajectory
-
-if TYPE_CHECKING:
-    from ..typedefs._params import ModelParams
 
 
 def check_trajectories(trajectories: list[Trajectory], c: torch.Tensor | None):
@@ -78,26 +72,3 @@ def check_matrix_dim(flat: torch.Tensor, dim: int, method: str):
             raise ValueError(
                 f"Method must be be either 'full', 'diag' or 'ball', got {method}"
             )
-
-
-def check_params_align(params1: ModelParams, params2: ModelParams):
-    """Checks if the named parameters lists have the same length, names and methods.
-
-    Args:
-        params1 (ModelParams): The first instance of ModelParams.
-        params2 (ModelParams): The second instance of ModelParams.
-
-    Raises:
-        ValueError: If the parameters do not have the same names.
-        ValueError: If the parameters do not have the same shapes.
-    """
-    if (
-        dict(params1.named_parameters()).keys()
-        != dict(params2.named_parameters()).keys()
-    ):
-        raise ValueError("All parameters must have the same names")
-    if any(
-        t1.shape != t2.shape
-        for t1, t2 in zip(params1.parameters(), params2.parameters(), strict=True)
-    ):
-        raise ValueError("All parameters must have the same shapes")

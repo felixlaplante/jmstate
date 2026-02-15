@@ -19,7 +19,7 @@ from ._defs import (
     RegressionFn,
     Trajectory,
 )
-from ._params import ModelParams
+from ._parameters import ModelParameters
 
 
 # Dataclasses
@@ -179,18 +179,18 @@ class CompleteModelData(ModelData):
     @validate_params(
         {
             "model_design": [ModelDesign],
-            "params": [ModelParams],
+            "model_parameters": [ModelParameters],
         },
         prefer_skip_nested_validation=True,
     )
-    def prepare(self, model_design: ModelDesign, params: ModelParams):
+    def prepare(self, model_design: ModelDesign, model_parameters: ModelParameters):
         """Sets the missing representation.
 
         Args:
             model_design (ModelDesign): The design of the model.
-            params (ModelParams): The model parameters.
+            model_parameters (ModelParameters): The model parameters.
         """
-        check_consistent_length(params.r.cov, self.y.transpose(0, -1))
+        check_consistent_length(model_parameters.r.cov, self.y.transpose(0, -1))
 
         self.valid_mask = ~self.y.isnan()
         self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())

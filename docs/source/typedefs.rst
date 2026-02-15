@@ -13,13 +13,12 @@ Typedefs
    BucketData
    ClockMethod
    CompleteModelData
-   CovParam
+   CovParameters
    IndividualEffectsFn
    LinkFn
    LogBaseHazardFn
    ModelData
    ModelDesign
-   ModelParams
+   ModelParameters
    RegressionFn
-
    SampleData

@@ -8,7 +8,7 @@ from sklearn.utils.validation import check_is_fitted  # type: ignore
 from torch.nn.utils import parameters_to_vector
 
 from ..typedefs._data import CompleteModelData, ModelDesign
-from ..typedefs._params import ModelParams
+from ..typedefs._parameters import ModelParameters
 from ._fit import FitMixin
 from ._predict import PredictMixin
 
@@ -94,7 +94,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     """
 
     model_design: ModelDesign
-    params: ModelParams
+    params: ModelParameters
     optimizer: torch.optim.Optimizer | None
     n_quad: int
     n_bisect: int
@@ -110,7 +110,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     window_size: int
     n_samples_summary: int
     verbose: bool
-    params_vector_history_: list[torch.Tensor]
+    vector_model_parameters_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
     loglik_: float | None
     aic_: float | None
@@ -119,7 +119,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     @validate_params(
         {
             "model_design": [ModelDesign],
-            "params": [ModelParams],
+            "model_parameters": [ModelParameters],
             "optimizer": [torch.optim.Optimizer, None],
             "n_quad": [Interval(Integral, 1, None, closed="left")],
             "n_bisect": [Interval(Integral, 1, None, closed="left")],
@@ -141,7 +141,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     def __init__(
         self,
         model_design: ModelDesign,
-        params: ModelParams,
+        model_parameters: ModelParameters,
         optimizer: torch.optim.Optimizer | None = None,
         *,
         n_quad: int = 32,
@@ -163,7 +163,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
         Args:
             model_design (ModelDesign): Model design containing modeling information.
-            params (ModelParams): (Initial) values for the parameters.
+            model_parameters (ModelParameters): (Initial) values for the parameters.
             optimizer (torch.optim.Optimizer | None, optional): The optimizer   used for
                 fitting. Defaults to None.
             n_quad (int, optional): The used number of points for Gauss-Legendre
@@ -211,12 +211,12 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
         # Store model components
         self.model_design = model_design
-        self.params = params
+        self.model_parameters = model_parameters
         self.n_warmup = n_warmup
         self.n_subsample = n_subsample
         self.verbose = verbose
-        self.vector_params_history_ = [
-            parameters_to_vector(self.params.parameters()).detach()
+        self.vector_model_parameters_history_ = [
+            parameters_to_vector(self.model_parameters.parameters()).detach()
         ]
         self.fim_ = None
         self.loglik_ = None

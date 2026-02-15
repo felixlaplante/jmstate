@@ -14,7 +14,7 @@ from tqdm import trange
 
 from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
 from ..typedefs._defs import Trajectory
-from ..typedefs._params import ModelParams
+from ..typedefs._parameters import ModelParameters
 from ..utils._cache import Cache
 from ._hazard import HazardMixin
 from ._sampler import MCMCMixin
@@ -24,7 +24,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
     """Mixin class for prediction."""
 
     model_design: ModelDesign
-    params: ModelParams
+    model_parameters: ModelParameters
     n_chains: int
     n_warmup: int
     n_subsample: int
@@ -36,8 +36,8 @@ class PredictMixin(HazardMixin, MCMCMixin):
         """Initialize the prediction mixin."""
         super().__init__(*args, **kwargs)
 
-    def _sample_vector_params(self, sample_size: int) -> torch.Tensor:
-        """Sample parameters based on asymptotic behavior of the MLE.
+    def _sample_vector_model_parameters(self, sample_size: int) -> torch.Tensor:
+        """Sample model parameters based on asymptotic behavior of the MLE.
 
         This uses Bernstein-von Mises theorem to approximate the posterior distribution
         of the parameters as a multivariate normal distribution with mean equal to the
@@ -50,18 +50,17 @@ class PredictMixin(HazardMixin, MCMCMixin):
             ValueError: If the model is not fitted.
 
         Returns:
-            torch.Tensor: A tensor of shape (sample_size, n_params) of sampled model
-                parameters as vectors.
+            torch.Tensor: A tensor of sampled model parameters as vectors.
         """
         check_is_fitted(self, "fim_")
 
         dist = torch.distributions.MultivariateNormal(
-            parameters_to_vector(self.params.parameters()).detach(),
+            parameters_to_vector(self.model_parameters.parameters()).detach(),
             cast(torch.Tensor, self.fim_).inverse(),
         )
         return dist.sample((sample_size,))
 
-    @torch.no_grad()
+    @torch.no_grad()  # type: ignore
     @validate_params(
         {
             "data": [ModelData],
@@ -114,15 +113,17 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         # Load and complete data
         data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.params)
+        data.prepare(self.model_design, self.model_parameters)
 
         # Initialize variables
         y_pred: list[torch.Tensor] = []
         n_iter = ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
-            init_param_vector = parameters_to_vector(self.params.parameters())
-            vector_params = self._sample_vector_params(n_iter)
+            init_model_parameters = parameters_to_vector(
+                self.model_parameters.parameters()
+            )
+            vector_model_parameters = self._sample_vector_model_parameters(n_iter)
 
         # Initialize optimizer and MCMC
         sampler = self._init_mcmc(data)
@@ -132,7 +133,10 @@ class PredictMixin(HazardMixin, MCMCMixin):
             n_iter, desc="Predicting longitudinal values", disable=not self.verbose
         ):
             if double_monte_carlo:
-                vector_to_parameters(vector_params[i], self.params.parameters())  # type: ignore
+                vector_to_parameters(
+                    vector_model_parameters[i],  # type: ignore
+                    self.model_parameters.parameters(),
+                )
 
             y = self.model_design.regression_fn(u, sampler.psi)
             y_pred.extend(y[i] for i in range(y.size(0)))
@@ -140,11 +144,14 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         # Restore parameters
         if double_monte_carlo:
-            vector_to_parameters(init_param_vector, self.params.parameters())  # type: ignore
+            vector_to_parameters(
+                init_model_parameters,  # type: ignore
+                self.model_parameters.parameters(),
+            )
         self._cache.clear()
         return torch.stack(y_pred[:n_samples])
 
-    @torch.no_grad()
+    @torch.no_grad()  # type: ignore
     @validate_params(
         {
             "data": [ModelData],
@@ -208,15 +215,17 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         # Load and complete data
         data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.params)
+        data.prepare(self.model_design, self.model_parameters)
 
         # Initialize variables
         surv_logps_pred: list[torch.Tensor] = []
         n_iter = ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
-            init_param_vector = parameters_to_vector(self.params.parameters())
-            vector_params = self._sample_vector_params(n_iter)
+            init_model_parameters = parameters_to_vector(
+                self.model_parameters.parameters()
+            )
+            vector_model_parameters = self._sample_vector_model_parameters(n_iter)
 
         # Initialize optimizer and MCMC
         sampler = self._init_mcmc(data)
@@ -228,7 +237,10 @@ class PredictMixin(HazardMixin, MCMCMixin):
             disable=not self.verbose,
         ):
             if double_monte_carlo:
-                vector_to_parameters(vector_params[i], self.params.parameters())  # type: ignore
+                vector_to_parameters(
+                    vector_model_parameters[i],  # type: ignore
+                    self.model_parameters.parameters(),
+                )
 
             sample_data = SampleData(data.x, data.trajectories, sampler.psi, data.c)
             surv_logps = self.compute_surv_logps(sample_data, u)
@@ -236,11 +248,14 @@ class PredictMixin(HazardMixin, MCMCMixin):
             sampler.run(self.n_subsample)
 
         if double_monte_carlo:
-            vector_to_parameters(init_param_vector, self.params.parameters())  # type: ignore
+            vector_to_parameters(
+                init_model_parameters,  # type: ignore
+                self.model_parameters.parameters(),
+            )
         self._cache.clear()
         return torch.stack(surv_logps_pred[:n_samples])
 
-    @torch.no_grad()
+    @torch.no_grad()  # type: ignore
     @validate_params(
         {
             "data": [ModelData],
@@ -294,14 +309,16 @@ class PredictMixin(HazardMixin, MCMCMixin):
         check_consistent_length(c_max, data)
 
         data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.params)
+        data.prepare(self.model_design, self.model_parameters)
 
         trajectories_pred: list[list[Trajectory]] = []
         n_iter = ceil(n_samples / self.n_chains)
 
         if double_monte_carlo:
-            init_param_vector = parameters_to_vector(self.params.parameters())
-            vector_params = self._sample_vector_params(n_iter)
+            vector_init_model_parameters = parameters_to_vector(
+                self.model_parameters.parameters()
+            )
+            vector_model_parameters = self._sample_vector_model_parameters(n_iter)
 
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
@@ -312,7 +329,10 @@ class PredictMixin(HazardMixin, MCMCMixin):
             disable=not self.verbose,
         ):
             if double_monte_carlo:
-                vector_to_parameters(vector_params[i], self.params.parameters())  # type: ignore
+                vector_to_parameters(
+                    vector_model_parameters[i],  # type: ignore
+                    self.model_parameters.parameters(),
+                )
 
             for j in range(sampler.psi.size(0)):
                 sample_data = SampleData(
@@ -321,9 +341,12 @@ class PredictMixin(HazardMixin, MCMCMixin):
                 trajectories_pred.append(
                     self.sample_trajectories(sample_data, c_max, max_length=max_length)
                 )
-            sampler.run(self.n_subsample)
+            sampler.run(self.n_subsample)  # type: ignore
 
         if double_monte_carlo:
-            vector_to_parameters(init_param_vector, self.params.parameters())  # type: ignore
+            vector_to_parameters(
+                vector_init_model_parameters,  # type: ignore
+                self.model_parameters.parameters(),
+            )
         self._cache.clear()
         return trajectories_pred[:n_samples]
