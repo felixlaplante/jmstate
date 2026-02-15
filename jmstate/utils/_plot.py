@@ -73,4 +73,5 @@ def plot_model_parameters_history(
 
     plt.suptitle("Stochastic optimization of the parameters")  # type: ignore
     plt.tight_layout()
-    return fig, Any
+    return fig, axes
+
