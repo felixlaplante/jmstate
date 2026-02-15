@@ -1,9 +1,9 @@
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 import torch
 
-from ..types._data import CompleteModelData
+from ..types._data import ModelData
 from ..types._parameters import ModelParameters
 
 
@@ -18,7 +18,7 @@ class MCMCMixin:
 
     def _logpdfs_aux_fn(
         self,
-        data: CompleteModelData,
+        data: ModelData,
         b: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]: ...
 
@@ -46,11 +46,11 @@ class MCMCMixin:
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
 
-    def _init_mcmc(self, data: CompleteModelData):
+    def _init_mcmc(self, data: ModelData):
         """Initializes the MCMC sampler.
 
         Args:
-            data (CompleteModelData): The complete model data.
+            data (ModelData): The complete model data.
 
         Returns:
             MetropolisHastingsSampler: The initialized MCMC sampler.
@@ -97,10 +97,7 @@ class MetropolisHastingsSampler:
             adapt_rate (int | float): Adaptation rate for the step_size.
             target_accept_rate (int | float): Mean acceptance target.
         """
-        self.logpdfs_aux_fn = cast(
-            Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]],
-            torch.no_grad()(logpdfs_aux_fn),
-        )
+        self.logpdfs_aux_fn = torch.no_grad()(logpdfs_aux_fn)
         self.n_chains = n_chains
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate

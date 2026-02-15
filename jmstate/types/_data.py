@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Self
 
 import torch
 from sklearn.base import BaseEstimator  # type: ignore
@@ -19,7 +21,10 @@ from ._defs import (
     RegressionFn,
     Trajectory,
 )
-from ._parameters import ModelParameters
+
+if TYPE_CHECKING:
+    from ..model._fit import FitMixin
+    from ..model._predict import PredictMixin
 
 
 # Dataclasses
@@ -79,7 +84,18 @@ class ModelData(BaseEstimator):
 
     Note `y` is expected to be a 3D tensor of dimension :math:`(n, m, d)` if there are
     :math:`n` individual, with a maximum number of :math:`m` measurements in
-    :math:`\mathbb{R}^d`. Its values should not be all NaNs.
+    :math:`\mathbb{R}^d`. Padding is done with NaNs. The attribute `t` is expected to
+    be either a 2D tensor of dimension :math:`(n, m)` if there are :math:`n` individual,
+    or a 1D tensor of dimension :math:`(m,)` if the times are shared by all individual.
+    Padding is not mandatory, but can be done with NaNs. `t` must not contain NaN values
+    where `y` is not NaN. If the `r` attribute of `ModelParameters` is set to `full` and
+    `y` is is :math:`\mathbb{R}^d` with :math:`d > 1`, then `r.covariance_type` must not
+    be set to `full`, as it will lead to incorrect likelihood computations.
+
+    This data can be completed using the `prepare` method, which makes the data usable
+    for manual likelihood computations and MCMC. This usage is only encourage for people
+    aware of the codebase. It will be run automatically by fitting and predicton methods
+    without user input.
 
     Raises:
         ValueError: If some trajectory is empty.
@@ -101,6 +117,12 @@ class ModelData(BaseEstimator):
             A `Trajectory` is a list of tuples containing time and state.
         c (torch.Tensor): The censoring times as a column vector. They must not
             be less than the trajectory maximum times.
+        valid_mask (torch.Tensor): The mask of the valid measurements.
+        n_valid (torch.Tensor): The number of valid measurements.
+        valid_t (torch.Tensor): The valid times.
+        valid_y (torch.Tensor): The valid measurements.
+        buckets (dict[tuple[Any, Any], tuple[torch.Tensor, ...]]): The buckets for the
+            trajectories.
     """
 
     x: torch.Tensor | None
@@ -108,6 +130,11 @@ class ModelData(BaseEstimator):
     y: torch.Tensor
     trajectories: list[Trajectory]
     c: torch.Tensor
+    valid_mask: torch.Tensor = field(init=False)
+    n_valid: torch.Tensor = field(init=False)
+    valid_t: torch.Tensor = field(init=False)
+    valid_y: torch.Tensor = field(init=False)
+    buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
 
     def __len__(self) -> int:
         """Gets the number of individuals.
@@ -154,56 +181,56 @@ class ModelData(BaseEstimator):
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
             raise ValueError("NaN time values on non NaN y values")
 
-
-class CompleteModelData(ModelData):
-    """Complete model data class.
-
-    Use this to compute the log pdfs by hand if necessary. It is possible to simply
-    call the `MultiStateJointModel` class as it inherits from `nn.Module`.
-
-    Attributes:
-        valid_mask (torch.Tensor): The mask of the valid measurements.
-        n_valid (torch.Tensor): The number of valid measurements.
-        valid_t (torch.Tensor): The valid times.
-        valid_y (torch.Tensor): The valid measurements.
-        buckets (dict[tuple[Any, Any], tuple[torch.Tensor, ...]]): The buckets for the
-            trajectories.
-    """
-
-    valid_mask: torch.Tensor = field(init=False)
-    n_valid: torch.Tensor = field(init=False)
-    valid_t: torch.Tensor = field(init=False)
-    valid_y: torch.Tensor = field(init=False)
-    buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
-
-    @validate_params(
-        {
-            "model_design": [ModelDesign],
-            "model_parameters": [ModelParameters],
-        },
-        prefer_skip_nested_validation=True,
-    )
-    def prepare(self, model_design: ModelDesign, model_parameters: ModelParameters):
-        """Sets the missing representation.
+    def prepare(self, model: FitMixin | PredictMixin) -> Self:
+        """Sets the representation for likelihood computations according to model.
 
         Args:
-            model_design (ModelDesign): The design of the model.
-            model_parameters (ModelParameters): The model parameters.
+            model (FitMixin | PredictMixin): The multistate joint model.
+
+        Returns:
+            Self: The prepared data.
         """
-        check_consistent_length(model_parameters.r.cov, self.y.transpose(0, -1))
+        from ..model._fit import FitMixin  # noqa: PLC0415
+        from ..model._predict import PredictMixin  # noqa: PLC0415
+
+        validate_params(
+            {
+                "model": [FitMixin, PredictMixin],
+            },
+            prefer_skip_nested_validation=True,
+        )
+        check_consistent_length(model.model_parameters.r.cov, self.y.transpose(0, -1))
 
         self.valid_mask = ~self.y.isnan()
         self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_all_buckets(
-            self.trajectories, self.c, tuple(model_design.surv_map.keys())
+            self.trajectories, self.c, tuple(model.model_design.surv_map.keys())
         )
+
+        return self
+
+
+@dataclass
+class ModelDataUnchecked(ModelData):
+    """Unchecked model data class."""
+
+    def __post_init__(self):
+        pass
 
 
 @dataclass
 class SampleData(BaseEstimator):
     """Dataclass for data used in sampling.
+
+    This assumes exact knowledge of the individual parameters `psi`. It is exposed
+    in the `compute_surv_logps` and `sample_trajectories` methods of `HazardMixin`,
+    which itself is used in the `MultiStateJointModel` class. This is used for data
+    simulation, and internally, for the prediction of quantities linked to the
+    survival function or trajectories. The `t_trunc` attribute is optional, and if not
+    provided, it is set to the maximum time of observation of the individuals. It
+    corresponds to the truncation time or conditionning time.
 
     Raises:
         ValueError: If some trajectory is empty.
@@ -229,7 +256,7 @@ class SampleData(BaseEstimator):
     x: torch.Tensor | None
     trajectories: list[Trajectory]
     psi: torch.Tensor
-    c: torch.Tensor | None = None
+    t_trunc: torch.Tensor | None = None
 
     def __len__(self) -> int:
         """Gets the number of individuals.
@@ -245,7 +272,7 @@ class SampleData(BaseEstimator):
         Raises:
             ValueError: If some trajectory is empty.
             ValueError: If some trajectory is not sorted.
-            ValueError: If some trajectory is not compatible with the censoring times.
+            ValueError: If some trajectory is not compatible with the truncation times.
             ValueError: If any of the inputs contain inf or NaN values.
             ValueError: If the size is not consistent between inputs.
         """
@@ -253,17 +280,25 @@ class SampleData(BaseEstimator):
             {
                 "trajectories": [list],
                 "psi": [torch.Tensor],
-                "c": [torch.Tensor],
+                "t_trunc": [torch.Tensor],
             },
             prefer_skip_nested_validation=True,
         )
 
-        check_trajectories(self.trajectories, self.c)
+        check_trajectories(self.trajectories, self.t_trunc)
 
         assert_all_finite(self.x, input_name="x")
         assert_all_finite(self.psi, input_name="psi")
-        assert_all_finite(self.c, input_name="c")
+        assert_all_finite(self.t_trunc, input_name="t_trunc")
 
         check_consistent_length(
-            self.x, self.psi.transpose(0, -2), self.c, self.trajectories
+            self.x, self.psi.transpose(0, -2), self.t_trunc, self.trajectories
         )
+
+
+@dataclass
+class SampleDataUnchecked(SampleData):
+    """Unchecked sample data class."""
+
+    def __post_init__(self):
+        pass

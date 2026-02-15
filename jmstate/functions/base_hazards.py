@@ -22,13 +22,15 @@ from ..types._defs import LOG_TWO_PI, ClockMethod, LogBaseHazardFn
 def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
     r"""Time transformation for clock forward method.
 
-    This is the simple mapping:
+    This is the simple mapping
 
     .. math::
         (t_0, t_1) \mapsto t_1.
 
     This type of mapping is particularly useful when the base risk does not depend on
-    relative (sojourn) type, but rather on absolute time.
+    relative (sojourn) type, but rather on absolute time. It expects a former transition
+    time column vector `t0` as well as a matrix of next time points `t1`. `t1` is a
+    matrix with the same number of rows as `t0`.
 
     Args:
         t0 (torch.Tensor): Past transition time.
@@ -47,13 +49,15 @@ def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: 
 def clock_reset(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
     r"""Time transformation for clock reset method.
 
-    This is the simple mapping:
+    This is the simple mapping
 
     .. math::
         (t_0, t_1) \mapsto t_1 - t_0.
 
     This type of mapping is particularly useful when the base risk depends on
-    relative (sojourn) type, but not on absolute time.
+    relative (sojourn) type, but not on absolute time. It expects a former transition
+    time column vector `t0` as well as a matrix of next time points `t1`. `t1` is a
+    matrix with the same number of rows as `t0`.
 
     Args:
         t0 (torch.Tensor): Past transition time.
@@ -74,12 +78,14 @@ class Exponential(LogBaseHazardFn):
 
     Exponential base hazard is time independent.
 
-    It is given by the formula:
+    It is given by the formula
 
     .. math::
         \lambda(t) = \lambda.
 
-    This returns the base hazard in log scale.$
+    This returns the base hazard in log scale. It expects a former transition time
+    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
+    with the same number of rows as `t0`.
 
     Attributes:
         log_lmda (nn.Parameter): The log rate factor.
@@ -135,12 +141,14 @@ class Weibull(LogBaseHazardFn):
 
     Weibull base hazard is time dependent.
 
-    It is given by the formula:
+    It is given by the formula
 
     .. math::
         \lambda(t) = \frac{k}{\lambda} \frac{t}{\lambda}^{k - 1}.
 
-    This returns the base hazard in log scale.
+    This returns the base hazard in log scale. It expects a former transition time
+    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
+    with the same number of rows as `t0`.
 
     Attributes:
         clock_method (ClockMethod): The ClockMethod transformation.
@@ -213,12 +221,14 @@ class Gompertz(LogBaseHazardFn):
     r"""Implements the Gompertz base hazard.
 
     Gompertz base hazard is time dependent.
-    It is given by the formula:
+    It is given by the formula
 
     .. math::
         \lambda(t) = a \exp{bt}.
 
-    This returns the base hazard in log scale.
+    This returns the base hazard in log scale. It expects a former transition time
+    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
+    with the same number of rows as `t0`.
 
     Attributes:
         b (nn.Parameter): The shape parameter.
@@ -280,7 +290,7 @@ class LogNormal(LogBaseHazardFn):
     r"""Implements the log normal base hazard.
 
     Log normal base hazard is time dependent.
-    It is given by the formula :
+    It is given by the formula
 
     .. math::
         \lambda(t) = \frac{\phi\left( \frac{\log t - \mu}{\sigma} \right)}{t \sigma
@@ -293,7 +303,9 @@ class LogNormal(LogBaseHazardFn):
         \phi(z) = \frac{1}{\sqrt{2\pi}} e^{-z^2/2}, \quad
         \Phi(z) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^z e^{-t^2/2} \, dt.
 
-    This returns the base hazard in log scale.
+    This returns the base hazard in log scale. It expects a former transition time
+    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
+    with the same number of rows as `t0`.
 
     Attributes:
         mu (nn.Parameter): The log time mean.

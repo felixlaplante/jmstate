@@ -35,21 +35,21 @@ def check_trajectories(trajectories: list[Trajectory], c: torch.Tensor | None):
         )
 
 
-def check_matrix_dim(flat: torch.Tensor, dim: int, method: str):
-    """Sets dimensions for matrix.
+def check_matrix_dim(flat: torch.Tensor, dim: int, covariance_type: str):
+    """Checks dimensions for matrix according to covariance type.
 
     Args:
         flat (torch.Tensor): The flat tensor.
         dim (int): The dimension of the matrix.
-        method (str): The method to use.
+        covariance_type (str): The covariance type.
 
     Raises:
-        ValueError: If the number of elements is incompatible with method "full".
-        ValueError: If the number of elements is incompatible with method "diag".
-        ValueError: If the number of elements is not one and the method is "ball".
-        ValueError: If the method is not in ("full", "diag", "ball").
+        ValueError: If the number of elements is incompatible with method `full`.
+        ValueError: If the number of elements is incompatible with method `diag`.
+        ValueError: If the number of elements is not one and the method is `spherical`.
+        ValueError: If the method is not valid.
     """
-    match method:
+    match covariance_type:
         case "full":
             if flat.numel() != (dim * (dim + 1)) // 2:
                 raise ValueError(
@@ -62,7 +62,7 @@ def check_matrix_dim(flat: torch.Tensor, dim: int, method: str):
                     f"{flat.numel()} is incompatible with diag matrix of dimension "
                     f"{dim}"
                 )
-        case "ball":
+        case "spherical":
             if flat.numel() != 1:
                 raise ValueError(
                     f"Expected 1 element for flat, got {flat.numel()} for matrix of "
@@ -70,5 +70,6 @@ def check_matrix_dim(flat: torch.Tensor, dim: int, method: str):
                 )
         case _:
             raise ValueError(
-                f"Method must be be either 'full', 'diag' or 'ball', got {method}"
+                f"Covariance type must be be either 'full', 'diag' or 'spherical', got "
+                f"{covariance_type}"
             )

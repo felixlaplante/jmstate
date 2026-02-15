@@ -12,7 +12,6 @@ Types
 
    BucketData
    ClockMethod
-   CompleteModelData
    CovParameters
    IndividualEffectsFn
    LinkFn

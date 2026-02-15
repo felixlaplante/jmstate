@@ -61,8 +61,8 @@ class UniqueParametersNNModule(nn.Module):
 class CovParameters(BaseEstimator, nn.Module):
     r"""`nn.Module` containing covariance parameter.
 
-    Note three types of covariance matrices parametrization are provided: scalar
-    matrix; diagonal matrix; full matrix. Defaults to the full matrix parametrization.
+    Note three types of covariance matrices parametrization are provided: full matrix;
+    diagonal matrix; scalar matrix. Defaults to the full matrix parametrization.
     This is achieved through a log Cholesky parametrization of the inverse covariance
     matrix. Formally, consider :math:`P = \Sigma^{-1}` the precision matrix and let
     :math:`L` be the Cholesky factor with positive diagonal elements, the log Cholseky
@@ -83,57 +83,60 @@ class CovParameters(BaseEstimator, nn.Module):
 
         \log \det P = 2 \operatorname{Tr}(\tilde{L}).
 
-    You can use these methods by creating the appropriate `MatRepr` with methods of
-    `ball`, `diag` or `full`.
-
-    Additionnally, if your data has mixed missing values, do not use `full` matrix
-    parametrization for the residuals, as is this case the components must be
-    independent.
+    You can use these methods by creating the appropriate isntance from a covariance
+    matrix using the `from_cov` classmethod with `covariance_type` of either `full`,
+    `diag`, or `spherical`.
 
     Attributes:
         flat (torch.Tensor): The flat representation of the covariance matrix.
         dim (int): The dimension of the covariance matrix.
-        method (str): The method used to parametrize the covariance matrix.
+        covariance_type (str): The method used to parametrize the covariance matrix.
+
+    Examples:
+        >>> q_param = CovParameters.from_cov(torch.eye(3), "diag")
+        >>> r_param = CovParameters.from_cov(torch.eye(2), "spherical")
     """
 
     @classmethod
     @validate_params(
         {
             "V": [torch.Tensor],
-            "method": [StrOptions({"full", "diag", "ball"})],
+            "covariance_type": [StrOptions({"full", "diag", "spherical"})],
         },
         prefer_skip_nested_validation=True,
     )
-    def from_cov(cls, V: torch.Tensor, method: str = "full") -> Self:
-        r"""Gets representation from covariance matrix according to choice of method.
+    def from_cov(cls, V: torch.Tensor, covariance_type: str = "full") -> Self:
+        r"""Gets instance from covariance matrix according to choice of covariance type.
 
         Args:
-            V (torch.Tensor): The square covariance matrix parameter.
-            method (str, optional): The method, `full`, `diag` or `ball`. Defaults to
-                `full`.
+            V (torch.Tensor): The square covariance matrix.
+            covariance_type (str, optional): The method, `full`, `diag`, or `spherical`.
+                Defaults to `full`.
 
         Returns:
             Self: The usable representation.
         """
         L = cast(torch.Tensor, torch.linalg.cholesky(V.inverse()))  # type: ignore
         L.diagonal().log_()
-        return cls(flat_from_log_cholesky(L, method), L.size(0), method)
+        return cls(
+            flat_from_log_cholesky(L, covariance_type), L.size(0), covariance_type
+        )
 
     @validate_params(
         {
             "flat": [torch.Tensor],
             "dim": [Interval(Integral, 1, None, closed="left")],
-            "method": [StrOptions({"full", "diag", "ball"})],
+            "covariance_type": [StrOptions({"full", "diag", "spherical"})],
         },
         prefer_skip_nested_validation=True,
     )
-    def __init__(self, flat: torch.Tensor, dim: int, method: str):
+    def __init__(self, flat: torch.Tensor, dim: int, covariance_type: str):
         """Initializes the `CovParam` object.
 
         Args:
             flat (torch.Tensor): The flat representation of the covariance matrix.
             dim (int): The dimension of the covariance matrix.
-            method (str): The method used to parametrize the covariance matrix.
+            covariance_type (str): The method used to parametrize the covariance matrix.
 
         Raises:
             ValueError: If the representation is invalid.
@@ -142,9 +145,9 @@ class CovParameters(BaseEstimator, nn.Module):
 
         self.flat = nn.Parameter(flat)
         self.dim = dim
-        self.method = method
+        self.covariance_type = covariance_type
 
-        check_matrix_dim(self.flat, self.dim, self.method)
+        check_matrix_dim(self.flat, self.dim, self.covariance_type)
 
     @property
     def cov(self) -> torch.Tensor:
@@ -153,7 +156,7 @@ class CovParameters(BaseEstimator, nn.Module):
         Returns:
             torch.Tensor: The covariance matrix.
         """
-        L = log_cholesky_from_flat(self.flat, self.dim, self.method)
+        L = log_cholesky_from_flat(self.flat, self.dim, self.covariance_type)
         L.diagonal().exp_()
         return torch.cholesky_inverse(L)
 
@@ -164,7 +167,7 @@ class CovParameters(BaseEstimator, nn.Module):
         Returns:
             tuple[torch.Tensor, torch.Tensor]: Precision matrix and log eigvals.
         """
-        L = log_cholesky_from_flat(self.flat, self.dim, self.method)
+        L = log_cholesky_from_flat(self.flat, self.dim, self.covariance_type)
         log_eigvals = 2 * L.diag()
         L.diagonal().exp_()
 
@@ -174,38 +177,18 @@ class CovParameters(BaseEstimator, nn.Module):
 class ModelParameters(BaseEstimator, UniqueParametersNNModule):
     r"""`nn.Module` containing model parameters.
 
+    The `gamma`  and `betas` attributes may be `None` if the model does not take into
+    account covariates or population level effects. When set, both `alphas` and `betas`
+    are expected to be dictionaries of parameters with keys corresponding to the
+    a tuple `(from_state, to_state)` of states. The `q` and `r` attributes are
+    `CovParameters` objects representing the random effects and residuals matrices
+    respectively. The `extra` attribute is a dictionary of parameters that is passed in
+    addition to other mandatory parameters. For example, if base hazard parameters are
+    to be optimized, they should be passed in `extra`.
+
     Shared parameters are possible by assigning the exact same object to multiple fields
     so that the data pointer is the same. `self.parameters()` will not return duplicate
     parameters and is safe to use.
-
-    Note three types of covariance matrices parametrization are provided: scalar
-    matrix; diagonal matrix; full matrix. Defaults to the full matrix parametrization.
-    This is achieved through a log Cholesky parametrization of the inverse covariance
-    matrix. Formally, consider :math:`P = \Sigma^{-1}` the precision matrix and let
-    :math:`L` be the Cholesky factor with positive diagonal elements, the log Cholseky
-    is given by:
-
-    .. math::
-        \tilde{L}_{ij} = L_{ij}, \, i > j,
-
-    and:
-
-    .. math::
-        \tilde{L}_{ii} = \log L_{ii}.
-
-    This is very numerically stable and fast, as it doesn't require inverting the
-    matrix when computing quadratic forms. The log determinant is then equal to:
-
-    .. math::
-
-        \log \det P = 2 \operatorname{Tr}(\tilde{L}).
-
-    You can use these methods by creating the appropriate `MatRepr` with methods of
-    `ball`, `diag` or `full`.
-
-    Additionnally, if your data has mixed missing values, do not use `full` matrix
-    parametrization for the residuals, as is this case the components must be
-    independent.
 
     Attributes:
         gamma (torch.Tensor | None): The population level parameters.
@@ -218,21 +201,25 @@ class ModelParameters(BaseEstimator, UniqueParametersNNModule):
 
     Examples:
         >>> # To create a model with simple parameters
-        >>> init_params = ModelParams(
-        ...     torch.zeros_like(gamma),
-        ...     CovParam.from_cov(torch.eye(Q.size(0)), method="diag"),
-        ...     CovParam.from_cov(torch.eye(R.size(0)), method="ball"),
-        ...     {k: torch.zeros_like(v) for k, v in alphas.items()},
-        ...     {k: torch.zeros_like(v) for k, v in betas.items()},
+        >>> gamma = torch.zeros(3)
+        >>> alphas = {(0, 1): torch.zeros(3), (1, 0): torch.zeros(3)}
+        >>> betas = {(0, 1): torch.zeros(2), (1, 0): torch.zeros(2)}
+        >>> init_params = ModelParameters(
+        ...     gamma,
+        ...     CovParameters.from_cov(torch.eye(3), "diag"),
+        ...     CovParameters.from_cov(torch.eye(2), "spherical"),
+        ...     alphas,
+        ...     betas,
         ... )
         >>> # To create a model with shared parameters
-        >>> alpha_shared = torch.zeros_like(list(alphas.values())[0])
-        >>> init_params_shared = ModelParams(
-        ...     torch.zeros_like(gamma),
-        ...     CovParam.from_cov(torch.eye(Q.size(0)), method="diag"),
-        ...     CovParam.from_cov(torch.eye(R.size(0)), method="ball"),
-        ...     {k: alpha_shared for k, v in alphas.items()},
-        ...     {k: torch.zeros_like(v) for k, v in betas.items()},
+        >>> alpha_shared = torch.zeros(3)
+        >>> alphas_shared = {(0, 1): alpha_shared, (1, 0): alpha_shared}
+        >>> init_params_shared = ModelParameters(
+        ...     torch.zeros(3),
+        ...     CovParameters.from_cov(torch.eye(3), "diag"),
+        ...     CovParameters.from_cov(torch.eye(2), "spherical"),
+        ...     alphas_shared,
+        ...     betas,
         ... )
     """
 

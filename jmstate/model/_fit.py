@@ -9,7 +9,7 @@ from torch.func import functional_call, jacfwd  # type: ignore
 from torch.nn.utils import parameters_to_vector
 from tqdm import trange
 
-from ..types._data import CompleteModelData, ModelData, ModelDesign
+from ..types._data import ModelData, ModelDataUnchecked, ModelDesign
 from ..types._parameters import ModelParameters, UniqueParametersNNModule
 from ..utils._cache import Cache
 from ._hazard import HazardMixin
@@ -32,7 +32,7 @@ class FitMixin(
     tol: float
     window_size: int
     n_samples_summary: int
-    verbose: bool
+    verbose: bool | int
     vector_model_parameters_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
     loglik_: float | None
@@ -68,7 +68,7 @@ class FitMixin(
         self.window_size = window_size
         self.n_samples_summary = n_samples_summary
 
-    def forward(self, data: CompleteModelData, b: torch.Tensor) -> torch.Tensor:
+    def forward(self, data: ModelData, b: torch.Tensor) -> torch.Tensor:
         """Computes the mean log pdfs for the random effects `b`.
 
         This is used to compute the Fisher Information Matrix, as
@@ -78,7 +78,7 @@ class FitMixin(
         the random effects with Gauss-Hermite quadrature.
 
         Args:
-            data (CompleteModelData): Dataset on which likelihood is computed.
+            data (ModelData): Dataset on which likelihood is computed.
             b (torch.Tensor): The random effects.
 
         Returns:
@@ -90,13 +90,13 @@ class FitMixin(
     def _step(
         self,
         sampler: MetropolisHastingsSampler,
-        data: CompleteModelData,
+        data: ModelData,
     ):
         """Performs a step of the optimizer.
 
         Args:
             sampler (MetropolisHastingsSampler): The sampler.
-            data (CompleteModelData): The data.
+            data (ModelData): The data.
 
         Raises:
             ValueError: If the optimizer is not initialized.
@@ -146,12 +146,12 @@ class FitMixin(
         return r2(Y).max().item() < self.tol
 
     def _init_jac(
-        self, data: CompleteModelData
+        self, data: ModelData
     ) -> tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]:
         """Initializes the Jacobian matrix.
 
         Args:
-            data (CompleteModelData): The complete model data.
+            data (ModelData): The complete model data.
 
         Returns:
             tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]: The Jacobian
@@ -201,11 +201,11 @@ class FitMixin(
         mjac /= ceil(self.n_samples_summary / self.n_chains)
         return mjac.T @ mjac
 
-    def _init_criteria(self, data: CompleteModelData):
+    def _init_criteria(self, data: ModelData):
         """Initializes the criteria.
 
         Args:
-            data (CompleteModelData): The complete model data.
+            data (ModelData): The complete model data.
 
         Returns:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
@@ -275,6 +275,10 @@ class FitMixin(
     def fit(self, data: ModelData) -> Self:
         r"""Fits the model to the data.
 
+        This method computes an estimate of the Maximum Likelihood Estimate (MLE) noted
+        :math:`\hat{\theta}`. It is optimized using the `optimizer` attribute for a
+        maximum of `max_iter_fit` iterations.
+
         It leverages the Fisher identity and stochastic gradient algorithm coupled
         with a MCMC (Metropolis-Hastings) sampler. The Fisher identity states that
 
@@ -289,8 +293,12 @@ class FitMixin(
 
         .. math::
             \mathcal{I}_n(\theta) = \sum_{i=1}^n \mathbb{E}_{b \sim p(\cdot \mid x_i,
-            \theta)} \left(\nabla \log \mathcal{L}(\theta ; x_i, b) \nabla \log
-            \mathcal{L}(\theta ; x_i, b)^T \right).
+            \hat{\theta})} \left(\nabla \log \mathcal{L}(\hat{\theta} ; x_i, b) \nabla
+            \log \mathcal{L}(\hat{\theta} ; x_i, b)^T \right).
+
+        `n_samples_summary` is the number of samples used to compute the Fisher
+        Information Matrix and model selection criteria. The greater this number,
+        the more accurate the estimates are, but the longer it takes to compute them.
 
         For more information, see ISSN 2824-7795.
 
@@ -300,9 +308,11 @@ class FitMixin(
         Returns:
             Self: The fitted model.
         """
-        data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.model_parameters)
+        data = ModelDataUnchecked(
+            data.x, data.t, data.y, data.trajectories, data.c
+        ).prepare(self)
 
+        # Initialize MCMC
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 

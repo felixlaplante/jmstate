@@ -12,7 +12,13 @@ from sklearn.utils.validation import (  # type: ignore
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from tqdm import trange
 
-from ..types._data import CompleteModelData, ModelData, ModelDesign, SampleData
+from ..types._data import (
+    ModelData,
+    ModelDataUnchecked,
+    ModelDesign,
+    SampleData,
+    SampleDataUnchecked,
+)
 from ..types._defs import Trajectory
 from ..types._parameters import ModelParameters
 from ..utils._cache import Cache
@@ -28,7 +34,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
     n_chains: int
     n_warmup: int
     n_subsample: int
-    verbose: bool
+    verbose: bool | int
     fim_: torch.Tensor | None
     _cache: Cache
 
@@ -60,7 +66,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
         )
         return dist.sample((sample_size,))
 
-    @torch.no_grad()  # type: ignore
+    @torch.no_grad()
     @validate_params(
         {
             "data": [ModelData],
@@ -112,8 +118,9 @@ class PredictMixin(HazardMixin, MCMCMixin):
         check_consistent_length(u, data)
 
         # Load and complete data
-        data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.model_parameters)
+        data = ModelDataUnchecked(
+            data.x, data.t, data.y, data.trajectories, data.c
+        ).prepare(self)
 
         # Initialize variables
         y_pred: list[torch.Tensor] = []
@@ -125,7 +132,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
             )
             vector_model_parameters = self._sample_vector_model_parameters(n_iter)
 
-        # Initialize optimizer and MCMC
+        # Initialize MCMC
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 
@@ -151,7 +158,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
         self._cache.clear()
         return torch.stack(y_pred[:n_samples])
 
-    @torch.no_grad()  # type: ignore
+    @torch.no_grad()
     @validate_params(
         {
             "data": [ModelData],
@@ -214,8 +221,9 @@ class PredictMixin(HazardMixin, MCMCMixin):
         check_consistent_length(u, data)
 
         # Load and complete data
-        data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.model_parameters)
+        data = ModelDataUnchecked(
+            data.x, data.t, data.y, data.trajectories, data.c
+        ).prepare(self)
 
         # Initialize variables
         surv_logps_pred: list[torch.Tensor] = []
@@ -227,7 +235,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
             )
             vector_model_parameters = self._sample_vector_model_parameters(n_iter)
 
-        # Initialize optimizer and MCMC
+        # Initialize MCMC
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 
@@ -255,11 +263,11 @@ class PredictMixin(HazardMixin, MCMCMixin):
         self._cache.clear()
         return torch.stack(surv_logps_pred[:n_samples])
 
-    @torch.no_grad()  # type: ignore
+    @torch.no_grad()
     @validate_params(
         {
             "data": [ModelData],
-            "c_max": [torch.Tensor],
+            "c": [torch.Tensor],
             "max_length": [Interval(Integral, 1, None, closed="left")],
             "n_samples": [Interval(Integral, 1, None, closed="left")],
             "double_monte_carlo": [bool],
@@ -269,7 +277,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
     def predict_trajectories(
         self,
         data: ModelData,
-        c_max: torch.Tensor,
+        c: torch.Tensor,
         *,
         max_length: int = 10,
         n_samples: int = 1000,
@@ -278,10 +286,10 @@ class PredictMixin(HazardMixin, MCMCMixin):
         r"""Function to predict trajectories.
 
         For every drawing of a random effect :math:`b`, this simulates the trajectories
-        up to time `c_max` with a maximum length of `max_length` to avoid infinite
-        loops. This uses a variant of Gillepsie's algorithm.
+        up to a censoring time `c` with a maximum length of `max_length` to avoid
+        infinite loops. This uses a variant of Gillepsie's algorithm.
 
-        The variable `c_max` is expected to be a column vector with the same number of
+        The variable `c` is expected to be a column vector with the same number of
         rows as individuals.
 
         If `double_monte_carlo` is True, then the prediction is computed using double
@@ -289,7 +297,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         Args:
             data (ModelData): The data to predict.
-            c_max (torch.Tensor): The matrix containing prediction times.
+            c (torch.Tensor): The sampling censoring times.
             max_length (int, optional): The maximum length of the trajectories.
                 Defaults to 10.
             n_samples (int, optional): The number of samples to draw from the
@@ -299,18 +307,21 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         Raises:
             ValueError: If `double_monte_carlo` is True and the model is not fitted.
-            ValueError: If `c_max` contains inf or NaN values.
-            ValueError: If `c_max` has incompatible shape.
+            ValueError: If `c` contains inf or NaN values.
+            ValueError: If `c` has incompatible shape.
 
         Returns:
             torch.Tensor: The predicted trajectories.
         """
-        assert_all_finite(c_max, input_name="c_max")
-        check_consistent_length(c_max, data)
+        assert_all_finite(c, input_name="c")
+        check_consistent_length(c, data)
 
-        data = CompleteModelData(data.x, data.t, data.y, data.trajectories, data.c)
-        data.prepare(self.model_design, self.model_parameters)
+        # Load and complete data
+        data = ModelDataUnchecked(
+            data.x, data.t, data.y, data.trajectories, data.c
+        ).prepare(self)
 
+        # Initialize variables
         trajectories_pred: list[list[Trajectory]] = []
         n_iter = ceil(n_samples / self.n_chains)
 
@@ -320,6 +331,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
             )
             vector_model_parameters = self._sample_vector_model_parameters(n_iter)
 
+        # Initialize MCMC
         sampler = self._init_mcmc(data)
         sampler.run(self.n_warmup)
 
@@ -334,12 +346,13 @@ class PredictMixin(HazardMixin, MCMCMixin):
                     self.model_parameters.parameters(),
                 )
 
+            # Sample trajectories, not possible to vectorize fully
             for j in range(sampler.psi.size(0)):
-                sample_data = SampleData(
+                sample_data = SampleDataUnchecked(
                     data.x, data.trajectories, sampler.psi[j], data.c
                 )
                 trajectories_pred.append(
-                    self.sample_trajectories(sample_data, c_max, max_length=max_length)
+                    self.sample_trajectories(sample_data, c, max_length=max_length)
                 )
             sampler.run(self.n_subsample)  # type: ignore
 

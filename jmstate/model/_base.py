@@ -7,7 +7,7 @@ from sklearn.utils._param_validation import Interval, validate_params  # type: i
 from sklearn.utils.validation import check_is_fitted  # type: ignore
 from torch.nn.utils import parameters_to_vector
 
-from ..types._data import CompleteModelData, ModelDesign
+from ..types._data import ModelData, ModelDesign
 from ..types._parameters import ModelParameters
 from ._fit import FitMixin
 from ._predict import PredictMixin
@@ -20,7 +20,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     joint model, but also allows for the modeling of multiple states assuming a semi
     Markov property. The model is defined by a set of longitudinal and hazard
     functions in `ModelDesign`, which are parameterized by a set of parameters in
-    `ModelParams`. Parameters may also be shared (see the documentation).
+    `ModelParameters`. Parameters may also be shared (see the documentation).
 
     The model is fit using a stochastic gradient ascent algorithm, and the parameters
     are sampled using a Metropolis-Hastings algorithm.
@@ -40,7 +40,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     specify the initial step size for the MCMC sampler, `adapt_rate` to specify the
     adaptation rate for the step size, `target_accept_rate` to specify the target
     acceptance rate, `n_warmup` to specify the number of warmup iterations, and
-    `n_subsample` to specify the number of subsamples.
+    `n_subsample` to specify the number of subsamples. The greater this number, the
+    less correlated the samples are, but the longer it takes to run the MCMC sampler.
 
     For fitting, use `max_iter_fit` to specify the maximum number of iterations for
     stochastic gradient ascent, `n_samples_summary` to specify the number of samples to
@@ -55,9 +56,13 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     For printing, use `verbose` to specify whether to print the progress of the model
     fitting and predicting.
 
+    After fitting, the helper functions `summary` and `plot_model_parameters_history`
+    under `jmstate.utils` can be used to show p-values, log-likelihood, AIC, BIC,
+    and the evolution of the parameters during fitting respectively.
+
     Attributes:
         model_design (ModelDesign): The model design.
-        params (ModelParams): The (variable) model parameters.
+        model_parameters (ModelParameters): The (variable) model parameters.
         optimizer (torch.optim.Optimizer | None): The optimizer.
         n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
         n_bisect (int): The number of bisection steps for the bisection algorithm.
@@ -85,8 +90,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
     Examples:
         >>> # Declares initial model
-        >>> optimizer = torch.optim.Adam(init_params.parameters(), lr=0.5)
-        >>> model = MultiStateJointModel(model_design, init_params, optimizer)
+        >>> optimizer = torch.optim.Adam(init_model_parameters.parameters(), lr=0.5)
+        >>> model = MultiStateJointModel(model_design, init_model_parameters, optimizer)
         >>> # Runs optimization process
         >>> model.fit(data)
         >>> # Prints a summary of the model
@@ -94,7 +99,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     """
 
     model_design: ModelDesign
-    params: ModelParameters
+    model_parameters: ModelParameters
     optimizer: torch.optim.Optimizer | None
     n_quad: int
     n_bisect: int
@@ -109,7 +114,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     tol: float
     window_size: int
     n_samples_summary: int
-    verbose: bool
+    verbose: bool | int
     vector_model_parameters_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
     loglik_: float | None
@@ -134,7 +139,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             "tol": [Interval(Real, 0, 1, closed="both")],
             "window_size": [Interval(Integral, 1, None, closed="left")],
             "n_samples_summary": [Interval(Integral, 1, None, closed="left")],
-            "verbose": [bool],
+            "verbose": ["verbose"],
         },
         prefer_skip_nested_validation=True,
     )
@@ -157,7 +162,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         tol: float = 0.1,
         window_size: int = 100,
         n_samples_summary: int = 500,
-        verbose: bool = True,
+        verbose: bool | int = True,
     ):
         """Initializes the joint model based on the user defined design.
 
@@ -190,7 +195,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
                 to 100.
             n_samples_summary (int, optional): The number of samples used to compute
                 Fisher Information Matrix and model selection criteria. Defaults to 500.
-            verbose (bool, optional): Whether to print the progress of the model
+            verbose (bool | int, optional): Whether to print the progress of the model
                 fitting. Defaults to True.
         """
         # Info of the Mixin Classes
@@ -224,18 +229,20 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         self.bic_ = None
 
     def _logpdfs_aux_fn(
-        self, data: CompleteModelData, b: torch.Tensor
+        self, data: ModelData, b: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Gets the log pdfs with individual effects and log likelihoods.
 
         Args:
-            data (CompleteModelData): Dataset on which likelihood is computed.
+            data (ModelData): Dataset on which likelihood is computed.
             b (torch.Tensor): The random effects.
 
         Returns:
            tuple[torch.Tensor, torch.Tensor]: The log pdfs and aux.
         """
-        psi = self.model_design.individual_effects_fn(self.params.gamma, data.x, b)
+        psi = self.model_design.individual_effects_fn(
+            self.model_parameters.gamma, data.x, b
+        )
         logpdfs = (
             super()._longitudinal_logliks(data, psi)
             + super()._hazard_logliks(data, psi)

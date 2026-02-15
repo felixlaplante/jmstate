@@ -98,7 +98,9 @@ class ClockMethod(Protocol):
     r"""The clock method protocol.
 
     This protocol is useful to differentiate between two natural mappings when dealing
-    with base hazards:
+    with base hazards. It expects a former transition time column vector `t0` as well as
+    a matrix of next time points `t1`. `t1` is a matrix with the same number of rows as
+    `t0`.
 
     .. math::
         (t_0, t_1) \mapsto \begin{cases} t_1 - t_0 \text{(clock reset)}, \\ t_1
@@ -114,10 +116,10 @@ class LogBaseHazardFn(nn.Module, ABC):
 
     This is not a protocol because caching is done, and therefore a key is required.
     Making this a `nn.Module`, one can check the value of the parameters and store their
-    hashed values at the same time as the
+    hashed values.
 
     Note that the log base hazard function is in log scale, and expects a former
-    transition time column vector `t0` as well as other times points at which the log
+    transition time column vector `t0` as well as next times points at which the log
     base hazard is to be computed. `t1` is a matrix with the same number of rows as
     `t0`.
 
@@ -161,30 +163,6 @@ class BucketData(NamedTuple):
     idxs: torch.Tensor
     t0: torch.Tensor
     t1: torch.Tensor
-
-
-class HazardInfo(NamedTuple):
-    """A simple internal `NamedTuple` required for hazard computation.
-
-    Attributes:
-        t0 (torch.Tensor): A column vector of previous transition times.
-        t1 (torch.Tensor): A matrix of next transition times.
-        x (torch.Tensor | None): The covariates.
-        psi (torch.Tensor): The individual parameters.
-        alpha (torch.Tensor): The baseline hazard parameters.
-        beta (torch.Tensor | None): The regression parameters.
-        log_base_hazard_fn (LogBaseHazardFn): The log base hazard function.
-        link_fn (LinkFn): The link function.
-    """
-
-    t0: torch.Tensor
-    t1: torch.Tensor
-    x: torch.Tensor | None
-    psi: torch.Tensor
-    alpha: torch.Tensor
-    beta: torch.Tensor | None
-    log_base_hazard_fn: LogBaseHazardFn
-    link_fn: LinkFn
 
 
 # Constants
