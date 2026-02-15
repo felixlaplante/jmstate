@@ -148,7 +148,7 @@ class FitMixin(
     def _init_jac(
         self, data: ModelData
     ) -> tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]:
-        """Initializes the Jacobian matrix.
+        """Initializes the Jacobian matrix and function.
 
         Args:
             data (ModelData): The complete model data.
@@ -202,7 +202,7 @@ class FitMixin(
         return mjac.T @ mjac
 
     def _init_criteria(self, data: ModelData):
-        """Initializes the criteria.
+        """Initializes the model selection criteria.
 
         Args:
             data (ModelData): The complete model data.
@@ -224,7 +224,7 @@ class FitMixin(
         mb2: torch.Tensor,
         sampler: MetropolisHastingsSampler,
     ):
-        """Updates the criteria.
+        """Updates the model selection criteria.
 
         Args:
             logpdf (torch.Tensor): The logpdf.
@@ -232,7 +232,7 @@ class FitMixin(
             mb2 (torch.Tensor): The mean of squared b.
             sampler (MetropolisHastingsSampler): The sampler.
         """
-        logpdf += sampler.logpdfs.mean()
+        logpdf += sampler.logpdfs.sum()
         mb += sampler.b.mean(dim=0)
         mb2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b)
 
@@ -243,7 +243,7 @@ class FitMixin(
         mb2: torch.Tensor,
         fim: torch.Tensor,
     ) -> tuple[float, float, float]:
-        """Computes the criteria.
+        """Computes the model selection criteria.
 
         Args:
             logpdf (torch.Tensor): The logpdf.
@@ -254,10 +254,10 @@ class FitMixin(
         Returns:
             tuple[float, float, float]: The criteria.
         """
-        n_iter = ceil(self.n_samples_summary / self.n_chains)
-        logpdf /= n_iter
-        mb /= self.n_chains * n_iter
-        mb2 /= self.n_chains * n_iter
+        den = self.n_chains * ceil(self.n_samples_summary / self.n_chains)
+        logpdf /= den
+        mb /= den
+        mb2 /= den
 
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
         entropy = 0.5 * (torch.logdet(covs) + self.model_parameters.q.dim).sum().item()
@@ -295,6 +295,9 @@ class FitMixin(
             \mathcal{I}_n(\theta) = \sum_{i=1}^n \mathbb{E}_{b \sim p(\cdot \mid x_i,
             \hat{\theta})} \left(\nabla \log \mathcal{L}(\hat{\theta} ; x_i, b) \nabla
             \log \mathcal{L}(\hat{\theta} ; x_i, b)^T \right).
+
+        Model selection criteria are based on a Laplace approximation of the posterior
+        distribution to ensure a closed form entropy.
 
         `n_samples_summary` is the number of samples used to compute the Fisher
         Information Matrix and model selection criteria. The greater this number,
@@ -357,3 +360,4 @@ class FitMixin(
 
         self._cache.clear()
         return self
+
