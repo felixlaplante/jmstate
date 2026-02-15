@@ -233,7 +233,7 @@ class FitMixin(
             sampler (MetropolisHastingsSampler): The sampler.
         """
         logpdf += sampler.logpdfs.sum()
-        mb += sampler.b.mean(dim=0)
+        mb += sampler.b.sum(dim=0)
         mb2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b)
 
     def _compute_criteria(
@@ -261,6 +261,7 @@ class FitMixin(
 
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
         entropy = 0.5 * (torch.logdet(covs) + self.model_parameters.q.dim).sum().item()
+
         loglik = logpdf.item() + entropy
         aic = -2 * loglik + 2 * self.model_parameters.numel()
         bic = -2 * loglik + torch.logdet(fim).item()
@@ -360,4 +361,3 @@ class FitMixin(
 
         self._cache.clear()
         return self
-
