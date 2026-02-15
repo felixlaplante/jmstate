@@ -10,14 +10,15 @@ Typedefs
    :toctree: generated/
    :recursive:
 
-   BaseHazardFn
    BucketData
    ClockMethod
    CovParam
    IndividualEffectsFn
    LinkFn
+   LogBaseHazardFn
    ModelData
    ModelDesign
    ModelParams
    RegressionFn
+
    SampleData
