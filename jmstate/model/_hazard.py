@@ -11,7 +11,7 @@ from sklearn.utils.validation import (  #  type: ignore
 from xxhash import xxh3_64_intdigest
 
 from ..types._data import ModelData, ModelDesign, SampleData, SampleDataUnchecked
-from ..types._defs import HAZARD_CACHE_KEYS, LinkFn, LogBaseHazardFn, Trajectory
+from ..types._defs import LinkFn, LogBaseHazardFn, Trajectory
 from ..types._parameters import ModelParameters
 from ..utils._cache import Cache
 from ..utils._surv import build_possible_buckets, build_remaining_buckets
@@ -112,7 +112,7 @@ class HazardMixin:
         self.n_bisect = n_bisect
         self.cache_limit = cache_limit
         self._std_nodes, self._std_weights = self._legendre_quad(n_quad)
-        self._cache = Cache(cache_limit, HAZARD_CACHE_KEYS)
+        self._cache = Cache(cache_limit)
 
     @staticmethod
     def _legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bisect import bisect_left
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 import torch
 from rich.console import Console, Group
@@ -12,10 +12,25 @@ from rich.text import Text
 from torch.distributions import Normal
 from torch.nn.utils import parameters_to_vector
 
-from ..types._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
-
 if TYPE_CHECKING:
     from ..model._base import MultiStateJointModel
+
+
+# Constants
+SIGNIFICANCE_LEVELS: Final[tuple[float, ...]] = (
+    0.001,
+    0.01,
+    0.05,
+    0.1,
+    float("inf"),
+)
+SIGNIFICANCE_CODES: Final[tuple[str, ...]] = (
+    "[red3]***[/]",
+    "[orange3]**[/]",
+    "[yellow3]*[/]",
+    ".",
+    "",
+)
 
 
 def summary(model: MultiStateJointModel):

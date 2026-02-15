@@ -3,10 +3,15 @@ from typing import Final, NamedTuple, Protocol, TypeAlias
 
 import torch
 from torch import nn
+from torch.nn.utils import parameters_to_vector
 from xxhash import xxh3_64_intdigest
 
 # Type Aliases
 Trajectory: TypeAlias = list[tuple[float, str]]
+
+
+# Constants
+LOG_TWO_PI: Final[torch.Tensor] = torch.log(torch.tensor(2.0 * torch.pi))
 
 
 # Protocols
@@ -139,12 +144,11 @@ class LogBaseHazardFn(nn.Module, ABC):
             tuple[int, ...]: A key used in caching operations.
         """
         ident = id(self)
-        parameters = list(self.parameters())
-        if parameters == []:
+        try:
+            vector = parameters_to_vector(self.parameters())
+            return (ident, xxh3_64_intdigest(vector.detach().numpy()))  # type: ignore
+        except ValueError:
             return (ident,)
-
-        params_flat = nn.utils.parameters_to_vector(self.parameters())
-        return (ident, xxh3_64_intdigest(params_flat.detach().numpy()))  # type: ignore
 
     @abstractmethod
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
@@ -163,22 +167,3 @@ class BucketData(NamedTuple):
     idxs: torch.Tensor
     t0: torch.Tensor
     t1: torch.Tensor
-
-
-# Constants
-LOG_TWO_PI: Final[torch.Tensor] = torch.log(torch.tensor(2.0 * torch.pi))
-HAZARD_CACHE_KEYS: Final[tuple[str, ...]] = ("base", "half", "quad_c", "quad_lc")
-SIGNIFICANCE_LEVELS: Final[tuple[float, ...]] = (
-    0.001,
-    0.01,
-    0.05,
-    0.1,
-    float("inf"),
-)
-SIGNIFICANCE_CODES: Final[tuple[str, ...]] = (
-    "[red3]***[/]",
-    "[orange3]**[/]",
-    "[yellow3]*[/]",
-    ".",
-    "",
-)

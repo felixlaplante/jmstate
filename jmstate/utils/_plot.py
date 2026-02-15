@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from numpy import atleast_1d
 from sklearn.utils._param_validation import validate_params  # type: ignore
@@ -22,7 +23,7 @@ def plot_model_parameters_history(
     model: MultiStateJointModel,
     *,
     figsize: tuple[int, int] = (10, 8),
-) -> tuple[plt.Figure, Any]:  # type: ignore
+) -> tuple[plt.Figure, np.ndarray]:  # type: ignore
     """Plot the history of the model parameters during optimization.
 
     This function plots the history of the parameters in a grid of subplots.
@@ -35,7 +36,7 @@ def plot_model_parameters_history(
         ValueError: If the model has less than two parameter history.
 
     Returns:
-        tuple[plt.Figure, Any]: The figure and axes.
+        tuple[plt.Figure, np.ndarray]: The figure and axes as a flat array.
     """
     from ..model._base import MultiStateJointModel  # noqa: PLC0415
 
@@ -57,7 +58,7 @@ def plot_model_parameters_history(
 
     # Create subplots
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)  # type: ignore
-    axes = atleast_1d(axes).flat
+    axes = atleast_1d(axes).ravel()
 
     Y = torch.stack(model.vector_model_parameters_history_)
     i = 0
@@ -75,5 +76,3 @@ def plot_model_parameters_history(
     plt.tight_layout()
 
     return fig, axes
-
-
