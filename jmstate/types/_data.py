@@ -217,6 +217,7 @@ class ModelDataUnchecked(ModelData):
     """Unchecked model data class."""
 
     def __post_init__(self):
+        """Overrides to skip checks."""
         pass
 
 
@@ -301,4 +302,5 @@ class SampleDataUnchecked(SampleData):
     """Unchecked sample data class."""
 
     def __post_init__(self):
+        """Overrides to skip checks."""
         pass
