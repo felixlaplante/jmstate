@@ -12,9 +12,9 @@ from sklearn.utils.validation import (  # type: ignore
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from tqdm import trange
 
-from ..typedefs._data import CompleteModelData, ModelData, ModelDesign, SampleData
-from ..typedefs._defs import Trajectory
-from ..typedefs._parameters import ModelParameters
+from ..types._data import CompleteModelData, ModelData, ModelDesign, SampleData
+from ..types._defs import Trajectory
+from ..types._parameters import ModelParameters
 from ..utils._cache import Cache
 from ._hazard import HazardMixin
 from ._sampler import MCMCMixin

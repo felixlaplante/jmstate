@@ -2,7 +2,7 @@ import itertools
 
 import torch
 
-from ..typedefs._defs import Trajectory
+from ..types._defs import Trajectory
 
 
 def check_trajectories(trajectories: list[Trajectory], c: torch.Tensor | None):

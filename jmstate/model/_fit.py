@@ -9,8 +9,8 @@ from torch.func import functional_call, jacfwd  # type: ignore
 from torch.nn.utils import parameters_to_vector
 from tqdm import trange
 
-from ..typedefs._data import CompleteModelData, ModelData, ModelDesign
-from ..typedefs._parameters import ModelParameters, UniqueParametersNNModule
+from ..types._data import CompleteModelData, ModelData, ModelDesign
+from ..types._parameters import ModelParameters, UniqueParametersNNModule
 from ..utils._cache import Cache
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin

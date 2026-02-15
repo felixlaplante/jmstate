@@ -6,7 +6,7 @@ from typing import Any
 
 import torch
 
-from ..typedefs._defs import BucketData, Trajectory
+from ..types._defs import BucketData, Trajectory
 
 
 def build_buckets(

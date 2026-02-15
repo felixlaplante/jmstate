@@ -3,8 +3,8 @@ from typing import Any, cast
 
 import torch
 
-from ..typedefs._data import CompleteModelData
-from ..typedefs._parameters import ModelParameters
+from ..types._data import CompleteModelData
+from ..types._parameters import ModelParameters
 
 
 class MCMCMixin:

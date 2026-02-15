@@ -16,7 +16,7 @@ import torch
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from torch import nn
 
-from ..typedefs._defs import LOG_TWO_PI, ClockMethod, LogBaseHazardFn
+from ..types._defs import LOG_TWO_PI, ClockMethod, LogBaseHazardFn
 
 
 def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: ARG001

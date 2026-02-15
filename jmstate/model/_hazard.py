@@ -11,9 +11,9 @@ from sklearn.utils.validation import (  #  type: ignore
 )
 from xxhash import xxh3_64_intdigest
 
-from ..typedefs._data import CompleteModelData, ModelDesign, SampleData
-from ..typedefs._defs import HAZARD_CACHE_KEYS, HazardInfo, Trajectory
-from ..typedefs._parameters import ModelParameters
+from ..types._data import CompleteModelData, ModelDesign, SampleData
+from ..types._defs import HAZARD_CACHE_KEYS, HazardInfo, Trajectory
+from ..types._parameters import ModelParameters
 from ..utils._cache import Cache
 from ..utils._surv import build_possible_buckets, build_remaining_buckets
 

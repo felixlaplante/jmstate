@@ -2,7 +2,7 @@ from typing import Any
 
 import torch
 
-from ..typedefs._parameters import ModelParameters
+from ..types._parameters import ModelParameters
 
 
 class PriorMixin:

@@ -2,9 +2,9 @@ from typing import Any
 
 import torch
 
-from ..typedefs._data import CompleteModelData, ModelDesign
-from ..typedefs._defs import LOG_TWO_PI
-from ..typedefs._parameters import ModelParameters
+from ..types._data import CompleteModelData, ModelDesign
+from ..types._defs import LOG_TWO_PI
+from ..types._parameters import ModelParameters
 
 
 class LongitudinalMixin:
@@ -21,7 +21,7 @@ class LongitudinalMixin:
         """Initializes the longitudinal mixin."""
         super().__init__(*args, **kwargs)
 
-    def _long_logliks(self, data: CompleteModelData, psi: torch.Tensor) -> torch.Tensor:
+    def _longitudinal_logliks(self, data: CompleteModelData, psi: torch.Tensor) -> torch.Tensor:
         """Computes the longitudinal log likelihoods.
 
         Args:

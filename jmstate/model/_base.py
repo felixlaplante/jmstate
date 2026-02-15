@@ -7,8 +7,8 @@ from sklearn.utils._param_validation import Interval, validate_params  # type: i
 from sklearn.utils.validation import check_is_fitted  # type: ignore
 from torch.nn.utils import parameters_to_vector
 
-from ..typedefs._data import CompleteModelData, ModelDesign
-from ..typedefs._parameters import ModelParameters
+from ..types._data import CompleteModelData, ModelDesign
+from ..types._parameters import ModelParameters
 from ._fit import FitMixin
 from ._predict import PredictMixin
 
@@ -237,7 +237,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         """
         psi = self.model_design.individual_effects_fn(self.params.gamma, data.x, b)
         logpdfs = (
-            super()._long_logliks(data, psi)
+            super()._longitudinal_logliks(data, psi)
             + super()._hazard_logliks(data, psi)
             + super()._prior_logliks(b)
         )

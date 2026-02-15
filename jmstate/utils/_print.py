@@ -12,7 +12,7 @@ from rich.text import Text
 from torch.distributions import Normal
 from torch.nn.utils import parameters_to_vector
 
-from ..typedefs._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
+from ..types._defs import SIGNIFICANCE_CODES, SIGNIFICANCE_LEVELS
 
 if TYPE_CHECKING:
     from ..model._base import MultiStateJointModel

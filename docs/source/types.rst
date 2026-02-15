@@ -1,7 +1,7 @@
-Typedefs
-========
+Types
+=====
 
-.. automodule:: jmstate.typedefs
+.. automodule:: jmstate.types
    :no-members:
    :no-undoc-members:
    :no-index:

@@ -8,7 +8,7 @@ This page provides an overview of the main modules and their members within the 
    :caption: Subpackages:
 
    model
-   typedefs
+   types
    functions
    utils
 
