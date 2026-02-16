@@ -23,7 +23,8 @@ from ._defs import (
 )
 
 if TYPE_CHECKING:
-    from ..model._sampler import MCMCMixin
+    from ..model._fit import FitMixin  # noqa: PLC0415
+    from ..model._predict import PredictMixin  # noqa: PLC0415
 
 
 # Dataclasses
@@ -189,11 +190,12 @@ class ModelData(BaseEstimator):
         Returns:
             Self: The prepared (completed) data.
         """
-        from ..model._sampler import MCMCMixin  # noqa: PLC0415
+        from ..model._fit import FitMixin  # noqa: PLC0415
+        from ..model._predict import PredictMixin  # noqa: PLC0415
 
         validate_params(
             {
-                "model": [MCMCMixin],
+                "model": [FitMixin | PredictMixin],
             },
             prefer_skip_nested_validation=True,
         )
