@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     },
     prefer_skip_nested_validation=True,
 )
-def plot_model_parameters_history(
+def plot_params_history(
     model: MultiStateJointModel,
     *,
     figsize: tuple[int, int] = (10, 8),
@@ -47,11 +47,11 @@ def plot_model_parameters_history(
         prefer_skip_nested_validation=True,
     )
 
-    if len(model.vector_model_parameters_history_) <= 1:
+    if len(model.params_history_) <= 1:
         raise ValueError("Only one parameter history provided")
 
     # Get the names
-    named_parameters_dict = dict(model.model_parameters.named_parameters())
+    named_parameters_dict = dict(model.params.named_parameters())
     nsubplots = len(named_parameters_dict)
     ncols = math.ceil(math.sqrt(nsubplots))
     nrows = math.ceil(nsubplots / ncols)
@@ -60,7 +60,7 @@ def plot_model_parameters_history(
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize)  # type: ignore
     axes = atleast_1d(axes).ravel()
 
-    Y = torch.stack(model.vector_model_parameters_history_)
+    Y = torch.stack(model.params_history_)
     i = 0
     for ax, (name, val) in zip(axes, named_parameters_dict.items(), strict=False):
         history = Y[:, i : (i := i + val.numel())]

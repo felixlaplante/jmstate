@@ -54,7 +54,7 @@ class ModelDesign(BaseEstimator):
             to be careful. The last dimension is the dimension of the response variable;
             second last is the repeated measurements; third last is individual based;
             possible fourth last is for parallelization of the MCMC sampler.
-        surv_map (Mapping[tuple[Any, Any], tuple[LogBaseHazardFn, LinkFn]]): A mapping
+        surv_fns (Mapping[tuple[Any, Any], tuple[LogBaseHazardFn, LinkFn]]): A mapping
             of transition keys that can be typed however you want. The tuple contains a
             log base hazard function, as well as a link function that shares the same
             requirements as `regression_fn`. Log base hazard function is expected to be
@@ -67,12 +67,12 @@ class ModelDesign(BaseEstimator):
         ...     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
         >>> individual_effects_fn = lambda gamma, x, b: gamma + b
         >>> regression_fn = sigmoid
-        >>> surv_map = {("alive", "dead"): (Exponential(1.2), sigmoid)}
+        >>> surv_fns = {("alive", "dead"): (Exponential(1.2), sigmoid)}
     """
 
     individual_effects_fn: IndividualEffectsFn
     regression_fn: RegressionFn
-    surv_map: Mapping[
+    surv_fns: Mapping[
         tuple[Any, Any],
         tuple[LogBaseHazardFn, LinkFn],
     ]
@@ -199,14 +199,14 @@ class ModelData(BaseEstimator):
             },
             prefer_skip_nested_validation=True,
         )
-        check_consistent_length(model.model_parameters.r.cov, self.y.transpose(0, -1))
+        check_consistent_length(model.params.r.cov, self.y.transpose(0, -1))
 
         self.valid_mask = ~self.y.isnan()
         self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_all_buckets(
-            self.trajectories, self.c, tuple(model.model_design.surv_map.keys())
+            self.trajectories, self.c, tuple(model.design.surv_fns.keys())
         )
 
         return self

@@ -30,10 +30,10 @@ class UniqueParametersNNModule(nn.Module):
             Iterator[nn.Parameter]: An iterator over the unique parameters.
         """
         seen: set[int] = set()
-        for parameter in super().parameters(recurse):
-            if (ptr := parameter.data_ptr()) not in seen:
+        for param in super().parameters(recurse):
+            if (ptr := param.data_ptr()) not in seen:
                 seen.add(ptr)
-                yield parameter
+                yield param
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -52,12 +52,10 @@ class UniqueParametersNNModule(nn.Module):
             Iterator[nn.Parameter]: An iterator over the unique parameters.
         """
         seen: set[int] = set()
-        for name, parameter in super().named_parameters(
-            prefix, recurse, remove_duplicate
-        ):
-            if (ptr := parameter.data_ptr()) not in seen:
+        for name, param in super().named_parameters(prefix, recurse, remove_duplicate):
+            if (ptr := param.data_ptr()) not in seen:
                 seen.add(ptr)
-                yield name, parameter
+                yield name, param
 
 
 class CovParameters(BaseEstimator, nn.Module):

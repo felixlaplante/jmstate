@@ -146,7 +146,7 @@ class LogBaseHazardFn(nn.Module, ABC):
         ident = id(self)
         try:
             vector = parameters_to_vector(self.parameters())
-            return (ident, xxh3_64_intdigest(vector.detach().numpy()))  # type: ignore
+            return (ident, xxh3_64_intdigest(vector.detach().numpy()))
         except ValueError:
             return (ident,)
 

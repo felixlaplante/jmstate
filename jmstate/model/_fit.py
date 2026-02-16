@@ -23,8 +23,8 @@ class FitMixin(
 ):
     """Mixin for fitting the model."""
 
-    model_design: ModelDesign
-    model_parameters: ModelParameters
+    design: ModelDesign
+    params: ModelParameters
     optimizer: torch.optim.Optimizer | None
     n_warmup: int
     n_subsample: int
@@ -33,7 +33,7 @@ class FitMixin(
     window_size: int
     n_samples_summary: int
     verbose: bool | int
-    vector_model_parameters_history_: list[torch.Tensor]
+    params_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
     loglik_: float | None
     aic_: float | None
@@ -84,7 +84,7 @@ class FitMixin(
         Returns:
            torch.Tensor: The log pdfs.
         """
-        logpdfs, _ = self._logpdfs_aux_fn(data, b)
+        logpdfs, _ = self._logpdfs_psi_fn(data, b)
         return logpdfs if logpdfs.ndim == 1 else logpdfs.mean(dim=0)
 
     def _step(
@@ -106,15 +106,15 @@ class FitMixin(
 
         def closure():
             self.optimizer.zero_grad()  # type: ignore
-            logpdfs, _ = self._logpdfs_aux_fn(data, sampler.b)
+            logpdfs, _ = self._logpdfs_psi_fn(data, sampler.b)
             loss = -logpdfs.mean()
             loss.backward()  # type: ignore
             return loss.item()
 
         self.optimizer.step(closure)
 
-        # Restore logpdfs and aux
-        sampler.logpdfs, sampler.psi = sampler.logpdfs_aux_fn(sampler.b)
+        # Restore logpdfs and psi
+        sampler.logpdfs, sampler.psi = sampler.logpdfs_psi_fn(sampler.b)
 
     def _is_converged(self) -> bool:
         """Checks if the optimizer has converged.
@@ -139,10 +139,10 @@ class FitMixin(
             den = i_centered.pow(2).sum() * y_centered.pow(2).sum(dim=0)
             return (num / den).nan_to_num()
 
-        if len(self.vector_model_parameters_history_) < self.window_size:
+        if len(self.params_history_) < self.window_size:
             return False
 
-        Y = torch.stack(self.vector_model_parameters_history_[-self.window_size :])
+        Y = torch.stack(self.params_history_[-self.window_size :])
         return r2(Y).max().item() < self.tol
 
     def _init_jac(
@@ -170,7 +170,7 @@ class FitMixin(
                 dim=-1,
             )
 
-        return torch.zeros(len(data), self.model_parameters.numel()), cast(
+        return torch.zeros(len(data), self.params.numel()), cast(
             Callable[[torch.Tensor], torch.Tensor], _jac_fn
         )
 
@@ -211,10 +211,8 @@ class FitMixin(
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
         """
         logpdf = torch.tensor(0.0)
-        mb = torch.zeros(len(data), self.model_parameters.q.dim)
-        mb2 = torch.zeros(
-            len(data), self.model_parameters.q.dim, self.model_parameters.q.dim
-        )
+        mb = torch.zeros(len(data), self.params.q.dim)
+        mb2 = torch.zeros(len(data), self.params.q.dim, self.params.q.dim)
         return logpdf, mb, mb2
 
     def _update_criteria(
@@ -260,10 +258,10 @@ class FitMixin(
         mb2 /= den
 
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
-        entropy = 0.5 * (torch.logdet(covs) + self.model_parameters.q.dim).sum().item()
+        entropy = 0.5 * (torch.logdet(covs) + self.params.q.dim).sum().item()
 
         loglik = logpdf.item() + entropy
-        aic = -2 * loglik + 2 * self.model_parameters.numel()
+        aic = -2 * loglik + 2 * self.params.numel()
         bic = -2 * loglik + torch.logdet(fim).item()
         return loglik, aic, bic
 
@@ -288,7 +286,7 @@ class FitMixin(
             \mid x, \theta)} \left( \nabla_\theta \log \mathcal{L}(\theta ; x, b)
             \right).
 
-        Many methods exist for computing the Fisher Information Matrix in latent
+        Many methods exist for estimating the Fisher Information Matrix in latent
         variable models. In particular, this class leverages the expected Fisher
         Information Matrix using the identity
 
@@ -325,8 +323,8 @@ class FitMixin(
             self.max_iter_fit, desc="Fitting joint model", disable=not self.verbose
         ):
             self._step(sampler, data)
-            self.vector_model_parameters_history_.append(
-                parameters_to_vector(self.model_parameters.parameters()).detach()
+            self.params_history_.append(
+                parameters_to_vector(self.params.parameters()).detach()
             )
             if self._is_converged():
                 break

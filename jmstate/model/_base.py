@@ -20,12 +20,15 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     joint model, but also allows for the modeling of multiple states assuming a semi
     Markov property. The model is defined by a set of longitudinal and hazard
     functions in `ModelDesign`, which are parameterized by a set of parameters in
-    `ModelParameters`. Parameters may also be shared (see the documentation).
+    `ModelParameters`. Parameters may also be shared (see the documentation). The model
+    design `ModelDesign` is fixed at initialization, and defines the specification of
+    the model in conjunction with the parameters `ModelParameters`. The parameters are
+    modifiable after initialization, and will be modified in place during fit.
 
     The model is fit using a stochastic gradient ascent algorithm, and the parameters
     are sampled using a Metropolis-Hastings algorithm.
 
-    Dynamic prediciton is possible using the different prediction methods, that support
+    Dynamic prediction is possible using the different prediction methods, that support
     dynamic prediction with both single and double Monte Carlo integration.
 
     For numerical integration, use `n_quad` to specify the number of nodes for the
@@ -56,13 +59,13 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     For printing, use `verbose` to specify whether to print the progress of the model
     fitting and predicting.
 
-    After fitting, the helper functions `summary` and `plot_model_parameters_history`
-    under `jmstate.utils` can be used to show p-values, log-likelihood, AIC, BIC,
-    and the evolution of the parameters during fitting respectively.
+    After fitting, the helper functions `summary` and `plot_params_history` under
+    `jmstate.utils` can be used to show p-values, log-likelihood, AIC, BIC, and the
+    evolution of the parameters during fitting respectively.
 
     Attributes:
-        model_design (ModelDesign): The model design.
-        model_parameters (ModelParameters): The (variable) model parameters.
+        design (ModelDesign): The model specification.
+        params (ModelParameters): The (modifiable) model parameters.
         optimizer (torch.optim.Optimizer | None): The optimizer.
         n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
         n_bisect (int): The number of bisection steps for the bisection algorithm.
@@ -82,7 +85,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         n_samples_summary (int): The number of samples used to compute Fisher
             Information Matrix and model selection criteria.
         verbose (bool): Whether to print the progress of the model fitting.
-        params_vector_history_ (list[torch.Tensor]): The history of model parameters.
+        params_history_ (list[torch.Tensor]): The history of model parameters as flat
+            tensors.
         fim_ (torch.Tensor | None): The Fisher Information Matrix.
         loglik_ (float | None): The log likelihood.
         aic_ (float | None): The Akaike Information Criterion.
@@ -98,8 +102,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         >>> model.summary()
     """
 
-    model_design: ModelDesign
-    model_parameters: ModelParameters
+    design: ModelDesign
+    params: ModelParameters
     optimizer: torch.optim.Optimizer | None
     n_quad: int
     n_bisect: int
@@ -115,7 +119,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     window_size: int
     n_samples_summary: int
     verbose: bool | int
-    vector_model_parameters_history_: list[torch.Tensor]
+    params_history_: list[torch.Tensor]
     fim_: torch.Tensor | None
     loglik_: float | None
     aic_: float | None
@@ -123,8 +127,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
     @validate_params(
         {
-            "model_design": [ModelDesign],
-            "model_parameters": [ModelParameters],
+            "design": [ModelDesign],
+            "params": [ModelParameters],
             "optimizer": [torch.optim.Optimizer, None],
             "n_quad": [Interval(Integral, 1, None, closed="left")],
             "n_bisect": [Interval(Integral, 1, None, closed="left")],
@@ -145,8 +149,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     )
     def __init__(
         self,
-        model_design: ModelDesign,
-        model_parameters: ModelParameters,
+        design: ModelDesign,
+        params: ModelParameters,
         optimizer: torch.optim.Optimizer | None = None,
         *,
         n_quad: int = 32,
@@ -167,9 +171,9 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         """Initializes the joint model based on the user defined design.
 
         Args:
-            model_design (ModelDesign): Model design containing modeling information.
-            model_parameters (ModelParameters): (Initial) values for the parameters.
-            optimizer (torch.optim.Optimizer | None, optional): The optimizer   used for
+            design (ModelDesign): The model specification.
+            params (ModelParameters): (Initial) values for the parameters.
+            optimizer (torch.optim.Optimizer | None, optional): The optimizer used for
                 fitting. Defaults to None.
             n_quad (int, optional): The used number of points for Gauss-Legendre
                 quadrature. Defaults to 32.
@@ -215,20 +219,18 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         )
 
         # Store model components
-        self.model_design = model_design
-        self.model_parameters = model_parameters
+        self.design = design
+        self.params = params
         self.n_warmup = n_warmup
         self.n_subsample = n_subsample
         self.verbose = verbose
-        self.vector_model_parameters_history_ = [
-            parameters_to_vector(self.model_parameters.parameters()).detach()
-        ]
+        self.params_history_ = [parameters_to_vector(self.params.parameters()).detach()]
         self.fim_ = None
         self.loglik_ = None
         self.aic_ = None
         self.bic_ = None
 
-    def _logpdfs_aux_fn(
+    def _logpdfs_psi_fn(
         self, data: ModelData, b: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Gets the log pdfs with individual effects and log likelihoods.
@@ -238,11 +240,9 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             b (torch.Tensor): The random effects.
 
         Returns:
-           tuple[torch.Tensor, torch.Tensor]: The log pdfs and aux.
+           tuple[torch.Tensor, torch.Tensor]: The log pdfs and psi.
         """
-        psi = self.model_design.individual_effects_fn(
-            self.model_parameters.gamma, data.x, b
-        )
+        psi = self.design.individual_effects_fn(self.params.gamma, data.x, b)
         logpdfs = (
             super()._longitudinal_logliks(data, psi)
             + super()._hazard_logliks(data, psi)
@@ -256,7 +256,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         r"""Returns the estimated standard error of the parameters as a vector.
 
         They can be used to draw confidence intervals. The standard errors are computed
-        using the diagonal of the inverse of the inverse Fisher Information Matrix at
+        using the diagonal of the inverse of the estimated Fisher Information Matrix at
         the MLE
 
         .. math::

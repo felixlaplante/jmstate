@@ -16,7 +16,7 @@ def identity(
 
     It is useful when only random effects are considered as individual parameters.
 
-    This is simply the mapping:
+    This is simply the mapping
 
     .. math::
         (\gamma, x, b) \mapsto b.
@@ -40,10 +40,10 @@ def gamma_x_plus_b(
     It is useful when a linear combination of covariates and random effects are
     considered as individual parameters.
 
-    This is simply the mapping:
+    This is simply the mapping
 
     .. math::
-        (\gamma, x, b) \mapsto \gamma x + b
+        (\gamma, x, b) \mapsto \langle \gamma, x \rangle + b
 
     Args:
         gamma (torch.Tensor | None): The population parameters. It must not be None.
@@ -66,7 +66,7 @@ def gamma_plus_b(
     It is useful when a linear combination of population parameters and random effects
     are considered as individual parameters.
 
-    This is simply the mapping:
+    This is simply the mapping
 
     .. math::
         (\gamma, x, b) \mapsto \gamma + b

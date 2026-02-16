@@ -8,7 +8,7 @@ import torch
 def linear(t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor:
     r"""Implements the linear regression or link function.
 
-    When reverting to a linear joint model, this gives the mapping:
+    When reverting to a linear joint model, this gives the mapping
 
     .. math::
         h(t, \psi) = \psi,

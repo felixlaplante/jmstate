@@ -71,19 +71,17 @@ class HazardInfo(NamedTuple):
             t1,
             None if x is None else x.index_select(0, idxs),
             psi.index_select(-2, idxs),
-            model.model_parameters.alphas[str(key)],
-            None
-            if model.model_parameters.betas is None
-            else model.model_parameters.betas[str(key)],
-            *model.model_design.surv_map[key],
+            model.params.alphas[str(key)],
+            None if model.params.betas is None else model.params.betas[str(key)],
+            *model.design.surv_fns[key],
         )
 
 
 class HazardMixin:
     """Mixin class for hazard model computations."""
 
-    model_design: ModelDesign
-    model_parameters: ModelParameters
+    design: ModelDesign
+    params: ModelParameters
     n_quad: int
     n_bisect: int
     cache_limit: int | None
@@ -342,7 +340,7 @@ class HazardMixin:
 
         # Get buckets from last states
         buckets = build_remaining_buckets(
-            sample_data.trajectories, tuple(self.model_design.surv_map.keys())
+            sample_data.trajectories, tuple(self.design.surv_fns.keys())
         )
 
         # Compute the log probabilities summing over transitions
@@ -410,7 +408,7 @@ class HazardMixin:
 
         # Get buckets from last states
         current_buckets = build_possible_buckets(
-            sample_data.trajectories, c, tuple(self.model_design.surv_map.keys())
+            sample_data.trajectories, c, tuple(self.design.surv_fns.keys())
         )
 
         if not current_buckets:

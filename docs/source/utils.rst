@@ -11,5 +11,5 @@ Utils
    :recursive:
 
    build_buckets
-   plot_model_parameters_history
+   plot_params_history
    summary

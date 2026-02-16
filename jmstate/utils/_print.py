@@ -36,13 +36,13 @@ SIGNIFICANCE_CODES: Final[tuple[str, ...]] = (
 def summary(model: MultiStateJointModel):
     """Prints a summary of the fitted model.
 
-    This function prints the p-values of the parameters as well as values and
+    This function prints the (nullity) p-values of the parameters as well as values and
     standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
 
     Raises:
         ValueError: If the model is not fitted.
     """
-    vector = parameters_to_vector(model.model_parameters.parameters())
+    vector = parameters_to_vector(model.params.parameters())
     stderr = model.stderr
     zvalues = torch.abs(vector / stderr)
     pvalues = 2 * (1 - Normal(0, 1).cdf(zvalues))
@@ -56,7 +56,7 @@ def summary(model: MultiStateJointModel):
     table.add_column("Significance level", justify="center")
 
     i = 0
-    for name, val in model.model_parameters.named_parameters():
+    for name, val in model.params.named_parameters():
         for j in range(val.numel()):
             code = SIGNIFICANCE_CODES[
                 bisect_left(SIGNIFICANCE_LEVELS, pvalues[i].item())

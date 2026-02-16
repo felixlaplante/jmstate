@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import torch
 
@@ -10,13 +10,13 @@ from ..types._parameters import ModelParameters
 class MCMCMixin:
     """Mixin for MCMC sampling."""
 
-    model_parameters: ModelParameters
+    params: ModelParameters
     n_chains: int
     init_step_size: float
     adapt_rate: float
     target_accept_rate: float
 
-    def _logpdfs_aux_fn(
+    def _logpdfs_psi_fn(
         self,
         data: ModelData,
         b: torch.Tensor,
@@ -56,8 +56,8 @@ class MCMCMixin:
             MetropolisHastingsSampler: The initialized MCMC sampler.
         """
         return MetropolisHastingsSampler(
-            lambda b: self._logpdfs_aux_fn(data, b),
-            torch.zeros(self.n_chains, len(data), self.model_parameters.q.dim),
+            lambda b: self._logpdfs_psi_fn(data, b),
+            torch.zeros(self.n_chains, len(data), self.params.q.dim),  # type: ignore
             self.n_chains,
             self.init_step_size,
             self.adapt_rate,
@@ -68,18 +68,18 @@ class MCMCMixin:
 class MetropolisHastingsSampler:
     """A robust Metropolis-Hastings sampler with adaptive step size."""
 
-    logpdfs_aux_fn: Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]
+    logpdfs_psi_fn: Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]
     n_chains: int
     adapt_rate: int | float
     target_accept_rate: int | float
     b: torch.Tensor
     logpdfs: torch.Tensor
-    aux: torch.Tensor
+    psi: torch.Tensor
     step_sizes: torch.Tensor
 
     def __init__(
         self,
-        logpdfs_aux_fn: Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]],
+        logpdfs_psi_fn: Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]],
         init_b: torch.Tensor,
         n_chains: int,
         init_step_size: int | float,
@@ -89,15 +89,18 @@ class MetropolisHastingsSampler:
         """Initializes the Metropolis-Hastings sampler kernel.
 
         Args:
-            logpdfs_aux_fn (Callable[[torch.Tensor], tuple[torch.Tensor,
-                torch.Tensor]]): The log pdfs function with auxiliary data.
+            logpdfs_psi_fn (Callable[[torch.Tensor], tuple[torch.Tensor,
+                torch.Tensor]]): The log pdfs function with psiiliary data.
             init_b (torch.Tensor): Starting b for the chain.
             n_chains (int): The number of parallel chains to spawn.
             init_step_size (int | float): Kernel step in Metropolis-Hastings.
             adapt_rate (int | float): Adaptation rate for the step_size.
             target_accept_rate (int | float): Mean acceptance target.
         """
-        self.logpdfs_aux_fn = torch.no_grad()(logpdfs_aux_fn)
+        self.logpdfs_psi_fn = cast(
+            Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]],
+            torch.no_grad()(logpdfs_psi_fn),
+        )
         self.n_chains = n_chains
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
@@ -106,7 +109,7 @@ class MetropolisHastingsSampler:
         self.b = init_b.clone()
 
         # Compute initial log logpdfs
-        self.logpdfs, self.psi = self.logpdfs_aux_fn(self.b)
+        self.logpdfs, self.psi = self.logpdfs_psi_fn(self.b)
 
         # Proposal noise initialization
         self._noise = torch.empty_like(self.b)
@@ -119,7 +122,7 @@ class MetropolisHastingsSampler:
 
         # Get the proposal
         proposed_state = self.b + self._noise * self.step_sizes.unsqueeze(-1)
-        proposed_logpdfs, proposed_aux = self.logpdfs_aux_fn(proposed_state)
+        proposed_logpdfs, proposed_psi = self.logpdfs_psi_fn(proposed_state)
         logpdf_diff = proposed_logpdfs - self.logpdfs
 
         # Vectorized acceptance decision
@@ -128,7 +131,7 @@ class MetropolisHastingsSampler:
 
         torch.where(accept_mask.unsqueeze(-1), proposed_state, self.b, out=self.b)
         torch.where(accept_mask, proposed_logpdfs, self.logpdfs, out=self.logpdfs)
-        torch.where(accept_mask.unsqueeze(-1), proposed_aux, self.psi, out=self.psi)
+        torch.where(accept_mask.unsqueeze(-1), proposed_psi, self.psi, out=self.psi)
 
         # Update step sizes
         mean_accept_mask = accept_mask.to(torch.get_default_dtype()).mean(dim=0)

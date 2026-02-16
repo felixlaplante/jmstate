@@ -33,7 +33,7 @@ def clock_forward(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:  # noqa: 
     matrix with the same number of rows as `t0`.
 
     Args:
-        t0 (torch.Tensor): Past transition time.
+        t0 (torch.Tensor): Former transition time.
         t1 (torch.Tensor): Current time
 
     Returns:
@@ -60,11 +60,11 @@ def clock_reset(t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
     matrix with the same number of rows as `t0`.
 
     Args:
-        t0 (torch.Tensor): Past transition time.
+        t0 (torch.Tensor): Former transition time.
         t1 (torch.Tensor): Current time
 
     Returns:
-        torch.Tensor: Current time - Past transition time.
+        torch.Tensor: Current time - Former transition time.
 
     Examples:
         >>> clock_reset(1, 2)
@@ -118,7 +118,7 @@ class Exponential(LogBaseHazardFn):
         """Calls the Exponential base hazard.
 
         Args:
-            t0 (torch.Tensor): Past transition time.
+            t0 (torch.Tensor): Former transition time.
             t1 (torch.Tensor): Current time
 
         Returns:
@@ -144,7 +144,7 @@ class Weibull(LogBaseHazardFn):
     It is given by the formula
 
     .. math::
-        \lambda(t) = \frac{k}{\lambda} \frac{t}{\lambda}^{k - 1}.
+        \lambda(t) = \frac{k}{\lambda} \left( \frac{t}{\lambda} \right)^{k - 1}.
 
     This returns the base hazard in log scale. It expects a former transition time
     column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
@@ -188,7 +188,7 @@ class Weibull(LogBaseHazardFn):
         """Calls the Weibull base hazard.
 
         Args:
-            t0 (torch.Tensor): Past transition time.
+            t0 (torch.Tensor): Former transition time.
             t1 (torch.Tensor): Current time
 
         Returns:
@@ -267,7 +267,7 @@ class Gompertz(LogBaseHazardFn):
         """Calls the Gompertz base hazard.
 
         Args:
-            t0 (torch.Tensor): Past transition time.
+            t0 (torch.Tensor): Former transition time.
             t1 (torch.Tensor): Current time
 
         Returns:
@@ -349,7 +349,7 @@ class LogNormal(LogBaseHazardFn):
         """Calls the log normal base hazard.
 
         Args:
-            t0 (torch.Tensor): Past transition time.
+            t0 (torch.Tensor): Former transition time.
             t1 (torch.Tensor): Current time
 
         Returns:
