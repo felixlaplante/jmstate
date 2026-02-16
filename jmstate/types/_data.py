@@ -181,7 +181,7 @@ class ModelData(BaseEstimator):
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
             raise ValueError("NaN time values on non NaN y values")
 
-    def prepare(self, model: MCMCMixin) -> Self:
+    def prepare(self, model: FitMixin | PredictMixin) -> Self:
         """Sets the representation for likelihood computations according to model.
 
         Args:
