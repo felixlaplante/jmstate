@@ -22,7 +22,7 @@ def parameters_to_vector(parameters: Iterable[torch.Tensor]) -> torch.Tensor:
     """
     vec: list[torch.Tensor] = []
     for param in parameters:
-        vec.append(param.reshape(-1))
+        vec.append(param.view(-1))
     return torch.cat(vec)
 
 
@@ -45,4 +45,5 @@ def vector_to_parameters(vec: torch.Tensor, parameters: Iterable[torch.Tensor]):
     for param in parameters:
         num_param = param.numel()
         param.data.copy_(vec[ptr : (ptr := ptr + num_param)].view_as(param))
+
 
