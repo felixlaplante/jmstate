@@ -162,7 +162,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         target_accept_rate: float = 0.234,
         n_warmup: int = 100,
         n_subsample: int = 10,
-        max_iter_fit: int = 500,
+        max_iter_fit: int = 1000,
         tol: float = 0.1,
         window_size: int = 100,
         n_samples_summary: int = 500,
@@ -193,7 +193,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             n_subsample (int, optional): The number of subsamples for the MCMC sampler.
                 Defaults to 10.
             max_iter_fit (int, optional): The maximum number of iterations for
-                stochastic gradient ascent. Defaults to 500.
+                stochastic gradient ascent. Defaults to 1000.
             tol (float, optional): The tolerance for the convergence. Defaults to 0.1.
             window_size (int, optional): The window size for the convergence. Defaults
                 to 100.
