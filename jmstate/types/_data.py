@@ -23,8 +23,8 @@ from ._defs import (
 )
 
 if TYPE_CHECKING:
-    from ..model._fit import FitMixin  # noqa: PLC0415
-    from ..model._predict import PredictMixin  # noqa: PLC0415
+    from ..model._fit import FitMixin
+    from ..model._predict import PredictMixin
 
 
 # Dataclasses
