@@ -10,7 +10,8 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from torch.distributions import Normal
-from torch.nn.utils import parameters_to_vector
+
+from ..utils._convert_parameters import parameters_to_vector
 
 if TYPE_CHECKING:
     from ..model._base import MultiStateJointModel

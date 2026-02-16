@@ -5,10 +5,10 @@ import torch
 from sklearn.base import BaseEstimator  # type: ignore
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from sklearn.utils.validation import check_is_fitted  # type: ignore
-from torch.nn.utils import parameters_to_vector
 
 from ..types._data import ModelData, ModelDesign
 from ..types._parameters import ModelParameters
+from ..utils._convert_parameters import parameters_to_vector
 from ._fit import FitMixin
 from ._predict import PredictMixin
 

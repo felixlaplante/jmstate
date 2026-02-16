@@ -9,7 +9,6 @@ from sklearn.utils.validation import (  # type: ignore
     check_consistent_length,  # type: ignore
     check_is_fitted,  # type: ignore
 )
-from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from tqdm import trange
 
 from ..types._data import (
@@ -22,6 +21,7 @@ from ..types._data import (
 from ..types._defs import Trajectory
 from ..types._parameters import ModelParameters
 from ..utils._cache import Cache
+from ..utils._convert_parameters import parameters_to_vector, vector_to_parameters
 from ._hazard import HazardMixin
 from ._sampler import MCMCMixin
 

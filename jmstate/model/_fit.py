@@ -6,12 +6,12 @@ from warnings import warn
 import torch
 from sklearn.utils._param_validation import validate_params  # type: ignore
 from torch.func import functional_call, jacfwd  # type: ignore
-from torch.nn.utils import parameters_to_vector
 from tqdm import trange
 
 from ..types._data import ModelData, ModelDataUnchecked, ModelDesign
 from ..types._parameters import ModelParameters, UniqueParametersNNModule
 from ..utils._cache import Cache
+from ..utils._convert_parameters import parameters_to_vector
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._prior import PriorMixin

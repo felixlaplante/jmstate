@@ -5,10 +5,15 @@ from functools import lru_cache
 from typing import Any
 
 import torch
+from sklearn.utils._param_validation import validate_params  # type: ignore
 
 from ..types._defs import BucketData, Trajectory
 
 
+@validate_params(
+    {"trajectories": [list]},
+    prefer_skip_nested_validation=True,
+)
 def build_buckets(
     trajectories: list[Trajectory],
 ) -> dict[tuple[Any, Any], BucketData]:

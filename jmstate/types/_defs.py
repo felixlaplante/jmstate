@@ -3,8 +3,9 @@ from typing import Final, NamedTuple, Protocol, TypeAlias
 
 import torch
 from torch import nn
-from torch.nn.utils import parameters_to_vector
 from xxhash import xxh3_64_intdigest
+
+from ..utils._convert_parameters import parameters_to_vector
 
 # Type Aliases
 Trajectory: TypeAlias = list[tuple[float, str]]
@@ -145,8 +146,8 @@ class LogBaseHazardFn(nn.Module, ABC):
         """
         ident = id(self)
         try:
-            vector = parameters_to_vector(self.parameters())
-            return (ident, xxh3_64_intdigest(vector.detach().numpy()))
+            vec = parameters_to_vector(self.parameters())
+            return (ident, xxh3_64_intdigest(vec.detach().numpy()))
         except ValueError:
             return (ident,)
 
