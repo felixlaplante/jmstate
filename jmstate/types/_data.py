@@ -23,8 +23,7 @@ from ._defs import (
 )
 
 if TYPE_CHECKING:
-    from ..model._fit import FitMixin
-    from ..model._predict import PredictMixin
+    from ..model._sampler import MCMCMixin
 
 
 # Dataclasses
@@ -181,21 +180,20 @@ class ModelData(BaseEstimator):
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
             raise ValueError("NaN time values on non NaN y values")
 
-    def prepare(self, model: FitMixin | PredictMixin) -> Self:
+    def prepare(self, model: MCMCMixin) -> Self:
         """Sets the representation for likelihood computations according to model.
 
         Args:
-            model (FitMixin | PredictMixin): The multistate joint model.
+            model (MCMCMixin): The multistate joint model.
 
         Returns:
-            Self: The prepared data.
+            Self: The prepared (completed) data.
         """
-        from ..model._fit import FitMixin  # noqa: PLC0415
-        from ..model._predict import PredictMixin  # noqa: PLC0415
+        from ..model._sampler import MCMCMixin  # noqa: PLC0415
 
         validate_params(
             {
-                "model": [FitMixin, PredictMixin],
+                "model": [MCMCMixin],
             },
             prefer_skip_nested_validation=True,
         )
