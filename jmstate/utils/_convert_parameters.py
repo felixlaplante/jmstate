@@ -41,7 +41,7 @@ def vector_to_parameters(vec: torch.Tensor, parameters: Iterable[torch.Tensor]):
         parameters (Iterable[Tensor]): an iterable of Tensors that are the parameters of
             a model.
     """
-    pointer = 0
+    ptr = 0
     for param in parameters:
         num_param = param.numel()
-        param.data.copy_(vec[pointer : (pointer := pointer + num_param)].view_as(param))
+        param.data.copy_(vec[ptr : (ptr := ptr + num_param)].view_as(param))
