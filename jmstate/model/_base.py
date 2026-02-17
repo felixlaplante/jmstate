@@ -46,15 +46,18 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     `n_subsample` to specify the number of subsamples. The greater this number, the
     less correlated the samples are, but the longer it takes to run the MCMC sampler.
 
-    For fitting, use `max_iter_fit` to specify the maximum number of iterations for
+    For fitting, any optimizer can be through the `optimizer` parameter. If set to
+    `None`, then fitting is not possible. Recommended to use `torch.optim.Adam` with a
+    learning rate of 0.1 to 1.0. A value of 0.5 is a good starting point.
+
+    Additionaly, use `max_iter_fit` to specify the maximum number of iterations for
     stochastic gradient ascent, `n_samples_summary` to specify the number of samples to
     compute Fisher Information Matrix and model selection criteria, `tol` to specify the
-    tolerance for the R2 convergence, and `window_size` to specify the window size for
-    the R2 convergence. The longer, the more stable the R2 convergence. The default
-    value seems a sweet spot, and the stopping criterion is scale-agnostic. Any
-    optimizer can be through the `optimizer` parameter. If set to `None`, then fitting
-    is not possible. Recommended to use `torch.optim.Adam` with a learning rate of
-    0.1 to 1.0. A value of 0.5 is a good starting point.
+    tolerance for the :math:`R^2` convergence, and `window_size` to specify the window
+    size for the :math:`R^2` convergence. The :math:`R^2` convergence criterion is
+    scale-agnostic and represents a local stationnary test over the last `window_size`
+    iterates. The default value of 100 seems a sweet spot. For more details, see the
+    `fit` method.
 
     For printing, use `verbose` to specify whether to print the progress of the model
     fitting and predicting.
@@ -80,8 +83,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         n_subsample (int): The number of subsamples for the MCMC sampler.
         max_iter_fit (int): The maximum number of iterations for stochastic gradient
             ascent.
-        tol (float): The tolerance for the R2 convergence.
-        window_size (int): The window size for the R2 convergence.
+        tol (float): The tolerance for the :math:`R^2` convergence.
+        window_size (int): The window size for the :math:`R^2` convergence.
         n_samples_summary (int): The number of samples used to compute Fisher
             Information Matrix and model selection criteria.
         verbose (bool): Whether to print the progress of the model fitting.
@@ -93,9 +96,9 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         bic_ (float | None): The Bayesian Information Criterion.
 
     Examples:
-        >>> # Declares initial model
-        >>> optimizer = torch.optim.Adam(init_model_parameters.parameters(), lr=0.5)
-        >>> model = MultiStateJointModel(model_design, init_model_parameters, optimizer)
+        >>> # Declares a fittable model
+        >>> optimizer = torch.optim.Adam(init_params.parameters(), lr=0.5)
+        >>> model = MultiStateJointModel(design, init_params, optimizer)
         >>> # Runs optimization process
         >>> model.fit(data)
         >>> # Prints a summary of the model
@@ -141,7 +144,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             "n_subsample": [Interval(Integral, 0, None, closed="left")],
             "max_iter_fit": [Interval(Integral, 1, None, closed="left")],
             "tol": [Interval(Real, 0, 1, closed="both")],
-            "window_size": [Interval(Integral, 1, None, closed="left")],
+            "window_size": [Interval(Integral, 2, None, closed="left")],
             "n_samples_summary": [Interval(Integral, 1, None, closed="left")],
             "verbose": ["verbose"],
         },

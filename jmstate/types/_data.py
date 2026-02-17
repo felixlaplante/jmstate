@@ -68,6 +68,7 @@ class ModelDesign(BaseEstimator):
         >>> individual_effects_fn = lambda gamma, x, b: gamma + b
         >>> regression_fn = sigmoid
         >>> surv_fns = {("alive", "dead"): (Exponential(1.2), sigmoid)}
+        >>> design = ModelDesign(individual_effects_fn, regression_fn, surv_fns)
     """
 
     individual_effects_fn: IndividualEffectsFn

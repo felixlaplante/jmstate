@@ -120,7 +120,7 @@ class FitMixin(
         """Checks if the optimizer has converged.
 
         This is based on a linear regression of the parameters with the current
-        number of iterations. It R2 is below a threshold, the optimizer is
+        number of iterations. If :math:`R^2` is below a threshold, the optimizer is
         considered to have converged.
 
         Args:
@@ -276,7 +276,13 @@ class FitMixin(
 
         This method computes an estimate of the Maximum Likelihood Estimate (MLE) noted
         :math:`\hat{\theta}`. It is optimized using the `optimizer` attribute for a
-        maximum of `max_iter_fit` iterations.
+        maximum of `max_iter_fit` iterations. Fitting is stopped when the maximum number
+        of iterations is reached, or when the :math:`R^2` stopping criterion is met. It
+        tests local stationarity of each parameter component using a short-term linear
+        regression over the last `window_size` iterates. The :math:`R^2` then measures
+        whether the optimization trajectory is better explained by a linear trend than
+        by a constant. Convergence is declared when all :math:`R^2` are less than `tol`,
+        indicating no significant linear drift.
 
         It leverages the Fisher identity and stochastic gradient algorithm coupled
         with a MCMC (Metropolis-Hastings) sampler. The Fisher identity states that
