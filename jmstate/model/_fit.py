@@ -97,12 +97,7 @@ class FitMixin(
         Args:
             sampler (MetropolisHastingsSampler): The sampler.
             data (ModelData): The data.
-
-        Raises:
-            ValueError: If the optimizer is not initialized.
         """
-        if self.optimizer is None:
-            raise ValueError("Optimizer is not initialized.")
 
         def closure():
             self.optimizer.zero_grad()  # type: ignore
@@ -111,7 +106,7 @@ class FitMixin(
             loss.backward()  # type: ignore
             return loss.item()
 
-        self.optimizer.step(closure)
+        cast(torch.optim.Optimizer, self.optimizer).step(closure)
 
         # Restore logpdfs and psi
         sampler.logpdfs, sampler.psi = sampler.logpdfs_psi_fn(sampler.b)
@@ -122,9 +117,6 @@ class FitMixin(
         This is based on a linear regression of the parameters with the current
         number of iterations. If :math:`R^2` is below a threshold, the optimizer is
         considered to have converged.
-
-        Args:
-            optimizer (torch.optim.Adam): The optimizer.
 
         Returns:
             bool: True if the optimizer has converged, False otherwise.
@@ -165,10 +157,11 @@ class FitMixin(
             return functional_call(self, named_parameters_dict, args=(data, b))
 
         def _jac_fn(b: torch.Tensor) -> torch.Tensor:
-            return torch.cat(
-                list(_dict_jac_fn(dict(self.named_parameters()), b).values()),  # type: ignore
-                dim=-1,
-            )
+            named_parameters_dict = {
+                k: v.data.reshape(-1) for k, v in self.named_parameters()
+            }
+            out = _dict_jac_fn(named_parameters_dict, b)
+            return torch.cat(list(out.values()), dim=-1)  # type: ignore
 
         return torch.zeros(len(data), self.params.numel()), cast(
             Callable[[torch.Tensor], torch.Tensor], _jac_fn
@@ -313,9 +306,15 @@ class FitMixin(
         Args:
             data (ModelData): The data to fit the model to.
 
+        Raises:
+            ValueError: If the optimizer is not initialized.
+
         Returns:
             Self: The fitted model.
         """
+        if self.optimizer is None:
+            raise ValueError("Optimizer is not initialized.")
+
         data = ModelDataUnchecked(
             data.x, data.t, data.y, data.trajectories, data.c
         ).prepare(self)
