@@ -26,9 +26,12 @@ class Exponential(nn.Module):
     .. math::
         \lambda(t) = \lambda.
 
-    This returns the base hazard in log scale. It expects a former transition time
-    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
-    with the same number of rows as `t0`.
+    This method expects:
+        - `t0`: a column vector of previous transition times, shape `(n, 1)`.
+        - `t1`: a matrix of future evaluation times, shape `(n, m)`, with the same
+          number of rows as `t0`.
+
+    The output is the log base hazard evaluated at each `t1` relative to `t0`.
 
     Optimization of the parameters can be disabled by checking the `forzen` flag.
 
@@ -68,8 +71,8 @@ class Exponential(nn.Module):
         """Calls the Exponential base hazard.
 
         Args:
-            t0 (torch.Tensor): Former transition time.
-            t1 (torch.Tensor): Current time
+            t0 (torch.Tensor): Previous transition times, shape :math:`(n, 1)`.
+            t1 (torch.Tensor): Future evaluation times, shape :math:`(n, m)`.
 
         Returns:
             torch.Tensor: The computed base hazard in log scale.
@@ -96,9 +99,12 @@ class Weibull(nn.Module):
     .. math::
         \lambda(t) = \frac{k}{\lambda} \left( \frac{t}{\lambda} \right)^{k - 1}.
 
-    This returns the base hazard in log scale. It expects a former transition time
-    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
-    with the same number of rows as `t0`.
+    This method expects:
+        - `t0`: a column vector of previous transition times, shape `(n, 1)`.
+        - `t1`: a matrix of future evaluation times, shape `(n, m)`, with the same
+            number of rows as `t0`.
+
+    The output is the log base hazard evaluated at each `t1` relative to `t0`.
 
     If `clock_type` is set to `sojourn`, given `t0` and `t1`, the transformation will be
     computed at `t1 - t0` (sojourn time), and simply `t1` if set to `absolute`.
@@ -157,8 +163,8 @@ class Weibull(nn.Module):
         """Calls the Weibull base hazard.
 
         Args:
-            t0 (torch.Tensor): Former transition time.
-            t1 (torch.Tensor): Current time
+            t0 (torch.Tensor): Previous transition times, shape `(n, 1)`.
+            t1 (torch.Tensor): Future evaluation times, shape `(n, m)`.
 
         Returns:
             torch.Tensor: The computed base hazard in log scale.
@@ -195,9 +201,12 @@ class Gompertz(nn.Module):
     .. math::
         \lambda(t) = a \exp{bt}.
 
-    This returns the base hazard in log scale. It expects a former transition time
-    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
-    with the same number of rows as `t0`.
+    This method expects:
+        - `t0`: a column vector of previous transition times, shape `(n, 1)`.
+        - `t1`: a matrix of future evaluation times, shape `(n, m)`, with the same
+          number of rows as `t0`.
+
+    The output is the log base hazard evaluated at each `t1` relative to `t0`.
 
     If `clock_type` is set to `sojourn`, given `t0` and `t1`, the transformation will be
     computed at `t1 - t0` (sojourn time), and simply `t1` if `clock_type` is set to
@@ -253,12 +262,12 @@ class Gompertz(nn.Module):
         self.clock_type = clock_type
         self.frozen = frozen
 
-    def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the Gompertz base hazard.
 
         Args:
-            t0 (torch.Tensor): Former transition time.
-            t1 (torch.Tensor): Current time
+            t0 (torch.Tensor): Previous transition times, shape `(n, 1)`.
+            t1 (torch.Tensor): Future evaluation times, shape `(n, m)`.
 
         Returns:
             torch.Tensor: The computed base hazard in log scale.
@@ -293,9 +302,12 @@ class LogNormal(nn.Module):
         \phi(z) = \frac{1}{\sqrt{2\pi}} e^{-z^2/2}, \quad
         \Phi(z) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^z e^{-t^2/2} \, dt.
 
-    This returns the base hazard in log scale. It expects a former transition time
-    column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
-    with the same number of rows as `t0`.
+    This method expects:
+        - `t0`: a column vector of previous transition times, shape `(n, 1)`.
+        - `t1`: a matrix of future evaluation times, shape `(n, m)`, with the same
+          number of rows as `t0`.
+
+    The output is the log base hazard evaluated at each `t1` relative to `t0`.
 
     If `clock_type` is set to `sojourn`, given `t0` and `t1`, the transformation will be
     computed at `t1 - t0` (sojourn time), and simply `t1` if `clock_type` is set to
@@ -341,9 +353,6 @@ class LogNormal(nn.Module):
                 "sojourn".
             frozen (bool, optional): Whether to freeze the parameters. Defaults to
                 `False`.
-
-        Returns:
-            LogBaseHazardFn: Returns the log normal base hazard function.
         """
         super().__init__()  # type: ignore
 
@@ -360,8 +369,8 @@ class LogNormal(nn.Module):
         """Calls the log normal base hazard.
 
         Args:
-            t0 (torch.Tensor): Former transition time.
-            t1 (torch.Tensor): Current time
+            t0 (torch.Tensor): Previous transition times, shape `(n, 1)`.
+            t1 (torch.Tensor): Future evaluation times, shape `(n, m)`.
 
         Returns:
             torch.Tensor: The computed base hazard in log scale.

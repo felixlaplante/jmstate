@@ -40,18 +40,7 @@ class LogBaseHazardFn(ABC, nn.Module):
     """
 
     @abstractmethod
-    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
-        r"""Compute the log base hazard values.
-
-        Args:
-            t0 (torch.Tensor): Previous transition times, shape :math:`(n, 1)`.
-            t1 (torch.Tensor): Future evaluation times, shape :math:`(n, m)`.
-
-        Returns:
-            torch.Tensor: Log base hazard values evaluated at `t1` relative to `t0`,
-            shape :math:`(n, m)`.
-        """
-        ...
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
 
 
 class IndividualParametersFn(Protocol):
