@@ -9,6 +9,7 @@ from sklearn.utils.validation import (  # type: ignore
     check_consistent_length,  # type: ignore
     check_is_fitted,  # type: ignore
 )
+from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from tqdm import trange
 
 from ..types._data import (
@@ -20,8 +21,6 @@ from ..types._data import (
 )
 from ..types._defs import Trajectory
 from ..types._parameters import ModelParameters
-from ..utils._cache import Cache
-from ..utils._convert_parameters import parameters_to_vector, vector_to_parameters
 from ._hazard import HazardMixin
 from ._sampler import MCMCMixin
 
@@ -36,7 +35,6 @@ class PredictMixin(HazardMixin, MCMCMixin):
     n_subsample: int
     verbose: bool | int
     fim_: torch.Tensor | None
-    _cache: Cache
 
     def __init__(self, *args: Any, **kwargs: Any):
         """Initialize the prediction mixin."""
@@ -84,35 +82,35 @@ class PredictMixin(HazardMixin, MCMCMixin):
         n_samples: int = 1000,
         double_monte_carlo: bool = False,
     ) -> torch.Tensor:
-        r"""Function to predict longitudinal values.
+        r"""Predict longitudinal measurements at specified times.
 
-        For every drawing of a random effect :math:`b`, this computes at the prediction
-        times :math:`u` the values of the regression function given input data:
+        Computes the predicted longitudinal responses for each individual at the
+        specified prediction times :math:`u` by evaluating the regression function
+        conditional on posterior draws of the random effects :math:`b`. The prediction
+        may optionally use a double Monte Carlo procedure to account for parameter
+        uncertainty following Rizopoulos (2011).
 
-        .. math::
-            h(u, b).
-
-        The variable `u` is expected to be a matrix with the same number of rows as
-        individuals, and the same number of columns as prediction times.
-
-        If `double_monte_carlo` is True, then the prediction is computed using double
-        Monte Carlo Rizopoulos-style (2011).
+        The input `u` must be a matrix of shape :math:`(n, m)` where :math:`n` is the
+        number of individuals and :math:`m` is the number of prediction time points.
 
         Args:
-            data (ModelData): The data to predict.
-            u (torch.Tensor): The matrix containing prediction times.
-            n_samples (int, optional): The number of samples to draw from the
-                posterior. Defaults to 1000.
-            double_monte_carlo (bool, optional): Whether to use double Monte Carlo.
-                Defaults to False.
+            data (ModelData): The dataset containing covariates, observed outcomes,
+                trajectories, and censoring information.
+            u (torch.Tensor): Matrix of prediction times of shape `(n, m)`.
+            n_samples (int, optional): Number of posterior samples to draw. Defaults to
+                1000.
+            double_monte_carlo (bool, optional): If True, predictions incorporate a
+                double Monte Carlo procedure to sample parameters. Defaults to False.
 
         Raises:
-            ValueError: If `double_monte_carlo` is True and the model is not fitted.
-            ValueError: If `u` contains inf or NaN values.
-            ValueError: If `u` has incompatible shape.
+            ValueError: If `double_monte_carlo` is True and the model has not been
+                fitted.
+            ValueError: If `u` contains NaN or infinite values.
+            ValueError: If `u` has a shape inconsistent with the number of individuals.
 
         Returns:
-            torch.Tensor: The predicted longitudinal values.
+            torch.Tensor: Predicted longitudinal outcomes of shape `(n_samples, n, m)`,
+                where predictions are stacked along the first dimension.
         """
         assert_all_finite(u, input_name="u")
         check_consistent_length(u, data)
@@ -140,14 +138,14 @@ class PredictMixin(HazardMixin, MCMCMixin):
             if double_monte_carlo:
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
 
-            y = self.design.regression_fn(u, sampler.psi)
+            y = self.design.regression_fn(u, sampler.indiv_params)
             y_pred.extend(y[i] for i in range(y.size(0)))
             sampler.run(self.n_subsample)
 
         # Restore parameters
         if double_monte_carlo:
             vector_to_parameters(init_params, self.params.parameters())  # type: ignore
-        self._cache.clear()
+
         return torch.stack(y_pred[:n_samples])
 
     @torch.no_grad()  # type: ignore
@@ -168,46 +166,50 @@ class PredictMixin(HazardMixin, MCMCMixin):
         n_samples: int = 1000,
         double_monte_carlo: bool = False,
     ) -> torch.Tensor:
-        r"""Function to predict survival log probability values.
+        r"""Predict survival log-probabilities at specified times.
 
-        For every drawing of a random effect :math:`b`, this computes at the prediction
-        times :math:`u` the values of the log survival probabilities given input data
-        and conditionally to survival up to time :math:`c`:
+        Computes the predicted log survival probabilities for each individual at the
+        specified prediction times :math:`u` by evaluating the survival function
+        conditional on posterior draws of the random effects :math:`b`. The computation
+        may optionally use a double Monte Carlo procedure to incorporate parameter
+        uncertainty following Rizopoulos (2011).
+
+        The predicted quantity is given by:
 
         .. math::
-            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt.
+            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt,
 
-        When multiple transitions are allowed, :math:`\lambda(t)` is a sum over all
-            possible transitions, that is to say if an individual is in the state
-            :math:`k` from time :math:`t_0`, this gives:
+        where :math:`c` denotes the individual censoring time. In the presence of
+        multiple transitions, :math:`\lambda(t)` is the sum over all possible
+        transition-specific hazards:
 
-            .. math::
-                -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt.
+        .. math::
+            -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt,
 
-        Please note this makes use of the Chasles property in order to avoid the
-        computation of two integrals and make computations more precise.
+        using the Chasles property to simplify computation and improve numerical
+        precision.
 
-        The variable `u` is expected to be a matrix with the same number of rows as
-        individuals, and the same number of columns as prediction times.
-
-        If `double_monte_carlo` is True, then the prediction is computed using double
-        Monte Carlo Rizopoulos-style (2011).
+        The input `u` must be a matrix of shape :math:`(n, m)` where :math:`n` is the
+        number of individuals and :math:`m` is the number of prediction time points.
 
         Args:
-            data (ModelData): The data to predict.
-            u (torch.Tensor): The matrix containing prediction times.
-            n_samples (int, optional): The number of samples to draw from the
-                posterior. Defaults to 1000.
-            double_monte_carlo (bool, optional): Whether to use double Monte Carlo.
-                Defaults to False.
+            data (ModelData): The dataset containing covariates, observed outcomes,
+                trajectories, and censoring information.
+            u (torch.Tensor): Matrix of prediction times of shape `(n, m)`.
+            n_samples (int, optional): Number of posterior samples to draw. Defaults to
+                1000.
+            double_monte_carlo (bool, optional): If True, predictions incorporate a
+                double Monte Carlo procedure to sample parameters. Defaults to False.
 
         Raises:
-            ValueError: If `double_monte_carlo` is True and the model is not fitted.
-            ValueError: If `u` contains inf or NaN values.
-            ValueError: If `u` has incompatible shape.
+            ValueError: If `double_monte_carlo` is True and the model has not been
+                fitted.
+            ValueError: If `u` contains NaN or infinite values.
+            ValueError: If `u` has a shape inconsistent with the number of individuals.
 
         Returns:
-            torch.Tensor: The predicted survival log probabilities.
+            torch.Tensor: Predicted survival log-probabilities of shape
+                `(n_samples, n, m)`, stacked along the first dimension.
         """
         assert_all_finite(u, input_name="u")
         check_consistent_length(u, data)
@@ -237,14 +239,16 @@ class PredictMixin(HazardMixin, MCMCMixin):
             if double_monte_carlo:
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
 
-            sample_data = SampleData(data.x, data.trajectories, sampler.psi, data.c)
+            sample_data = SampleData(
+                data.x, data.trajectories, sampler.indiv_params, data.c
+            )
             surv_logps = self.compute_surv_logps(sample_data, u)
             surv_logps_pred.extend(surv_logps[i] for i in range(surv_logps.size(0)))
             sampler.run(self.n_subsample)
 
         if double_monte_carlo:
             vector_to_parameters(init_params, self.params.parameters())  # type: ignore
-        self._cache.clear()
+
         return torch.stack(surv_logps_pred[:n_samples])
 
     @torch.no_grad()  # type: ignore
@@ -267,35 +271,40 @@ class PredictMixin(HazardMixin, MCMCMixin):
         n_samples: int = 1000,
         double_monte_carlo: bool = False,
     ) -> list[list[Trajectory]]:
-        r"""Function to predict trajectories.
+        r"""Predict individual-level trajectories up to specified censoring times.
 
-        For every drawing of a random effect :math:`b`, this simulates the trajectories
-        up to a censoring time `c` with a maximum length of `max_length` to avoid
-        infinite loops. This uses a variant of Gillepsie's algorithm.
+        Simulates the evolution of individual trajectories conditional on posterior
+        draws of the random effects :math:`b`, up to the censoring times `c`.
+        Trajectories are truncated to a maximum length of `max_length` to avoid
+        infinite loops. The simulation algorithm is a variant of Gillespie's method
+        adapted for individual parameters. If `double_monte_carlo` is True, then the
+        prediction is computed using the double Monte Carlo procedure described in
+        Rizopoulos (2011).
 
-        The variable `c` is expected to be a column vector with the same number of
-        rows as individuals.
-
-        If `double_monte_carlo` is True, then the prediction is computed using double
-        Monte Carlo Rizopoulos-style (2011).
+        The input `c` must be a column vector of shape :math:`(n, 1)` where :math:`n`
+        is the number of individuals.
 
         Args:
-            data (ModelData): The data to predict.
-            c (torch.Tensor): The sampling censoring times.
-            max_length (int, optional): The maximum length of the trajectories.
+            data (ModelData): The dataset containing covariates, observed outcomes,
+                trajectories, and censoring information.
+            c (torch.Tensor): Column vector of censoring times for each individual.
+            max_length (int, optional): Maximum length of generated trajectories.
                 Defaults to 10.
-            n_samples (int, optional): The number of samples to draw from the
-                posterior. Defaults to 1000.
-            double_monte_carlo (bool, optional): Whether to use double Monte Carlo.
-                Defaults to False.
+            n_samples (int, optional): Number of posterior samples to draw. Defaults to
+                1000.
+            double_monte_carlo (bool, optional): If True, predictions incorporate a
+                double Monte Carlo procedure to sample parameters. Defaults to False.
 
         Raises:
-            ValueError: If `double_monte_carlo` is True and the model is not fitted.
-            ValueError: If `c` contains inf or NaN values.
-            ValueError: If `c` has incompatible shape.
+            ValueError: If `double_monte_carlo` is True and the model has not been
+                fitted.
+            ValueError: If `c` contains NaN or infinite values.
+            ValueError: If `c` has a shape inconsistent with the number of individuals.
 
         Returns:
-            list[list[Trajectory]]: The predicted trajectories.
+            list[list[Trajectory]]: Predicted trajectories for each individual,
+            organized as a list of lists, with the outer list indexing posterior draws
+            and the inner list indexing individuals.
         """
         assert_all_finite(c, input_name="c")
         check_consistent_length(c, data)
@@ -326,9 +335,9 @@ class PredictMixin(HazardMixin, MCMCMixin):
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
 
             # Sample trajectories, not possible to vectorize fully
-            for j in range(sampler.psi.size(0)):
+            for j in range(sampler.indiv_params.size(0)):
                 sample_data = SampleDataUnchecked(
-                    data.x, data.trajectories, sampler.psi[j], data.c
+                    data.x, data.trajectories, sampler.indiv_params[j], data.c
                 )
                 trajectories_pred.append(
                     self.sample_trajectories(sample_data, c, max_length=max_length)
@@ -337,5 +346,5 @@ class PredictMixin(HazardMixin, MCMCMixin):
 
         if double_monte_carlo:
             vector_to_parameters(init_params, self.params.parameters())  # type: ignore
-        self._cache.clear()
+
         return trajectories_pred[:n_samples]

@@ -10,8 +10,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from torch.distributions import Normal
-
-from ..utils._convert_parameters import parameters_to_vector
+from torch.nn.utils import parameters_to_vector
 
 if TYPE_CHECKING:
     from ..model._base import MultiStateJointModel
@@ -35,13 +34,19 @@ SIGNIFICANCE_CODES: Final[tuple[str, ...]] = (
 
 
 def summary(model: MultiStateJointModel):
-    """Prints a summary of the fitted model.
+    r"""Print a statistical summary of the fitted multistate joint model.
 
-    This function prints the (nullity) p-values of the parameters as well as values and
-    standard error. Also prints the log likelihood, AIC, BIC with lovely colors.
+    This function displays the estimated parameter values, their standard errors, and
+    the (nullity) p-values testing the hypothesis that each coefficient is zero.
+    Note that for certain parameters—such as covariance components—these p-values
+    may not be meaningful and should be interpreted with caution.
+
+    Additionally, the function prints model selection metrics including the log
+    likelihood, Akaike Information Criterion (AIC), and Bayesian Information Criterion
+    (BIC), with color-enhanced formatting for readability.
 
     Raises:
-        ValueError: If the model is not fitted.
+        ValueError: If the model has not been fitted.
     """
     vector = parameters_to_vector(model.params.parameters())
     stderr = model.stderr

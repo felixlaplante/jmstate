@@ -11,7 +11,5 @@ Utils
    :recursive:
 
    build_buckets
-   parameters_to_vector
    plot_params_history
    summary
-   vector_to_parameters

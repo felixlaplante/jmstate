@@ -3,8 +3,7 @@
 from ._data import ModelData, ModelDesign, SampleData
 from ._defs import (
     BucketData,
-    ClockMethod,
-    IndividualEffectsFn,
+    IndividualParametersFn,
     LinkFn,
     LogBaseHazardFn,
     RegressionFn,
@@ -13,9 +12,8 @@ from ._parameters import CovParameters, ModelParameters
 
 __all__ = [
     "BucketData",
-    "ClockMethod",
     "CovParameters",
-    "IndividualEffectsFn",
+    "IndividualParametersFn",
     "LinkFn",
     "LogBaseHazardFn",
     "ModelData",

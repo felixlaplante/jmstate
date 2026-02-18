@@ -3,9 +3,6 @@ from typing import Final, NamedTuple, Protocol, TypeAlias
 
 import torch
 from torch import nn
-from xxhash import xxh3_64_intdigest
-
-from ..utils._convert_parameters import parameters_to_vector
 
 # Type Aliases
 Trajectory: TypeAlias = list[tuple[float, str]]
@@ -15,154 +12,175 @@ Trajectory: TypeAlias = list[tuple[float, str]]
 LOG_TWO_PI: Final[torch.Tensor] = torch.log(torch.tensor(2.0 * torch.pi))
 
 
-# Protocols
-class IndividualEffectsFn(Protocol):
-    """The individual effects function protocol.
+# User definitions
+class LogBaseHazardFn(ABC, nn.Module):
+    r"""Abstract base class for log base hazard functions.
 
-    Calls the individual effects function.
+    This class represents a log-transformed baseline hazard function in a multistate
+    model. The log base hazard is parameterized as a `torch.nn.Module`, allowing its
+    parameters to be optimized during model fitting. For default base hazards, a
+    `frozen` attribute can be set to prevent optimization of the module parameters.
 
-    It must be able to yield 2D or 3D tensors given inputs of `gamma` (population
-    parameters), `x` (covariates matrix), and `b` (random effects). Note `b` is
-    either 2D or 3D.
+    The function expects:
+
+    - `t0`: a column vector of previous transition times of shape :math:`(n, 1)`.
+    - `t1`: a matrix of future time points at which the log base hazard is evaluated,
+        of shape :math:`(n, m)` matching the number of rows in `t0`.
+
+    Attributes:
+        frozen (bool): If True, the parameters of the log base hazard are not updated
+            during optimization.
+
+    Methods:
+        forward(t0, t1): Computes the log base hazard between `t0` and `t1`.
+
+    Notes:
+        The outputs are in log scale and can be directly used in likelihood
+        computations for multistate models.
+    """
+
+    @abstractmethod
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+        r"""Compute the log base hazard values.
+
+        Args:
+            t0 (torch.Tensor): Previous transition times, shape :math:`(n, 1)`.
+            t1 (torch.Tensor): Future evaluation times, shape :math:`(n, m)`.
+
+        Returns:
+            torch.Tensor: Log base hazard values evaluated at `t1` relative to `t0`,
+            shape :math:`(n, m)`.
+        """
+        ...
+
+
+class IndividualParametersFn(Protocol):
+    r"""Protocol defining the individual parameters function.
+
+    This function maps population-level parameters, covariates, and random effects
+    to individual-specific parameters used in a multistate model.
+
+    Given inputs:
+
+    - `pop_params`: population-level parameters.
+    - `x`: covariates matrix of shape :math:`(n, p)`.
+    - `b`: random effects of shape either :math:`(n, q)` (2D) or :math:`(n, m, q)` (3D).
+
+    The function must return individual parameters `indiv_params` of shape 2D or 3D
+    consistent with the input dimensions.
 
     Args:
-        gamma (torch.Tensor | None): The population parameters.
-        x (torch.Tensor | None): The fixed covariates matrix.
-        b (torch.Tensor): The random effects.
+        pop_params (torch.Tensor): Population-level parameters.
+        x (torch.Tensor): Fixed covariates matrix.
+        b (torch.Tensor): Random effects tensor.
 
     Returns:
-        torch.Tensor: The individual parameters `psi`.
+        torch.Tensor: Individual parameters tensor of appropriate shape for each
+        individual.
 
     Examples:
-        >>> individual_effects_fn = lambda gamma, x, b: gamma + b
+        >>> indiv_params_fn = lambda pop, x, b: pop + b
     """
 
     def __call__(
-        self, gamma: torch.Tensor | None, x: torch.Tensor | None, b: torch.Tensor
+        self, pop_params: torch.Tensor, x: torch.Tensor, b: torch.Tensor
     ) -> torch.Tensor: ...
 
 
 class RegressionFn(Protocol):
-    """The regression function protocol.
+    r"""Protocol defining a regression function for multistate models.
 
-    It must be able to yield 3D and 4D tensors given 1D or 2D time inputs, as well
-        as `psi` input of order 2 or 3. This is not very restrictive, but requires to be
-        careful. The last dimension is the dimension of the response variable; second
-        last is the repeated measurements; third last is individual based; possible
-        fourth last is for parallelization of the MCMC sampler.
+    This function maps evaluation times and individual-specific parameters to predicted
+    response values. It must support both 1D and 2D time inputs and individual
+    parameters of order 2 or 3, returning either 3D or 4D tensors depending on the
+    model design.
 
-        It is identical to LinkFn.
+    Tensor output conventions:
+
+    - Last dimension corresponds to the response variable dimension :math:`d`.
+    - Second-last dimension corresponds to repeated measurements :math:`m`.
+    - Third-last dimension corresponds to individual index :math:`n`.
+    - Optional fourth-last dimension may be used for parallelization across MCMC
+      chains or batch processing.
+
+    This protocol is conceptually identical to `LinkFn`.
 
     Args:
-        t (torch.Tensor): The evaluation times.
-        psi (torch.Tensor): The individual parameters.
+        t (torch.Tensor): Evaluation times of shape :math:`(n, m)` or :math:`(m,)`.
+        indiv_params (torch.Tensor): Individual parameters of shape 2D :math:`(n, q)`
+            or 3D :math:`(n, m, q)`.
 
     Returns:
-        torch.Tensor: The response variable values.
+        torch.Tensor: Predicted response values of shape consistent with `(n, m, d)` or
+            `(batch, n, m, d)` for parallelized computations.
 
     Examples:
-        >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-        ...     scale, offset, slope = psi.chunk(3, dim=-1)
-        ...     # Fully broadcasted
+        >>> def sigmoid(t: torch.Tensor, indiv_params: torch.Tensor):
+        ...     scale, offset, slope = indiv_params.chunk(3, dim=-1)
+        ...     # Fully broadcasted computation
         ...     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
-        >>> regression_fn = sigmoid
     """
 
-    def __call__(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor: ...
+    def __call__(self, t: torch.Tensor, indiv_params: torch.Tensor) -> torch.Tensor: ...
 
 
 class LinkFn(Protocol):
-    """The link function protocol.
+    r"""Protocol defining a link function for multistate models.
 
-    It must be able to yield 3D and 4D tensors given 1D or 2D time inputs, as well
-        as `psi` input of order 2 or 3. This is not very restrictive, but requires to be
-        careful. The last dimension is the dimension of the response variable; second
-        last is the repeated measurements; third last is individual based; possible
-        fourth last is for parallelization of the MCMC sampler.
+    A link function maps evaluation times and individual-specific parameters to
+    transformed outputs, such as transition-specific parameters. Requirements are
+    identical to those of `RegressionFn`.
 
-        It is identical to RegressionFn.
+    Tensor output conventions:
+
+    - Last dimension corresponds to the response variable dimension :math:`d`.
+    - Second-last dimension corresponds to repeated measurements :math:`m`.
+    - Third-last dimension corresponds to individual index :math:`n`.
+    - Optional fourth-last dimension may be used for parallelization across MCMC
+      chains or batch computations.
+
+    This protocol is conceptually identical to `RegressionFn`.
 
     Args:
-        t (torch.Tensor): The evaluation times.
-        psi (torch.Tensor): The individual parameters.
+        t (torch.Tensor): Evaluation times of shape :math:`(n, m)` or :math:`(m,)`.
+        indiv_params (torch.Tensor): Individual parameters of shape 2D :math:`(n, q)`
+            or 3D :math:`(n, m, q)`.
 
     Returns:
-        torch.Tensor: The response variable values.
+        torch.Tensor: Transformed outputs consistent with shapes `(n, m, d)` or
+            `(batch, n, m, d)` for parallelized computations.
 
     Examples:
-        >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-        ...     scale, offset, slope = psi.chunk(3, dim=-1)
-        ...     # Fully broadcasted
+        >>> def sigmoid(t: torch.Tensor, indiv_params: torch.Tensor):
+        ...     scale, offset, slope = indiv_params.chunk(3, dim=-1)
+        ...     # Fully broadcasted computation
         ...     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
-        >>> link_fn = sigmoid
     """
 
-    def __call__(self, t: torch.Tensor, psi: torch.Tensor) -> torch.Tensor: ...
-
-
-class ClockMethod(Protocol):
-    r"""The clock method protocol.
-
-    This protocol is useful to differentiate between two natural mappings when dealing
-    with base hazards. It expects a former transition time column vector `t0` as well as
-    a matrix of next time points `t1`. `t1` is a matrix with the same number of rows as
-    `t0`.
-
-    .. math::
-        (t_0, t_1) \mapsto \begin{cases} t_1 - t_0 \text{(clock reset)}, \\ t_1
-        \text{(clock forward)} \end{cases}.
-    """
-
-    def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
-
-
-# Abstract classes
-class LogBaseHazardFn(nn.Module, ABC):
-    """The log base hazard base class.
-
-    This is not a protocol because caching is done, and therefore a key is required.
-    Making this a `nn.Module`, one can check the value of the parameters and store their
-    hashed values.
-
-    Note that the log base hazard function is in log scale, and expects a former
-    transition time column vector `t0` as well as next times points at which the log
-    base hazard is to be computed. `t1` is a matrix with the same number of rows as
-    `t0`.
-
-    Implement a `forward` and do not forget the `super().__init__()` when declaring your
-    own class.
-
-    Pass the parameters you want to optimize in the `ModelParams.extra` attribute as a
-    list. If you do not want them to be optimized, then by default they do not require
-    gradients for the given implementations.
-    """
-
-    @property
-    def key(self) -> tuple[int, ...]:
-        """Returns a hash containing the class type and parameters if there are any.
-
-        Returns:
-            tuple[int, ...]: A key used in caching operations.
-        """
-        ident = id(self)
-        try:
-            vec = parameters_to_vector(self.parameters())
-            return (ident, xxh3_64_intdigest(vec.detach().numpy()))
-        except ValueError:
-            return (ident,)
-
-    @abstractmethod
-    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
+    def __call__(self, t: torch.Tensor, indiv_params: torch.Tensor) -> torch.Tensor: ...
 
 
 # Named tuples
 class BucketData(NamedTuple):
-    """A simple `NamedTuple` containing transition information.
+    r"""NamedTuple representing a set of transitions for visualization purposes.
+
+    This structure stores the transition times of individuals grouped together,
+    typically used to visualize the trajectories per transition type in multistate
+    models. Each entry corresponds to a single transition for a specific individual.
 
     Attributes:
-        idxs (torch.Tensor): The individual indices.
-        t0 (torch.Tensor): A column vector of previous transition times.
-        t1 (torch.Tensor): A column vecotr of next transition times.
+        idxs (torch.Tensor): Indices of individuals corresponding to the transitions in
+            this bucket, shape :math:`(k,)`, where :math:`k` is the number of
+            transitions in the bucket.
+        t0 (torch.Tensor): Column vector of previous transition times, shape
+            :math:`(k, 1)`. Represents the start time of each transition.
+        t1 (torch.Tensor): Column vector of next transition times, shape
+            :math:`(k, 1)`. Represents the end time of each transition.
+
+    Notes:
+        Each tensor is aligned such that `t0[i]` and `t1[i]` correspond to the
+        transition of individual `idxs[i]`. This alignment facilitates plotting or
+        analyzing transitions per type across individuals.
     """
 
     idxs: torch.Tensor

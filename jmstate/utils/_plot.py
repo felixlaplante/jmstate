@@ -24,19 +24,26 @@ def plot_params_history(
     *,
     figsize: tuple[int, int] = (10, 8),
 ) -> tuple[plt.Figure, np.ndarray]:  # type: ignore
-    """Plot the history of the model parameters during optimization.
+    r"""Visualize the evolution of model parameters during fitting.
 
-    This function plots the history of the parameters in a grid of subplots.
+    This function generates a grid of subplots showing the trajectory of each model
+    parameter across iterations, allowing assessment of convergence and exploration
+    of the optimization process.
 
     Args:
-        model (MultiStateJointModel): The model to plot the parameters history of.
-        figsize (tuple[int, int], optional): The figure size. Defaults to (10, 8).
+        model (MultiStateJointModel): The fitted model whose parameter history is to
+            be plotted.
+        figsize (tuple[int, int], optional): Figure dimensions `(width, height)`.
+            Defaults to `(10, 8)`.
 
     Raises:
-        ValueError: If the model has less than two parameter history.
+        ValueError: If the model contains fewer than two recorded parameter states,
+            preventing visualization.
 
     Returns:
-        tuple[plt.Figure, np.ndarray]: The figure and axes as a flat array.
+        tuple[plt.Figure, np.ndarray]: A tuple containing the matplotlib `Figure`
+            object and a flattened array of `Axes` objects corresponding to the
+            subplots.
     """
     from ..model._base import MultiStateJointModel  # noqa: PLC0415
 
