@@ -41,7 +41,7 @@ class LogBaseHazardFn(ABC, nn.Module):
 
     @abstractmethod
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
-        """:noindex:"""  # noqa: D415
+        """:no-index:"""  # noqa: D415
         ...
 
 

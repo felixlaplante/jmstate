@@ -5,15 +5,7 @@ readme = "README.md"
 urls = { "Source" = "https://github.com/felixlaplante/jmstate" }
 authors = [{ name = "Félix Laplante" }]
 requires-python = ">=3.10"
-dependencies = [
-    "numpy",
-    "torch",
-    "matplotlib",
-    "scikit-learn",
-    "rich",
-    "xxhash",
-    "tqdm",
-]
+dependencies = ["numpy", "torch", "matplotlib", "scikit-learn", "rich", "tqdm"]
 dynamic = ["version"]
 classifiers = [
     "Programming Language :: Python :: 3",
