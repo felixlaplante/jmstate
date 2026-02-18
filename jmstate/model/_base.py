@@ -255,21 +255,23 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
     @property
     def stderr(self) -> torch.Tensor:
-        r"""Returns the estimated standard error of the parameters as a vector.
+        r"""Compute the estimated standard errors of the model parameters.
 
-        They can be used to draw confidence intervals. The standard errors are computed
-        using the diagonal of the inverse of the estimated Fisher Information Matrix at
-        the MLE
+        The standard errors are derived from the diagonal of the inverse of the
+        estimated Fisher Information Matrix evaluated at the Maximum Likelihood Estimate
+        (MLE). They provide a measure of uncertainty for each parameter and can be used
+        to construct confidence intervals.
 
         .. math::
             \mathrm{stderr} = \sqrt{\operatorname{diag}\left( \hat{\mathcal{I}}_n
             (\hat{\theta})^{-1} \right)}
 
         Raises:
-            ValueError: If the model is not fitted.
+            ValueError: If the model has not been fitted and the Fisher Information
+                Matrix is unavailable.
 
         Returns:
-            torch.Tensor: The estimated standard error as a vector.
+            torch.Tensor: Vector of standard errors corresponding to each parameter.
         """
         check_is_fitted(self, "fim_")
 

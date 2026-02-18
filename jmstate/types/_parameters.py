@@ -139,19 +139,25 @@ class ModelParameters(BaseEstimator, nn.Module):
     coefficients, random effects, noise covariance, and log base hazard functions.
     Parameters can be shared by assigning the same `nn.Parameter` object to multiple
     fields. Reusing tensors directly is not supported and requires wrapping in
-    `nn.Parameter`.
+    `nn.Parameter` for correct computations, as `nn.ParameterDict` would break the
+    object ids otherwise.
 
-    `pop_params` are population-level parameters.
+    Population-level parameters:
+        - `pop_params` are population-level parameters.
 
-    `random_cov` and `noise_cov` are `CovParameters` objects representing the random
-    effects and residual noise covariances respectively.
+    Random effects and noise covariance:
+        - `random_cov` and `noise_cov` are `CovParameters` objects representing
+          the random effects and residual noise covariances respectively.
 
-    `base_hazards` is a dictionary of `LogBaseHazardFn` modules keyed by
-    `(from_state, to_state)` tuples for each transition; optimization can be disabled
-    per hazard via its `frozen` attribute.
+    Base hazard functions:
+        - `base_hazards` is a dictionary of `LogBaseHazardFn` modules keyed by
+          `(from_state, to_state)` tuples for each transition; optimization can be
+          disabled per hazard via its `frozen` attribute.
 
-    `link_coefs` and `x_coefs` are dictionaries keyed by `(from_state, to_state)`
-    tuples, representing linear coefficients for links and covariates, respectively.
+    Link and covariate coefficients:
+        - `link_coefs` and `x_coefs` are dictionaries keyed by `(from_state,
+          to_state)` tuples, representing linear coefficients for links and
+          covariates, respectively.
 
     Attributes:
         pop_params (torch.Tensor): Population-level parameters.
