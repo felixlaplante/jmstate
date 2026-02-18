@@ -13,10 +13,10 @@ from sklearn.utils._param_validation import (  # type: ignore
 )
 from torch import nn
 
-from ..types._defs import LOG_TWO_PI
+from ..types._defs import LOG_TWO_PI, LogBaseHazardFn
 
 
-class Exponential(nn.Module):
+class Exponential(LogBaseHazardFn):
     r"""Implements the Exponential base hazard.
 
     Exponential base hazard is time independent.
@@ -89,7 +89,7 @@ class Exponential(nn.Module):
         return self.log_lmda.exp()
 
 
-class Weibull(nn.Module):
+class Weibull(LogBaseHazardFn):
     r"""Implements the Weibull base hazard.
 
     Weibull base hazard is time dependent.
@@ -192,7 +192,7 @@ class Weibull(nn.Module):
         return self.log_lmda.exp()
 
 
-class Gompertz(nn.Module):
+class Gompertz(LogBaseHazardFn):
     r"""Implements the Gompertz base hazard.
 
     Gompertz base hazard is time dependent.
@@ -285,7 +285,7 @@ class Gompertz(nn.Module):
         return self.log_a.exp()
 
 
-class LogNormal(nn.Module):
+class LogNormal(LogBaseHazardFn):
     r"""Implements the log normal base hazard.
 
     Log normal base hazard is time dependent.
