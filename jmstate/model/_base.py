@@ -255,7 +255,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
     @property
     def stderr(self) -> torch.Tensor:
-        r"""Compute the estimated standard errors of the model parameters.
+        r"""Computes the estimated standard errors of the model parameters.
 
         The standard errors are derived from the diagonal of the inverse of the
         estimated Fisher Information Matrix evaluated at the Maximum Likelihood Estimate
