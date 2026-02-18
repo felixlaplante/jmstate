@@ -22,9 +22,6 @@ def _flat_from_tril(L: torch.Tensor) -> torch.Tensor:
     Args:
         L (torch.Tensor): Square lower-triangular matrix of shape (dim, dim).
 
-    Raises:
-        RuntimeError: If the flattening fails.
-
     Returns:
         torch.Tensor: Flattened 1D tensor containing the lower triangular entries.
     """
@@ -40,7 +37,8 @@ def log_cholesky_from_flat(
     Args:
         flat (torch.Tensor): The flat tensor parameter.
         dim (int): The dimension of the matrix.
-        covariance_type (str): The covariance type, `full`, `diag`, or `spherical`.
+        covariance_type (str): The covariance type, `'full'`, `'diag'`, or
+            `'spherical'`.
 
     Raises:
         ValueError: If the covariance type is not valid.
@@ -67,7 +65,8 @@ def flat_from_log_cholesky(L: torch.Tensor, covariance_type: str) -> torch.Tenso
 
     Args:
         L (torch.Tensor): The square lower triangular matrix parameter.
-        covariance_type (str): The covariance type, `full`, `diag`, or `spherical`.
+        covariance_type (str): The covariance type, `'full'`, `'diag'`, or
+            `'spherical'`.
 
     Raises:
         ValueError: If the covariance type is not valid.

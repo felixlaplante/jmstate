@@ -44,10 +44,13 @@ def check_matrix_dim(flat: torch.Tensor, dim: int, covariance_type: str):
         covariance_type (str): The covariance type.
 
     Raises:
-        ValueError: If the number of elements is incompatible with method `full`.
-        ValueError: If the number of elements is incompatible with method `diag`.
-        ValueError: If the number of elements is not one and the method is `spherical`.
-        ValueError: If the method is not valid.
+        ValueError: If the number of elements is incompatible with covariance type
+            `'full'`.
+        ValueError: If the number of elements is incompatible with covariance type
+            `'diag'`.
+        ValueError: If the number of elements is not one and the covariance type is
+            `'spherical'`.
+        ValueError: If the covariance type is not valid.
     """
     match covariance_type:
         case "full":
@@ -59,14 +62,14 @@ def check_matrix_dim(flat: torch.Tensor, dim: int, covariance_type: str):
         case "diag":
             if flat.numel() != dim:
                 raise ValueError(
-                    f"{flat.numel()} is incompatible with diag matrix of dimension "
+                    f"{flat.numel()} is incompatible with diagonal matrix of dimension "
                     f"{dim}"
                 )
         case "spherical":
             if flat.numel() != 1:
                 raise ValueError(
-                    f"Expected 1 element for flat, got {flat.numel()} for matrix of "
-                    f" dimension {dim}"
+                    f"Expected 1 element for flat, got {flat.numel()} for scalar "
+                    f"marix of dimension {dim}"
                 )
         case _:
             raise ValueError(

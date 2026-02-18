@@ -5,22 +5,20 @@ from warnings import warn
 
 import torch
 from sklearn.utils._param_validation import validate_params  # type: ignore
+from torch import nn
 from torch.func import functional_call, jacfwd  # type: ignore
+from torch.nn.utils import parameters_to_vector
 from tqdm import trange
 
 from ..types._data import ModelData, ModelDataUnchecked, ModelDesign
-from ..types._parameters import ModelParameters, UniqueParametersNNModule
-from ..utils._cache import Cache
-from ..utils._convert_parameters import parameters_to_vector
+from ..types._parameters import ModelParameters
 from ._hazard import HazardMixin
 from ._longitudinal import LongitudinalMixin
 from ._prior import PriorMixin
 from ._sampler import MCMCMixin, MetropolisHastingsSampler
 
 
-class FitMixin(
-    PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, UniqueParametersNNModule
-):
+class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module):
     """Mixin for fitting the model."""
 
     design: ModelDesign
@@ -38,7 +36,6 @@ class FitMixin(
     loglik_: float | None
     aic_: float | None
     bic_: float | None
-    _cache: Cache
 
     def __init__(
         self,
@@ -84,7 +81,7 @@ class FitMixin(
         Returns:
            torch.Tensor: The log pdfs.
         """
-        logpdfs, _ = self._logpdfs_psi_fn(data, b)
+        logpdfs, _ = self._logpdfs_indiv_params_fn(data, b)
         return logpdfs if logpdfs.ndim == 1 else logpdfs.mean(dim=0)
 
     def _step(
@@ -101,15 +98,17 @@ class FitMixin(
 
         def closure():
             self.optimizer.zero_grad()  # type: ignore
-            logpdfs, _ = self._logpdfs_psi_fn(data, sampler.b)
+            logpdfs, _ = self._logpdfs_indiv_params_fn(data, sampler.b)
             loss = -logpdfs.mean()
             loss.backward()  # type: ignore
             return loss.item()
 
         cast(torch.optim.Optimizer, self.optimizer).step(closure)
 
-        # Restore logpdfs and psi
-        sampler.logpdfs, sampler.psi = sampler.logpdfs_psi_fn(sampler.b)
+        # Restore logpdfs and indiv_params
+        sampler.logpdfs, sampler.indiv_params = sampler.logpdfs_indiv_params_fn(
+            sampler.b
+        )
 
     def _is_converged(self) -> bool:
         """Checks if the optimizer has converged.
@@ -149,6 +148,7 @@ class FitMixin(
             tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]: The Jacobian
                 matrix and the Jacobian function.
         """
+        n = len(data)
 
         @jacfwd  # type: ignore
         def _dict_jac_fn(
@@ -157,13 +157,10 @@ class FitMixin(
             return functional_call(self, named_parameters_dict, args=(data, b))
 
         def _jac_fn(b: torch.Tensor) -> torch.Tensor:
-            named_parameters_dict = {
-                k: v.data.reshape(-1) for k, v in self.named_parameters()
-            }
-            out = _dict_jac_fn(named_parameters_dict, b)
-            return torch.cat(list(out.values()), dim=-1)  # type: ignore
+            out = _dict_jac_fn(dict(self.named_parameters()), b)  # type: ignore
+            return torch.cat([p.reshape(n, -1) for p in out.values()], dim=-1)  # type: ignore
 
-        return torch.zeros(len(data), self.params.numel()), cast(
+        return torch.zeros(n, self.params.numel()), cast(
             Callable[[torch.Tensor], torch.Tensor], _jac_fn
         )
 
@@ -203,9 +200,10 @@ class FitMixin(
         Returns:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
         """
+        n, q = len(data), self.params.random_cov.dim
         logpdf = torch.tensor(0.0)
-        mb = torch.zeros(len(data), self.params.q.dim)
-        mb2 = torch.zeros(len(data), self.params.q.dim, self.params.q.dim)
+        mb = torch.zeros(n, q)
+        mb2 = torch.zeros(n, q, q)
         return logpdf, mb, mb2
 
     def _update_criteria(
@@ -251,7 +249,7 @@ class FitMixin(
         mb2 /= den
 
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
-        entropy = 0.5 * (torch.logdet(covs) + self.params.q.dim).sum().item()
+        entropy = 0.5 * (torch.logdet(covs) + self.params.random_cov.dim).sum().item()
 
         loglik = logpdf.item() + entropy
         aic = -2 * loglik + 2 * self.params.numel()
@@ -265,52 +263,49 @@ class FitMixin(
         prefer_skip_nested_validation=True,
     )
     def fit(self, data: ModelData) -> Self:
-        r"""Fits the model to the data.
+        r"""Fit the model to observed data using maximum likelihood estimation.
 
-        This method computes an estimate of the Maximum Likelihood Estimate (MLE) noted
-        :math:`\hat{\theta}`. It is optimized using the `optimizer` attribute for a
-        maximum of `max_iter_fit` iterations. Fitting is stopped when the maximum number
-        of iterations is reached, or when the :math:`R^2` stopping criterion is met. It
-        tests local stationarity of each parameter component using a short-term linear
-        regression over the last `window_size` iterates. The :math:`R^2` then measures
-        whether the optimization trajectory is better explained by a linear trend than
-        by a constant. Convergence is declared when all :math:`R^2` are less than `tol`,
-        indicating no significant linear drift.
+        Computes the Maximum Likelihood Estimate (MLE) :math:`\hat{\theta}` of the model
+        parameters. Optimization is performed using the configured `optimizer` for up to
+        `max_iter_fit` iterations. Convergence is assessed via a linearity-based
+        stationarity test on the last `window_size` iterates: the :math:`R^2` statistic
+        measures whether the trajectory of each parameter component is better explained
+        by a linear trend than by a constant. Convergence is declared when all
+        :math:`R^2` values are below `tol`, indicating negligible linear drift.
 
-        It leverages the Fisher identity and stochastic gradient algorithm coupled
-        with a MCMC (Metropolis-Hastings) sampler. The Fisher identity states that
+        The fitting procedure leverages the Fisher identity coupled with a stochastic
+        gradient algorithm and a Metropolis-Hastings MCMC sampler. The Fisher identity
+        states:
 
         .. math::
             \nabla_\theta \log \mathcal{L}(\theta ; x) = \mathbb{E}_{b \sim p(\cdot
             \mid x, \theta)} \left( \nabla_\theta \log \mathcal{L}(\theta ; x, b)
             \right).
 
-        Many methods exist for estimating the Fisher Information Matrix in latent
-        variable models. In particular, this class leverages the expected Fisher
-        Information Matrix using the identity
+        The expected Fisher Information Matrix is estimated as:
 
         .. math::
             \mathcal{I}_n(\theta) = \sum_{i=1}^n \mathbb{E}_{b \sim p(\cdot \mid x_i,
             \hat{\theta})} \left(\nabla \log \mathcal{L}(\hat{\theta} ; x_i, b) \nabla
             \log \mathcal{L}(\hat{\theta} ; x_i, b)^T \right).
 
-        Model selection criteria are based on a Laplace approximation of the posterior
-        distribution to ensure a closed form entropy.
+        Model selection criteria are computed using a Laplace approximation of the
+        posterior distribution, providing closed-form estimates of entropy. The
+        parameter `n_samples_summary` controls the number of posterior samples used for
+        computing the Fisher Information Matrix and selection metrics; increasing this
+        number improves accuracy at the cost of computational time.
 
-        `n_samples_summary` is the number of samples used to compute the Fisher
-        Information Matrix and model selection criteria. The greater this number,
-        the more accurate the estimates are, but the longer it takes to compute them.
-
-        For more information, see ISSN 2824-7795.
+        For additional details, see ISSN 2824-7795.
 
         Args:
-            data (ModelData): The data to fit the model to.
+            data (ModelData): Dataset containing covariates, longitudinal measurements,
+                trajectories, and censoring times used for fitting.
 
         Raises:
-            ValueError: If the optimizer is not initialized.
+            ValueError: If the optimizer has not been initialized prior to fitting.
 
         Returns:
-            Self: The fitted model.
+            Self: The fitted model instance with estimated parameters.
         """
         if self.optimizer is None:
             raise ValueError("Optimizer is not initialized.")
@@ -362,5 +357,4 @@ class FitMixin(
             logpdf, mb, mb2, self.fim_
         )
 
-        self._cache.clear()
         return self

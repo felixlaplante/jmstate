@@ -5,104 +5,101 @@ import torch
 from sklearn.base import BaseEstimator  # type: ignore
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from sklearn.utils.validation import check_is_fitted  # type: ignore
+from torch.nn.utils import parameters_to_vector
 
 from ..types._data import ModelData, ModelDesign
 from ..types._parameters import ModelParameters
-from ..utils._convert_parameters import parameters_to_vector
 from ._fit import FitMixin
 from ._predict import PredictMixin
 
 
 class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
-    r"""A class of the nonlinear multistate joint model.
+    r"""Nonlinear multistate joint model for longitudinal and survival data.
 
-    Please note this class encompasses both the linear joint model and the standard
-    joint model, but also allows for the modeling of multiple states assuming a semi
-    Markov property. The model is defined by a set of longitudinal and hazard
-    functions in `ModelDesign`, which are parameterized by a set of parameters in
-    `ModelParameters`. Parameters may also be shared (see the documentation). The model
-    design `ModelDesign` is fixed at initialization, and defines the specification of
-    the model in conjunction with the parameters `ModelParameters`. The parameters are
-    modifiable after initialization, and will be modified in place during fit.
+    This class generalizes both linear and standard joint models to accommodate
+    multiple states under a semi-Markov assumption. The model is fully specified
+    by a `ModelDesign` object, which defines longitudinal and hazard functions, and
+    a `ModelParameters` object, which contains the associated (modifiable) parameters.
+    Parameters may be shared across functions as specified in the model design. The
+    `ModelDesign` is fixed at initialization, while `ModelParameters` are updated
+    in place during fitting.
 
-    The model is fit using a stochastic gradient ascent algorithm, and the parameters
-    are sampled using a Metropolis-Hastings algorithm.
+    Model fitting is performed using a stochastic gradient ascent algorithm,
+    and parameter sampling is handled by a Metropolis-Hastings MCMC procedure.
 
-    Dynamic prediction is possible using the different prediction methods, that support
-    dynamic prediction with both single and double Monte Carlo integration.
+    Dynamic prediction is supported via the prediction methods in `PredictMixin`,
+    which allow both single and double Monte Carlo integration.
 
-    For numerical integration, use `n_quad` to specify the number of nodes for the
-    Gauss Legendre quadrature of hazard, and `n_bisect` to specify the number of
-    bisection steps for the bisection algorithm for transition sampling.
+    Design settings:
+        - `design`: The model specification defining the individual parameters,
+          regression, and link functions.
+        - `params`: Initial values for the model parameters; modifiable during fitting.
 
-    For caching, use `cache_limit` to specify the limit of the cache used in hazard
-    computation, greatly reducing memory and CPU usage. None means infinite, 0 means
-    no caching.
+    Numerical integration settings:
+        - `n_quad`: Number of nodes for Gauss-Legendre quadrature in hazard integration.
+        - `n_bisect`: Number of bisection steps for transition time sampling.
 
-    For MCMC, use `n_chains` to specify the number of chains, `init_step_size` to
-    specify the initial step size for the MCMC sampler, `adapt_rate` to specify the
-    adaptation rate for the step size, `target_accept_rate` to specify the target
-    acceptance rate, `n_warmup` to specify the number of warmup iterations, and
-    `n_subsample` to specify the number of subsamples. The greater this number, the
-    less correlated the samples are, but the longer it takes to run the MCMC sampler.
+    MCMC settings:
+        - `n_chains`: Number of parallel MCMC chains.
+        - `init_step_size`: Initial kernel standard deviation in Metropolis-Hastings.
+        - `adapt_rate`: Adaptation rate for the step size.
+        - `target_accept_rate`: Target mean acceptance probability.
+        - `n_warmup`: Number of warmup iterations per chain.
+        - `n_subsample`: Number of subsamples between predictions; higher values
+          reduce autocorrelation but increase computation time.
 
-    For fitting, any optimizer can be through the `optimizer` parameter. If set to
-    `None`, then fitting is not possible. Recommended to use `torch.optim.Adam` with a
-    learning rate of 0.1 to 1.0. A value of 0.5 is a good starting point.
+    Fitting settings:
+        - `optimizer`: Optimizer for stochastic gradient ascent. If `None`, fitting
+          is disabled. Recommended: `torch.optim.Adam` with learning rate 0.1 to 1.0,
+          starting at 0.5.
+        - `max_iter_fit`: Maximum iterations for gradient ascent.
+        - `n_samples_summary`: Number of samples used to compute the Fisher
+          Information Matrix and model selection criteria; higher values improve
+          accuracy.
+        - `tol`: Tolerance for the :math:`R^2` convergence criterion.
+        - `window_size`: Window size for :math:`R^2` convergence; default 100.
+          This criterion is scale-agnostic and provides a local stationarity test.
 
-    Additionaly, use `max_iter_fit` to specify the maximum number of iterations for
-    stochastic gradient ascent, `n_samples_summary` to specify the number of samples to
-    compute Fisher Information Matrix and model selection criteria, `tol` to specify the
-    tolerance for the :math:`R^2` convergence, and `window_size` to specify the window
-    size for the :math:`R^2` convergence. The :math:`R^2` convergence criterion is
-    scale-agnostic and represents a local stationnary test over the last `window_size`
-    iterates. The default value of 100 seems a sweet spot. For more details, see the
-    `fit` method.
-
-    For printing, use `verbose` to specify whether to print the progress of the model
-    fitting and predicting.
-
-    After fitting, the helper functions `summary` and `plot_params_history` under
-    `jmstate.utils` can be used to show p-values, log-likelihood, AIC, BIC, and the
-    evolution of the parameters during fitting respectively.
+    Printing and visualization:
+        - `verbose`: Whether to print progress during fitting and prediction.
+        - After fitting, `summary` and `plot_params_history` (from `jmstate.utils`)
+          can be used to display p-values, log-likelihood, AIC, BIC, and the
+          evolution of parameters over iterations.
 
     Attributes:
-        design (ModelDesign): The model specification.
-        params (ModelParameters): The (modifiable) model parameters.
-        optimizer (torch.optim.Optimizer | None): The optimizer.
-        n_quad (int): The number of nodes for the Gauss Legendre quadrature of hazard.
-        n_bisect (int): The number of bisection steps for the bisection algorithm.
-        cache_limit (int | None): The limit of the cache used in hazard computation,
-            greatly reducing memory and CPU usage. None means infinite, 0 means no
-            caching.
-        n_chains (int): The number of parallel MCMC chains.
-        init_step_size (float): Kernel standard error in Metropolis.
-        adapt_rate (float): Adaptation rate for the step_size.
-        target_accept_rate (float): Mean acceptance target.
-        n_warmup (int): The number of warmup iterations for the MCMC sampler.
-        n_subsample (int): The number of subsamples for the MCMC sampler.
-        max_iter_fit (int): The maximum number of iterations for stochastic gradient
-            ascent.
-        tol (float): The tolerance for the :math:`R^2` convergence.
-        window_size (int): The window size for the :math:`R^2` convergence.
-        n_samples_summary (int): The number of samples used to compute Fisher
-            Information Matrix and model selection criteria.
-        verbose (bool): Whether to print the progress of the model fitting.
-        params_history_ (list[torch.Tensor]): The history of model parameters as flat
+        design (ModelDesign): The model specification defining the individual
+            parameters, regression, and link functions.
+        params (ModelParameters): The modifiable model parameters.
+        optimizer (torch.optim.Optimizer | None): Optimizer used for fitting.
+        n_quad (int): Number of Gauss-Legendre quadrature nodes for hazard integration.
+        n_bisect (int): Number of bisection steps for transition time sampling.
+        n_chains (int): Number of parallel MCMC chains.
+        init_step_size (float): Initial kernel standard deviation in
+            Metropolis-Hastings.
+        adapt_rate (float): Adaptation rate for the MCMC step size.
+        target_accept_rate (float): Target acceptance probability.
+        n_warmup (int): Number of warmup iterations per MCMC chain.
+        n_subsample (int): Number of subsamples for MCMC iterations.
+        max_iter_fit (int): Maximum number of iterations for stochastic gradient ascent.
+        tol (float): Tolerance for :math:`R^2` convergence criterion.
+        window_size (int): Window size for :math:`R^2` convergence evaluation.
+        n_samples_summary (int): Number of posterior samples for computing Fisher
+            Information and selection criteria.
+        verbose (bool): Flag to print fitting and prediction progress.
+        params_history_ (list[torch.Tensor]): History of parameter values as flattened
             tensors.
-        fim_ (torch.Tensor | None): The Fisher Information Matrix.
-        loglik_ (float | None): The log likelihood.
-        aic_ (float | None): The Akaike Information Criterion.
-        bic_ (float | None): The Bayesian Information Criterion.
+        fim_ (torch.Tensor | None): Fisher Information Matrix.
+        loglik_ (float | None): Log-likelihood of the fitted model.
+        aic_ (float | None): Akaike Information Criterion.
+        bic_ (float | None): Bayesian Information Criterion.
 
     Examples:
-        >>> # Declares a fittable model
-        >>> optimizer = torch.optim.Adam(init_params.parameters(), lr=0.5)
-        >>> model = MultiStateJointModel(design, init_params, optimizer)
-        >>> # Runs optimization process
+        >>> from jmstate import MultiStateJointModel
+        >>> optimizer = torch.optim.Adam(params.parameters(), lr=0.5)
+        >>> model = MultiStateJointModel(design, params, optimizer)
         >>> model.fit(data)
-        >>> # Prints a summary of the model
-        >>> model.summary()
+        >>> from jmstate.utils import summary
+        >>> summary(model)
     """
 
     design: ModelDesign
@@ -110,7 +107,6 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
     optimizer: torch.optim.Optimizer | None
     n_quad: int
     n_bisect: int
-    cache_limit: int | None
     n_chains: int
     init_step_size: float
     adapt_rate: float
@@ -135,7 +131,6 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             "optimizer": [torch.optim.Optimizer, None],
             "n_quad": [Interval(Integral, 1, None, closed="left")],
             "n_bisect": [Interval(Integral, 1, None, closed="left")],
-            "cache_limit": [Interval(Integral, 0, None, closed="left"), None],
             "n_chains": [Interval(Integral, 1, None, closed="left")],
             "init_step_size": [Interval(Real, 0, None, closed="neither")],
             "adapt_rate": [Interval(Real, 0, None, closed="left")],
@@ -158,7 +153,6 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         *,
         n_quad: int = 32,
         n_bisect: int = 32,
-        cache_limit: int | None = 256,
         n_chains: int = 5,
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
@@ -171,46 +165,51 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         n_samples_summary: int = 500,
         verbose: bool | int = True,
     ):
-        """Initializes the joint model based on the user defined design.
+        r"""Initialize the multistate joint model with specified design and parameters.
+
+        Constructs a joint model based on a user-defined `ModelDesign` and initial
+        `ModelParameters`. Provides default settings for numerical integration, MCMC
+        sampling, stochastic gradient fitting, and printing options.
 
         Args:
-            design (ModelDesign): The model specification.
-            params (ModelParameters): (Initial) values for the parameters.
-            optimizer (torch.optim.Optimizer | None, optional): The optimizer used for
-                fitting. Defaults to None.
-            n_quad (int, optional): The used number of points for Gauss-Legendre
-                quadrature. Defaults to 32.
-            n_bisect (int, optional): The number of bisection steps used in transition
+            design (ModelDesign): The model specification defining the individual
+                parameters, regression, and link functions.
+            params (ModelParameters): Initial values for the model parameters;
+                modifiable during fitting.
+            optimizer (torch.optim.Optimizer | None, optional): Optimizer used for
+                fitting. If `None`, fitting is disabled. Defaults to None.
+            n_quad (int, optional): Number of nodes for Gauss-Legendre quadrature in
+                hazard integration. Defaults to 32.
+            n_bisect (int, optional): Number of bisection steps for transition time
                 sampling. Defaults to 32.
-            cache_limit (int | None, optional): The max length of cache. Defaults to
-                256.
-            n_chains (int, optional): The number of chains for MCMC. Defaults to 5.
-            init_step_size (float, optional): The initial step size for the MCMC
-                sampler. Defaults to 0.1.
-            adapt_rate (float, optional): The adaptation rate for the MCMC sampler.
+            n_chains (int, optional): Number of parallel MCMC chains. Defaults to 5.
+            init_step_size (float, optional): Initial step size for the MCMC sampler.
+                Defaults to 0.1.
+            adapt_rate (float, optional): Adaptation rate for the MCMC step size.
                 Defaults to 0.01.
-            target_accept_rate (float, optional): The target acceptance rate for the
-                MCMC sampler. Defaults to 0.234.
-            n_warmup (int, optional): The number of warmup iterations for the MCMC
-                sampler. Defaults to 100.
-            n_subsample (int, optional): The number of subsamples for the MCMC sampler.
+            target_accept_rate (float, optional): Target mean acceptance probability for
+                MCMC. Defaults to 0.234.
+            n_warmup (int, optional): Number of warmup iterations per MCMC chain.
+                Defaults to 100.
+            n_subsample (int, optional): Number of subsamples between MCMC updates.
                 Defaults to 10.
-            max_iter_fit (int, optional): The maximum number of iterations for
-                stochastic gradient ascent. Defaults to 1000.
-            tol (float, optional): The tolerance for the convergence. Defaults to 0.1.
-            window_size (int, optional): The window size for the convergence. Defaults
-                to 100.
-            n_samples_summary (int, optional): The number of samples used to compute
-                Fisher Information Matrix and model selection criteria. Defaults to 500.
-            verbose (bool | int, optional): Whether to print the progress of the model
-                fitting. Defaults to True.
+            max_iter_fit (int, optional): Maximum number of iterations for stochastic
+                gradient ascent. Defaults to 1000.
+            tol (float, optional): Tolerance for :math:`R^2` convergence criterion.
+                Defaults to 0.1.
+            window_size (int, optional): Window size for :math:`R^2` convergence
+                evaluation. Defaults to 100.
+            n_samples_summary (int, optional): Number of posterior samples used to
+                compute the Fisher Information Matrix and model selection criteria.
+                Defaults to 500.
+            verbose (bool | int, optional): Flag to print progress during fitting and
+                prediction. Defaults to True.
         """
         # Info of the Mixin Classes
         super().__init__(
             optimizer=optimizer,
             n_quad=n_quad,
             n_bisect=n_bisect,
-            cache_limit=cache_limit,
             n_chains=n_chains,
             init_step_size=init_step_size,
             adapt_rate=adapt_rate,
@@ -233,7 +232,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         self.aic_ = None
         self.bic_ = None
 
-    def _logpdfs_psi_fn(
+    def _logpdfs_indiv_params_fn(
         self, data: ModelData, b: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Gets the log pdfs with individual effects and log likelihoods.
@@ -243,16 +242,16 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             b (torch.Tensor): The random effects.
 
         Returns:
-           tuple[torch.Tensor, torch.Tensor]: The log pdfs and psi.
+           tuple[torch.Tensor, torch.Tensor]: The log pdfs and individual parameters.
         """
-        psi = self.design.individual_effects_fn(self.params.gamma, data.x, b)
+        indiv_params = self.design.indiv_params_fn(self.params.pop_params, data.x, b)
         logpdfs = (
-            super()._longitudinal_logliks(data, psi)
-            + super()._hazard_logliks(data, psi)
+            super()._longitudinal_logliks(data, indiv_params)
+            + super()._hazard_logliks(data, indiv_params)
             + super()._prior_logliks(b)
         )
 
-        return logpdfs, psi
+        return logpdfs, indiv_params
 
     @property
     def stderr(self) -> torch.Tensor:

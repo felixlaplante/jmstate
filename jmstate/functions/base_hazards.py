@@ -13,15 +13,15 @@ from sklearn.utils._param_validation import (  # type: ignore
 )
 from torch import nn
 
-from ..types._defs import LOG_TWO_PI, LogBaseHazardFn
+from ..types._defs import LOG_TWO_PI
 
 
-class Exponential(LogBaseHazardFn):
+class Exponential(nn.Module):
     r"""Implements the Exponential base hazard.
 
     Exponential base hazard is time independent.
 
-    It is given by the formula
+    It is given by the formula:
 
     .. math::
         \lambda(t) = \lambda.
@@ -30,27 +30,35 @@ class Exponential(LogBaseHazardFn):
     column vector `t0` as well as a matrix of next time points `t1`. `t1` is a matrix
     with the same number of rows as `t0`.
 
+    Optimization of the parameters can be disabled by checking the `forzen` flag.
+
     Attributes:
-        log_lmda (nn.Parameter): The log rate factor.
+        log_lmda (nn.Parameter | torch.Tensor): The log rate factor.
+        frozen (bool): Whether the parameters are frozen.
     """
 
-    log_lmda: nn.Parameter
+    log_lmda: nn.Parameter | torch.Tensor
 
     @validate_params(
         {
             "lmda": [Interval(Real, 0, None, closed="neither")],
+            "frozen": [bool],
         },
         prefer_skip_nested_validation=True,
     )
-    def __init__(self, lmda: float):
+    def __init__(self, lmda: float, *, frozen: bool = False):
         """Initializes the Exponential hazard.
 
         Args:
             lmda (float): The rate factor.
+            frozen (bool, optional): Whether to freeze the parameters. Defaults to
+                `False`.
         """
         super().__init__()  # type: ignore
 
-        self.log_lmda = nn.Parameter(torch.log(torch.tensor(lmda)))
+        log_lmda_tensor = torch.log(torch.tensor(lmda))
+        self.log_lmda = nn.Parameter(log_lmda_tensor) if not frozen else log_lmda_tensor
+        self.frozen = frozen
 
     def forward(
         self,
@@ -78,12 +86,12 @@ class Exponential(LogBaseHazardFn):
         return self.log_lmda.exp()
 
 
-class Weibull(LogBaseHazardFn):
+class Weibull(nn.Module):
     r"""Implements the Weibull base hazard.
 
     Weibull base hazard is time dependent.
 
-    It is given by the formula
+    It is given by the formula:
 
     .. math::
         \lambda(t) = \frac{k}{\lambda} \left( \frac{t}{\lambda} \right)^{k - 1}.
@@ -95,25 +103,37 @@ class Weibull(LogBaseHazardFn):
     If `clock_type` is set to `sojourn`, given `t0` and `t1`, the transformation will be
     computed at `t1 - t0` (sojourn time), and simply `t1` if set to `absolute`.
 
+    Optimization of the parameters can be disabled by checking the `forzen` flag.
+
     Attributes:
-        log_k (nn.Parameter): The log of the shape parameter.
-        log_lmda (nn.Parameter): The log of the scale parameter.
+        log_k (nn.Parameter | torch.Tensor): The log of the shape parameter.
+        log_lmda (nn.Parameter | torch.Tensor): The log of the scale parameter.
         clock_type (str): The type of clock to use.
+        frozen (bool): Whether the parameters are frozen.
     """
 
-    log_lmda: nn.Parameter
-    log_k: nn.Parameter
+    log_lmda: nn.Parameter | torch.Tensor
+    log_k: nn.Parameter | torch.Tensor
     clock_type: str
+    frozen: bool
 
     @validate_params(
         {
             "lmda": [Interval(Real, 0, None, closed="neither")],
             "k": [Interval(Real, 0, None, closed="neither")],
             "clock_type": [StrOptions({"sojourn", "absolute"})],
+            "frozen": [bool],
         },
         prefer_skip_nested_validation=True,
     )
-    def __init__(self, lmda: float, k: float, *, clock_type: str = "sojourn"):
+    def __init__(
+        self,
+        lmda: float,
+        k: float,
+        *,
+        clock_type: str = "sojourn",
+        frozen: bool = False,
+    ):
         """Initializes the Weibull base hazard.
 
         Args:
@@ -121,12 +141,17 @@ class Weibull(LogBaseHazardFn):
             k (float): The shape parameter.
             clock_type (str, optional): The type of clock to use. Defaults to
                 "sojourn".
+            frozen (bool, optional): Whether to freeze the parameters. Defaults to
+                `False`.
         """
         super().__init__()  # type: ignore
 
-        self.log_lmda = nn.Parameter(torch.log(torch.tensor(lmda)))
-        self.log_k = nn.Parameter(torch.log(torch.tensor(k)))
+        log_lmda_tensor = torch.log(torch.tensor(lmda))
+        self.log_lmda = nn.Parameter(log_lmda_tensor) if not frozen else log_lmda_tensor
+        log_k_tensor = torch.log(torch.tensor(k))
+        self.log_k = nn.Parameter(log_k_tensor) if not frozen else log_k_tensor
         self.clock_type = clock_type
+        self.frozen = frozen
 
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the Weibull base hazard.
@@ -139,7 +164,7 @@ class Weibull(LogBaseHazardFn):
             torch.Tensor: The computed base hazard in log scale.
         """
         t = t1 - t0 if self.clock_type == "sojourn" else t1
-        log_t = torch.log(t)
+        log_t = torch.log(t).clamp(min=-50)
         return self.log_k - self.log_lmda + (self.k - 1) * (log_t - self.log_lmda)
 
     @property
@@ -161,11 +186,11 @@ class Weibull(LogBaseHazardFn):
         return self.log_lmda.exp()
 
 
-class Gompertz(LogBaseHazardFn):
+class Gompertz(nn.Module):
     r"""Implements the Gompertz base hazard.
 
     Gompertz base hazard is time dependent.
-    It is given by the formula
+    It is given by the formula:
 
     .. math::
         \lambda(t) = a \exp{bt}.
@@ -178,25 +203,37 @@ class Gompertz(LogBaseHazardFn):
     computed at `t1 - t0` (sojourn time), and simply `t1` if `clock_type` is set to
     `absolute`.
 
+    Optimization of the parameters can be disabled by checking the `forzen` flag.
+
     Attributes:
-        log_a (nn.Parameter): The baseline hazard parameter.
-        b (nn.Parameter): The shape parameter.
+        log_a (nn.Parameter | torch.Tensor): The baseline hazard parameter.
+        b (nn.Parameter | torch.Tensor): The shape parameter.
         clock_type (str): The type of clock to use.
+        frozen (bool): Whether the parameters are frozen.
     """
 
-    log_a: nn.Parameter
-    b: nn.Parameter
+    log_a: nn.Parameter | torch.Tensor
+    b: nn.Parameter | torch.Tensor
     clock_type: str
+    frozen: bool
 
     @validate_params(
         {
             "a": [Interval(Real, 0, None, closed="neither")],
             "b": [Interval(Real, None, None, closed="neither")],
             "clock_type": [StrOptions({"sojourn", "absolute"})],
+            "frozen": [bool],
         },
         prefer_skip_nested_validation=True,
     )
-    def __init__(self, a: float, b: float, *, clock_type: str = "sojourn"):
+    def __init__(
+        self,
+        a: float,
+        b: float,
+        *,
+        clock_type: str = "sojourn",
+        frozen: bool = False,
+    ):
         """Initializes the Gompertz base hazard.
 
         Args:
@@ -204,12 +241,17 @@ class Gompertz(LogBaseHazardFn):
             b (float): The shape parameter.
             clock_type (str, optional): The type of clock to use. Defaults to
                 "sojourn".
+            frozen (bool, optional): Whether to freeze the parameters. Defaults to
+                `False`.
         """
         super().__init__()  # type: ignore
 
-        self.log_a = nn.Parameter(torch.log(torch.tensor(a)))
-        self.b = nn.Parameter(torch.tensor(b))
+        log_a_tensor = torch.log(torch.tensor(a))
+        self.log_a = nn.Parameter(log_a_tensor) if not frozen else log_a_tensor
+        b_tensor = torch.tensor(b)
+        self.b = nn.Parameter(b_tensor) if not frozen else b_tensor
         self.clock_type = clock_type
+        self.frozen = frozen
 
     def __call__(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the Gompertz base hazard.
@@ -234,11 +276,11 @@ class Gompertz(LogBaseHazardFn):
         return self.log_a.exp()
 
 
-class LogNormal(LogBaseHazardFn):
+class LogNormal(nn.Module):
     r"""Implements the log normal base hazard.
 
     Log normal base hazard is time dependent.
-    It is given by the formula
+    It is given by the formula:
 
     .. math::
         \lambda(t) = \frac{\phi\left( \frac{\log t - \mu}{\sigma} \right)}{t \sigma
@@ -259,25 +301,37 @@ class LogNormal(LogBaseHazardFn):
     computed at `t1 - t0` (sojourn time), and simply `t1` if `clock_type` is set to
     `absolute`.
 
+    Optimization of the parameters can be disabled by checking the `forzen` flag.
+
     Attributes:
-        mu (nn.Parameter): The log time mean.
-        log_scale (nn.Parameter): The log of scale.
+        mu (nn.Parameter | torch.Tensor): The log time mean.
+        log_scale (nn.Parameter | torch.Tensor): The log of scale.
         clock_type (str): The type of clock to use.
+        frozen (bool): Whether the parameters are frozen.
     """
 
-    mu: nn.Parameter
-    log_scale: nn.Parameter
+    mu: nn.Parameter | torch.Tensor
+    log_scale: nn.Parameter | torch.Tensor
     clock_type: str
+    frozen: bool
 
     @validate_params(
         {
             "mu": [Interval(Real, None, None, closed="neither")],
             "scale": [Interval(Real, 0, None, closed="neither")],
             "clock_type": [StrOptions({"sojourn", "absolute"})],
+            "frozen": [bool],
         },
         prefer_skip_nested_validation=True,
     )
-    def __init__(self, mu: float, scale: float, *, clock_type: str = "sojourn"):
+    def __init__(
+        self,
+        mu: float,
+        scale: float,
+        *,
+        clock_type: str = "sojourn",
+        frozen: bool = False,
+    ):
         """Initializes the log normal base hazard.
 
         Args:
@@ -285,15 +339,22 @@ class LogNormal(LogBaseHazardFn):
             scale (float): The log time scale.
             clock_type (str, optional): The type of clock to use. Defaults to
                 "sojourn".
+            frozen (bool, optional): Whether to freeze the parameters. Defaults to
+                `False`.
 
         Returns:
             LogBaseHazardFn: Returns the log normal base hazard function.
         """
         super().__init__()  # type: ignore
 
-        self.mu = nn.Parameter(torch.tensor(mu))
-        self.log_scale = nn.Parameter(torch.log(torch.tensor(scale)))
+        mu_tensor = torch.tensor(mu)
+        self.mu = nn.Parameter(mu_tensor) if not frozen else mu_tensor
+        log_scale_tensor = torch.log(torch.tensor(scale))
+        self.log_scale = (
+            nn.Parameter(log_scale_tensor) if not frozen else log_scale_tensor
+        )
         self.clock_type = clock_type
+        self.frozen = frozen
 
     def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
         """Calls the log normal base hazard.
@@ -306,7 +367,7 @@ class LogNormal(LogBaseHazardFn):
             torch.Tensor: The computed base hazard in log scale.
         """
         t = t1 - t0 if self.clock_type == "sojourn" else t1
-        log_t = torch.log(t)
+        log_t = torch.log(t).clamp(min=-50)
         z = (log_t - self.mu) / self.scale
         log_pdf = -log_t - self.log_scale - 0.5 * LOG_TWO_PI - 0.5 * z**2
         log_sf = cast(torch.Tensor, torch.special.log_ndtr(-z))  # type: ignore

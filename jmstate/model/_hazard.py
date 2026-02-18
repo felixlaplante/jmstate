@@ -8,12 +8,10 @@ from sklearn.utils.validation import (  #  type: ignore
     assert_all_finite,  #  type: ignore
     check_consistent_length,  #  type: ignore
 )
-from xxhash import xxh3_64_intdigest
 
 from ..types._data import ModelData, ModelDesign, SampleData, SampleDataUnchecked
-from ..types._defs import LinkFn, LogBaseHazardFn, Trajectory
+from ..types._defs import Trajectory
 from ..types._parameters import ModelParameters
-from ..utils._cache import Cache
 from ..utils._surv import build_possible_buckets, build_remaining_buckets
 
 
@@ -22,58 +20,48 @@ class HazardInfo(NamedTuple):
     """A simple internal `NamedTuple` required for hazard computation.
 
     Attributes:
+        key (tuple[Any, Any]): The transition key.
         t0 (torch.Tensor): A column vector of previous transition times.
         t1 (torch.Tensor): A matrix of next transition times.
-        x (torch.Tensor | None): The covariates.
-        psi (torch.Tensor): The individual parameters.
-        alpha (torch.Tensor): The baseline hazard parameters.
-        beta (torch.Tensor | None): The regression parameters.
-        log_base_hazard_fn (LogBaseHazardFn): The log base hazard function.
-        link_fn (LinkFn): The link function.
+        x (torch.Tensor): The covariates.
+        indiv_params (torch.Tensor): The individual parameters.
     """
 
+    key: tuple[Any, Any]
     t0: torch.Tensor
     t1: torch.Tensor
-    x: torch.Tensor | None
-    psi: torch.Tensor
-    alpha: torch.Tensor
-    beta: torch.Tensor | None
-    log_base_hazard_fn: LogBaseHazardFn
-    link_fn: LinkFn
+    x: torch.Tensor
+    indiv_params: torch.Tensor
 
     @classmethod
     def create(
         cls,
-        model: "HazardMixin",
-        x: torch.Tensor | None,
-        psi: torch.Tensor,
         key: tuple[Any, Any],
-        idxs: torch.Tensor,
         t0: torch.Tensor,
         t1: torch.Tensor,
+        x: torch.Tensor,
+        indiv_params: torch.Tensor,
+        idxs: torch.Tensor,
     ) -> "HazardInfo":
         """Creates a HazardInfo object from sample data.
 
         Args:
-            model (HazardMixin): The model.
-            x (torch.Tensor | None): The covariates.
-            psi (torch.Tensor): The individual parameters.
             key (tuple[Any, Any]): The transition key.
-            idxs (torch.Tensor): The indices to slice.
             t0 (torch.Tensor): The previous transition times.
             t1 (torch.Tensor): The next transition times.
+            x (torch.Tensor): The fixed covariates.
+            indiv_params (torch.Tensor): The individual parameters.
+            idxs (torch.Tensor): The indices to slice.
 
         Returns:
             HazardInfo: The HazardInfo object.
         """
         return cls(
+            key,
             t0,
             t1,
-            None if x is None else x.index_select(0, idxs),
-            psi.index_select(-2, idxs),
-            model.params.alphas[str(key)],
-            None if model.params.betas is None else model.params.betas[str(key)],
-            *model.design.surv_fns[key],
+            x.index_select(0, idxs),
+            indiv_params.index_select(-2, idxs),
         )
 
 
@@ -84,16 +72,13 @@ class HazardMixin:
     params: ModelParameters
     n_quad: int
     n_bisect: int
-    cache_limit: int | None
     _std_nodes: torch.Tensor
     _std_weights: torch.Tensor
-    _cache: Cache
 
     def __init__(
         self,
         n_quad: int,
         n_bisect: int,
-        cache_limit: int | None,
         *args: Any,
         **kwargs: Any,
     ):
@@ -102,15 +87,12 @@ class HazardMixin:
         Args:
             n_quad (int): Number of quadrature nodes.
             n_bisect (int): The number of bisection steps.
-            cache_limit (int | None): Max length of cache.
         """
         super().__init__(*args, **kwargs)
 
         self.n_quad = n_quad
         self.n_bisect = n_bisect
-        self.cache_limit = cache_limit
         self._std_nodes, self._std_weights = self._legendre_quad(n_quad)
-        self._cache = Cache(cache_limit)
 
     @staticmethod
     def _legendre_quad(n_quad: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -145,33 +127,22 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed log hazard.
         """
-        t0, t1, x, psi, alpha, beta, log_base_hazard_fn, link_fn = hazard_info
+        key, t0, t1, x, indiv_params = hazard_info
+        str_key = str(key)
 
         # Compute baseline hazard
-        def _base_create():
-            return log_base_hazard_fn(t0, t1)
-
-        if self.cache_limit != 0:
-            try:
-                key = (
-                    *hazard_info.log_base_hazard_fn.key,
-                    xxh3_64_intdigest(t0.detach().contiguous().numpy()),  # type: ignore
-                    xxh3_64_intdigest(t1.detach().contiguous().numpy()),  # type: ignore
-                )
-                base = self._cache.get_cache("base", key, _base_create)
-            except RuntimeError:
-                base = _base_create()
-        else:
-            base = _base_create()
+        base = self.params.base_hazards[str_key](t0, t1)
 
         # Compute time-varying effects
-        mod = link_fn(t1, psi) @ alpha
+        mod = (
+            self.design.link_fns[key](t1, indiv_params)
+            @ self.params.link_coefs[str_key]
+        )
 
         # Compute covariates effect
-        if x is None or beta is None:
-            return base + mod
+        var = x @ self.params.x_coefs[str_key].unsqueeze(-1)
 
-        return base + mod + x @ beta.unsqueeze(-1)
+        return base + mod + var
 
     def _cum_hazard(self, hazard_info: HazardInfo) -> torch.Tensor:
         """Computes cumulative hazard.
@@ -182,38 +153,19 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed cumulative hazard.
         """
-        t0, t1, *_ = hazard_info
+        _, t0, t1, *_ = hazard_info
 
         # Transform to quadrature interval
-        def _half_create():
-            return 0.5 * (t1 - t0)
-
-        def _quad_c_create():
-            return (
-                (t0 + t1)
-                .reshape(-1, 1)
-                .addmm(half.reshape(-1, 1), self._std_nodes, beta=0.5)
-                .reshape(t1.size(0), -1)
-            )
-
-        if self.cache_limit != 0:
-            try:
-                key = (
-                    xxh3_64_intdigest(t0.detach().contiguous().numpy()),  # type: ignore
-                    xxh3_64_intdigest(t1.detach().contiguous().numpy()),  # type: ignore
-                )
-                half = self._cache.get_cache("half", key, _half_create)
-                quad_c = self._cache.get_cache("quad_c", key, _quad_c_create)
-            except RuntimeError:
-                half = _half_create()
-                quad_c = _quad_c_create()
-        else:
-            half = _half_create()
-            quad_c = _quad_c_create()
+        half = 0.5 * (t1 - t0)
+        quad = (
+            (t0 + t1)
+            .reshape(-1, 1)
+            .addmm(half.reshape(-1, 1), self._std_nodes, beta=0.5)
+            .reshape(t1.size(0), -1)
+        )
 
         # Compute hazard at quadrature points
-        vals = self._log_hazard(hazard_info._replace(t1=quad_c))
-        vals.clamp_(max=50.0).exp_()
+        vals = self._log_hazard(hazard_info._replace(t1=quad)).clamp(max=50).exp()
 
         return half.reshape(t1.shape) * (
             vals.reshape(*vals.shape[:-1], -1, self._std_weights.size(-1))
@@ -232,62 +184,45 @@ class HazardMixin:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: The log and cum hazard.
         """
-        t0, t1, *_ = hazard_info
+        _, t0, t1, *_ = hazard_info
 
         # Transform to quadrature interval
-        def _half_create():
-            return 0.5 * (t1 - t0)
-
-        def _quad_lc_create():
-            return torch.cat(
-                [t1, (t0 + t1).addmm(half, self._std_nodes, beta=0.5)], dim=-1
-            )
-
-        if self.cache_limit != 0:
-            try:
-                key = (
-                    xxh3_64_intdigest(t0.detach().contiguous().numpy()),  # type: ignore
-                    xxh3_64_intdigest(t1.detach().contiguous().numpy()),  # type: ignore
-                )
-                half = self._cache.get_cache("half", key, _half_create)
-                quad_lc = self._cache.get_cache("quad_c", key, _quad_lc_create)
-            except RuntimeError:
-                half = _half_create()
-                quad_lc = _quad_lc_create()
-        else:
-            half = _half_create()
-            quad_lc = _quad_lc_create()
+        half = 0.5 * (t1 - t0)
+        quad = torch.cat([t1, (t0 + t1).addmm(half, self._std_nodes, beta=0.5)], dim=-1)
 
         # Compute log hazard at all points
-        all_vals = self._log_hazard(hazard_info._replace(t1=quad_lc))
-        all_vals[..., 1:].clamp_(max=50.0).exp_()
+        all_vals = self._log_hazard(hazard_info._replace(t1=quad))
+        all_vals[..., 1:].clamp_(max=50).exp_()
 
         return all_vals[..., 0], half.reshape(-1) * (
             all_vals[..., 1:] @ self._std_weights
         )
 
-    def _hazard_logliks(self, data: ModelData, psi: torch.Tensor) -> torch.Tensor:
+    def _hazard_logliks(
+        self, data: ModelData, indiv_params: torch.Tensor
+    ) -> torch.Tensor:
         """Computes the hazard log likelihoods.
 
         Args:
             data (ModelData): Dataset on which likelihood is computed.
-            psi (torch.Tensor): A matrix of individual parameters.
+            indiv_params (torch.Tensor): A matrix of individual parameters.
 
         Returns:
             torch.Tensor: The computed log likelihoods.
         """
-        logliks = torch.zeros(psi.shape[:-1])
+        logliks = torch.zeros(indiv_params.shape[:-1])
 
         for key, bucket in data.buckets.items():
             # Compute log likelihood and scatter add
             idxs, t0, t1, obs = bucket
-            hazard_info = HazardInfo.create(self, data.x, psi, key, idxs, t0, t1)
+            hazard_info = HazardInfo.create(key, t0, t1, data.x, indiv_params, idxs)
             obs_logliks, alts_logliks = self._log_and_cum_hazard(hazard_info)
             vals = (-alts_logliks).addcmul(obs, obs_logliks)
             logliks.index_add_(-1, idxs, vals)
 
         return logliks
 
+    @torch.no_grad()  # type: ignore
     @validate_params(
         {
             "sample_data": [SampleData],
@@ -298,59 +233,61 @@ class HazardMixin:
     def compute_surv_logps(
         self, sample_data: SampleData, u: torch.Tensor
     ) -> torch.Tensor:
-        r"""Computes log probabilites of remaining event free up to time u.
+        r"""Compute log survival probabilities at specified times.
 
-        A censoring time may also be given. With known individual effects, this computes
-        at the times :math:`u` the values of the log survival probabilities given input
-        data conditionally to survival up to time :math:`c`:
-
-        .. math::
-            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt.
-
-        When multiple transitions are allowed, :math:`\lambda(t)` is a sum over all
-        possible transitions, that is to say if an individual is in the state :math:`k`
-        from time :math:`t_0`, this gives:
+        Evaluates the log-probability of remaining event-free up to the prediction times
+        :math:`u` conditional on individual-level parameters and censoring times. The
+        computation uses the hazard function :math:`\lambda(t)` to obtain:
 
         .. math::
-            -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt.
+            \log \mathbb{P}(T^* \geq u \mid T^* > c) = -\int_c^u \lambda(t) \, dt,
 
-        Please note this makes use of the Chasles property in order to avoid the
-        computation of two integrals and make computations more precise.
+        where :math:`c` denotes the censoring time for each individual. In cases with
+        multiple possible transitions, :math:`\lambda(t)` sums over all
+        transition-specific hazards:
 
-        The variable `u` is expected to be a matrix with the same number of rows as
-        individuals, and the same number of columns as prediction times.
+        .. math::
+            -\int_c^u \sum_{k'} \lambda^{k' \mid k}(t \mid t_0) \, dt,
+
+        exploiting the Chasles property to simplify computation and improve numerical
+        precision.
+
+        The input `u` must be a matrix of shape :math:`(n, m)` where :math:`n` is the
+        number of individuals and :math:`m` is the number of prediction time points.
 
         Args:
-            sample_data (SampleData): The data on which to compute the probabilities.
-            u (torch.Tensor): The times at which to evaluate the probabilities.
+            sample_data (SampleData): The dataset containing covariates,
+                individual-level parameters, trajectories, and censoring information.
+            u (torch.Tensor): Matrix of evaluation times of shape `(n, m)`.
 
         Raises:
-            ValueError: If `u` contains inf or NaN values.
-            ValueError: If `u` has incorrect shape.
+            ValueError: If `u` contains NaN or infinite values.
+            ValueError: If `u` has a shape inconsistent with the number of individuals.
 
         Returns:
-            torch.Tensor: The computed survival log probabilities.
+            torch.Tensor: Computed survival log-probabilities of shape `(n, m)`,
+            with rows corresponding to individuals and columns to prediction times.
         """
         assert_all_finite(u, input_name="u")
         check_consistent_length(u, sample_data)
 
         x = sample_data.x
-        psi = sample_data.psi
+        indiv_params = sample_data.indiv_params
         t_trunc = sample_data.t_trunc
 
         # Get buckets from last states
         buckets = build_remaining_buckets(
-            sample_data.trajectories, tuple(self.design.surv_fns.keys())
+            sample_data.trajectories, tuple(self.design.link_fns.keys())
         )
 
         # Compute the log probabilities summing over transitions
-        nlogps = torch.zeros(*psi.shape[:-1], u.size(1))
+        nlogps = torch.zeros(*indiv_params.shape[:-1], u.size(1))
         for key, bucket in buckets.items():
             # Compute negative log survival and scatter add
             idxs, t0 = bucket
             t0 = t0 if t_trunc is None else t_trunc.index_select(-2, idxs)
             hazard_info = HazardInfo.create(
-                self, x, psi, key, idxs, t0, u.index_select(0, idxs)
+                key, t0, u.index_select(0, idxs), x, indiv_params, idxs
             )
             alts_logliks = self._cum_hazard(hazard_info)
             nlogps.index_add_(-2, idxs, alts_logliks)
@@ -369,7 +306,7 @@ class HazardMixin:
         Returns:
             torch.Tensor: The computed pre transition times.
         """
-        t0, t1, *_ = hazard_info
+        _, t0, t1, *_ = hazard_info
 
         # Initialize for bisection search
         t_left, t_right = (
@@ -400,15 +337,15 @@ class HazardMixin:
             c (torch.Tensor): Sampling censoring time.
 
         Returns:
-            bool: If the sampling is done.
+            bool: True if the sampling is done.
         """
         x = sample_data.x
-        psi = sample_data.psi
+        indiv_params = sample_data.indiv_params
         t_trunc = sample_data.t_trunc
 
         # Get buckets from last states
         current_buckets = build_possible_buckets(
-            sample_data.trajectories, c, tuple(self.design.surv_fns.keys())
+            sample_data.trajectories, c, tuple(self.design.link_fns.keys())
         )
 
         if not current_buckets:
@@ -422,7 +359,7 @@ class HazardMixin:
             # Sample transition times, and condition with c
             idxs, t0, t1 = bucket
             t0 = t0 if t_trunc is None else t_trunc.index_select(-2, idxs)
-            hazard_info = HazardInfo.create(self, x, psi, key, idxs, t0, t1)
+            hazard_info = HazardInfo.create(key, t0, t1, x, indiv_params, idxs)
             t_sample = self._sample_transition(hazard_info)
             t_candidates[idxs, j] = t_sample.reshape(-1)
 
@@ -438,6 +375,7 @@ class HazardMixin:
 
         return False
 
+    @torch.no_grad()  # type: ignore
     @validate_params(
         {
             "sample_data": [SampleData],
@@ -453,26 +391,31 @@ class HazardMixin:
         *,
         max_length: int = 10,
     ) -> list[Trajectory]:
-        """Sample trajectories from the multistate joint model.
+        r"""Simulate individual trajectories from the multistate joint model.
 
-        This simulates the trajectories up to a censoring time `c` with a maximum length
-        of `max_length` to avoid infinite loops. This uses a variant of Gillepsie's
-        algorithm.
+        Generates sample trajectories for each individual up to the censoring times `c`,
+        truncating to a maximum of `max_length` transitions to prevent infinite loops.
+        The simulation employs a variant of Gillespie's algorithm adapted for individual
+        parameter draws. These sampled trajectories form the basis for posterior
+        predictive checks or downstream predictions in the joint model framework.
 
-        The variable `c` is expected to be a column vector with the same number of
-        rows as individuals.
+        The input `c` must be a column vector of shape :math:`(n, 1)` where :math:`n`
+        is the number of individuals.
 
         Args:
-            sample_data (SampleData): Prediction data.
-            c (torch.Tensor): The sampling censoring times.
-            max_length (int, optional): Maximum iterations or sampling. Defaults to 10.
+            sample_data (SampleData): The dataset containing covariates, trajectories,
+                and individual-level parameter used for sampling.
+            c (torch.Tensor): Column vector of censoring times for each individual.
+            max_length (int, optional): Maximum number of iterations or transitions
+                sampled per trajectory. Defaults to 10.
 
         Raises:
-            ValueError: If `c` contains inf or NaN values.
-            ValueError: If `c` has incorrect shape.
+            ValueError: If `c` contains NaN or infinite values.
+            ValueError: If `c` has a shape inconsistent with the number of individuals.
 
         Returns:
-            list[Trajectory]: The sampled trajectories.
+            list[Trajectory]: List of sampled trajectories, one per individual, with
+            each trajectory truncated at the censoring time.
         """
         assert_all_finite(c, input_name="c")
         check_consistent_length(c, sample_data)
@@ -484,7 +427,7 @@ class HazardMixin:
         sample_data_copied = SampleDataUnchecked(
             sample_data.x,
             trajectories_copied,
-            sample_data.psi,
+            sample_data.indiv_params,
             sample_data.t_trunc,
         )
 

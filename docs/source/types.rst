@@ -11,9 +11,8 @@ Types
    :recursive:
 
    BucketData
-   ClockMethod
    CovParameters
-   IndividualEffectsFn
+   IndividualParametersFn
    LinkFn
    LogBaseHazardFn
    ModelData

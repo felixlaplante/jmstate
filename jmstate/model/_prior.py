@@ -23,8 +23,10 @@ class PriorMixin:
         Returns:
             torch.Tensor: The computed log likelihoods.
         """
-        Q_inv_cholesky, Q_nlog_eigvals = self.params.q._inv_cholesky_and_log_eigvals  # type: ignore
-        Q_quad_form = (b @ Q_inv_cholesky).pow(2).sum(dim=-1)
-        Q_norm_factor = Q_nlog_eigvals.sum()
+        random_prec_cholesky, random_nlog_eigvals = (
+            self.params.random_cov._inv_cholesky_and_log_eigvals  # type: ignore
+        )
+        random_quad_form = (b @ random_prec_cholesky).pow(2).sum(dim=-1)
+        random_norm_factor = random_nlog_eigvals.sum()
 
-        return 0.5 * (Q_norm_factor - Q_quad_form)
+        return 0.5 * (random_norm_factor - random_quad_form)

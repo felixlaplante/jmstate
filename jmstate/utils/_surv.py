@@ -19,19 +19,18 @@ def build_buckets(
 ) -> dict[tuple[Any, Any], BucketData]:
     """Builds buckets from trajectories for user convenience.
 
-    This yeilds a `NamedTuple` containing transition information containing:
-        idxs (torch.Tensor): The individual indices.
-        t0 (torch.Tensor): A column vector of previous transition times.
-        t1 (torch.Tensor): A column vector of next transition times.
+    The return structure stores the transition times of individuals grouped together,
+    typically used to visualize the trajectories per transition type in multistate
+    models. Each entry corresponds to a single transition for a specific individual.
 
     Args:
         trajectories (list[Trajectory]): The list of individual trajectories.
 
     Raises:
-        TypeError: If the default dtype is not float32 or float64.
+        TypeError: If the default dtype is not `float32` or `float64`.
 
     Returns:
-        dict[tuple[Any, Any], BucketData]: Transition keys with values (idxs, t0, t1).
+        dict[tuple[Any, Any], BucketData]: Transition keys with values `BucketData`.
     """
     dtype = torch.get_default_dtype()
     if dtype == torch.float32:
@@ -99,7 +98,7 @@ def build_all_buckets(
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
     Raises:
-        TypeError: If the default dtype is not float32 or float64.
+        TypeError: If the default dtype is not `float32` or `float64`.
 
     Returns:
         dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The vectorizable buckets
@@ -165,7 +164,7 @@ def build_possible_buckets(
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
     Raises:
-        TypeError: If the default dtype is not float32 or float64.
+        TypeError: If the default dtype is not `float32` or `float64`.
 
     Returns:
         dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The possible buckets
@@ -218,7 +217,7 @@ def build_remaining_buckets(
         surv_keys (tuple[tuple[Any, Any], ...]): The survival keys.
 
     Raises:
-        TypeError: If the default dtype is not float32 or float64.
+        TypeError: If the default dtype is not `float32` or `float64`.
 
     Returns:
         dict[tuple[Any, Any], tuple[torch.Tensor, ...]]: The remaining buckets

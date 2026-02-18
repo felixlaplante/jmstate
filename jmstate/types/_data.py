@@ -14,13 +14,7 @@ from sklearn.utils.validation import (  # type: ignore
 
 from ..utils._checks import check_trajectories
 from ..utils._surv import build_all_buckets
-from ._defs import (
-    IndividualEffectsFn,
-    LinkFn,
-    LogBaseHazardFn,
-    RegressionFn,
-    Trajectory,
-)
+from ._defs import IndividualParametersFn, LinkFn, RegressionFn, Trajectory
 
 if TYPE_CHECKING:
     from ..model._fit import FitMixin
@@ -30,73 +24,118 @@ if TYPE_CHECKING:
 # Dataclasses
 @dataclass
 class ModelDesign(BaseEstimator):
-    """Class containing model design.
+    r"""Dataclass encapsulating the design of a multistate joint model.
 
-    For all functions, please use broadcasting as much as possible. It is almost always
-    possible to broadcast parameters to vectorize efficiently the operations. If you
-    copy, beware of a heavy performance hit. If unable, please use vmap.
+    This class defines the parametric and functional design of the model, including
+    individual-specific parameters, regression structures, and link functions for state
+    transitions. All functions should be implemented to allow maximum broadcasting to
+    ensure efficient vectorized computation. If broadcasting is not possible, `vmap` may
+    be used for safe parallelization.
 
-    Also, note that the function passed to the MCMC sampler will be built using the
-    `torch.no_grad()` decorator. If needs be, use `torch.enable_grad()` if one of the
-    model design functions always require gradient computation regardless of setting.
+    Functions provided to the MCMC sampler will automatically be wrapped with
+    `torch.no_grad()`. If gradient computation is required regardless of the sampling
+    context, wrap the function explicitly with `torch.enable_grad()`.
 
-    Ensure all functions all well defined on a closed interval and are differentiable
-    almost everywhere.
+    All functions must be well-defined on closed intervals of their input domain and
+    differentiable almost everywhere to ensure compatibility with gradient-based
+    procedures.
+
+    Individual Parameters:
+        - `indiv_params_fn` is a function that computes individual parameters. Given
+          `pop_params` (population-level parameters), `x` (covariates matrix of shape
+          :math:`(n, p)`), and `b` (random effects, either 2D or 3D), it yields tensors
+          of corresponding dimensions, either 2D or 3D depending on the model design.
+          This function defines the mapping from population-level parameters and
+          covariates to individual-specific parameters.
+
+    Regression:
+        - `regression_fn` is a function that maps time points and individual parameters
+          to the expected observations. It must accept 1D or 2D time inputs and 2D or 3D
+          individual parameters. The output tensor must have at least three dimensions:
+          the last dimension corresponds to the response variable, the second-last to
+          repeated measurements, the third-last to individuals, and an optional
+          fourth-last dimension for parallelization across MCMC chains.
+
+    Link Functions:
+        - `link_fns` is a mapping from transition keys (tuples of
+          `(state_from, state_to)`) to link functions. Each link function shares the
+          same requirements as `regression_fn` and defines the transformation from
+          regression outputs to transition-specific parameters.
 
     Attributes:
-        individual_effects_fn (IndividualEffectsFn): The individual effects function. It
-            must be able to yield 2D or 3D tensors given inputs of `gamma` (population
-            parameters), `x` (covariates matrix), and `b` (random effects). Note `b` is
-            either 2D or 3D.
-        regression_fn (RegressionFn): The regression function. It
-            must be able to yield 3D and 4D tensors given 1D or 2D time inputs, as well
-            as `psi` input of order 2 or 3. This is not very restrictive, but requires
-            to be careful. The last dimension is the dimension of the response variable;
-            second last is the repeated measurements; third last is individual based;
-            possible fourth last is for parallelization of the MCMC sampler.
-        surv_fns (Mapping[tuple[Any, Any], tuple[LogBaseHazardFn, LinkFn]]): A mapping
-            of transition keys that can be typed however you want. The tuple contains a
-            log base hazard function, as well as a link function that shares the same
-            requirements as `regression_fn`. Log base hazard function is expected to be
-            pure if caching is enabled, otherwise it will lead to false computations.
+        indiv_params_fn (IndividualParametersFn): Function that computes individual
+            parameters. Given `pop_params` (population-level parameters), `x`
+            (covariates matrix of shape :math:`(n, p)`), and `b` (random effects, either
+            2D or 3D), it yields tensors of corresponding dimensions, either 2D or 3D
+            depending on the model design. This function defines the mapping from
+            population-level parameters and covariates to individual-specific
+            parameters.
+        regression_fn (RegressionFn): Regression function mapping time points and
+            individual parameters to the expected observations. It must accept 1D or 2D
+            time inputs and 2D or 3D individual parameters. The output tensor must have
+            at least three dimensions: the last dimension corresponds to the response
+            variable, the second-last to repeated measurements, the third-last to
+            individuals, and an optional fourth-last dimension for parallelization
+            across MCMC chains.
+        link_fns (Mapping[tuple[Any, Any], LinkFn]): Mapping from transition keys
+            (tuples of `(state_from, state_to)`) to link functions. Each link function
+            shares the same requirements as `regression_fn` and defines the
+            transformation from regression outputs to transition-specific parameters.
 
     Examples:
-        >>> def sigmoid(t: torch.Tensor, psi: torch.Tensor):
-        ...     scale, offset, slope = psi.chunk(3, dim=-1)
+        >>> def sigmoid(t: torch.Tensor, indiv_params: torch.Tensor):
+        ...     scale, offset, slope = indiv_params.chunk(3, dim=-1)
         ...     # Fully broadcasted
         ...     return (scale * torch.sigmoid((t - offset) / slope)).unsqueeze(-1)
-        >>> individual_effects_fn = lambda gamma, x, b: gamma + b
-        >>> regression_fn = sigmoid
-        >>> surv_fns = {("alive", "dead"): (Exponential(1.2), sigmoid)}
-        >>> design = ModelDesign(individual_effects_fn, regression_fn, surv_fns)
+        >>> pop_plus_b = lambda pop_params, x, b: pop_params + b
+        >>> link_fns = {("alive", "dead"): sigmoid}
+        >>> design = ModelDesign(pop_plus_b, sigmoid, link_fns)
     """
 
-    individual_effects_fn: IndividualEffectsFn
+    indiv_params_fn: IndividualParametersFn
     regression_fn: RegressionFn
-    surv_fns: Mapping[
-        tuple[Any, Any],
-        tuple[LogBaseHazardFn, LinkFn],
-    ]
+    link_fns: Mapping[tuple[Any, Any], LinkFn]
 
 
 @dataclass
 class ModelData(BaseEstimator):
     r"""Dataclass containing learnable multistate joint model data.
 
-    Note `y` is expected to be a 3D tensor of dimension :math:`(n, m, d)` if there are
-    :math:`n` individual, with a maximum number of :math:`m` measurements in
-    :math:`\mathbb{R}^d`. Padding is done with NaNs. The attribute `t` is expected to
-    be either a 2D tensor of dimension :math:`(n, m)` if there are :math:`n` individual,
-    or a 1D tensor of dimension :math:`(m,)` if the times are shared by all individual.
-    Padding is not mandatory, but can be done with NaNs. `t` must not contain NaN values
-    where `y` is not NaN. If the `r` attribute of `ModelParameters` is set to `full` and
-    `y` is is :math:`\mathbb{R}^d` with :math:`d > 1`, then `r.covariance_type` must not
-    be set to `full`, as it will lead to incorrect likelihood computations.
+    Covariates:
+        - `x` is a matrix of covariates of shape :math:`(n, p)`, where :math:`n` denotes
+          the number of individuals and :math:`p` the number of covariates.
 
-    This data can be completed using the `prepare` method, which makes the data usable
-    for manual likelihood computations and MCMC. This usage is only encourage for people
-    aware of the codebase. It will be run automatically by fitting and predicton methods
-    without user input.
+    Measurement Times:
+        - `t` represents the measurement times. It can be either:
+            - a 2D tensor of shape :math:`(n, m)` when each individual has
+              individual-specific time points,
+            - a 1D tensor of shape :math:`(m,)` when all individuals share the same
+              measurement times.
+
+    Padding with NaNs is optional. However, `t` must not contain NaN values at positions
+    where `y` is observed (i.e., where `y` is not NaN).
+
+    Observations:
+        - `y` is expected to be a 3D tensor of shape :math:`(n, m, d)`, where :math:`n`
+          is the number of individuals, :math:`m` is the maximum number of measurements
+          per individual, and :math:`d` is the dimension of the observation space
+          :math:`\mathbb{R}^d`. Padding is performed with NaNs.
+
+    Trajectories:
+        - `trajectories` contains the individual-level multistate trajectories. They
+          correspond to a `list[list[tuple[float, Any]]]` where each inner list is a
+          trajectory and each tuple is a `(time, state)` pair.
+
+    Censoring Times:
+        - `c` represents the right censoring times, and are expected to be a column
+          vector of shape :math:`(n, 1)`. Each value must be greater than or equal to
+          the corresponding maximum transition time for each individual.
+
+    The data can be completed using the `prepare` method, which formats it for manual
+    likelihood evaluation and MCMC procedures. This usage is intended for advanced users
+    familiar with the codebase. The method is called automatically by the `fit` and
+    `predict` routines and does not require explicit user intervention in standard
+    workflows.
 
     Raises:
         ValueError: If some trajectory is empty.
@@ -106,27 +145,31 @@ class ModelData(BaseEstimator):
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
-        x (torch.Tensor | None): The fixed covariates.
-        t (torch.Tensor): The measurement times. Either a 1D tensor if the times are
-            shared by all individual, or a matrix of individual times. Use padding with
-            NaNs when necessary.
-        y (torch.Tensor): The measurements. A 3D tensor of dimension :math:`(n, m, d)`
-            if there are :math:`n` individual, with a maximum number of :math:`m`
-            measurements in :math:`\mathbb{R}^d`. Use padding with NaNs when
-            necessary.
-        trajectories (list[Trajectory]): The list of the individual trajectories.
-            A `Trajectory` is a list of tuples containing time and state.
-        c (torch.Tensor): The censoring times as a column vector. They must not
-            be less than the trajectory maximum times.
-        valid_mask (torch.Tensor): The mask of the valid measurements.
-        n_valid (torch.Tensor): The number of valid measurements.
-        valid_t (torch.Tensor): The valid times.
-        valid_y (torch.Tensor): The valid measurements.
-        buckets (dict[tuple[Any, Any], tuple[torch.Tensor, ...]]): The buckets for the
-            trajectories.
+        x (torch.Tensor): Fixed covariate matrix of shape `(n, p)`, where `n` is the
+            number of individuals and `p` the number of covariates.
+        t (torch.Tensor): Measurement times. Either a 1D tensor of shape `(m,)` when
+            times are shared across individuals, or a 2D tensor of shape `(n, m)`
+            when individuals have distinct time grids. Padding with NaNs may be
+            used when required.
+        y (torch.Tensor): Longitudinal measurements of shape `(n, m, d)`, where `n` is
+            the number of individuals, `m` the maximum number of measurements per
+            individual, and `d` the observation dimension. Padding is performed
+            with NaNs when necessary.
+        trajectories (list[Trajectory]): List of individual trajectories. Each
+            `Trajectory` consists of a sequence of `(time, state)` tuples.
+        c (torch.Tensor): Censoring times provided as a column vector. Each value must
+            be greater than or equal to the corresponding maximum trajectory time.
+        valid_mask (torch.Tensor): Boolean mask indicating valid (non-padded)
+            measurements.
+        n_valid (torch.Tensor): Number of valid measurements per individual.
+        valid_t (torch.Tensor): Filtered tensor containing only valid measurement
+            times.
+        valid_y (torch.Tensor): Filtered tensor containing only valid measurements.
+        buckets (dict[tuple[Any, Any], tuple[torch.Tensor, ...]]): Grouped trajectory
+            data structures used for likelihood computation.
     """
 
-    x: torch.Tensor | None
+    x: torch.Tensor
     t: torch.Tensor
     y: torch.Tensor
     trajectories: list[Trajectory]
@@ -152,8 +195,8 @@ class ModelData(BaseEstimator):
             ValueError: If some trajectory is empty.
             ValueError: If some trajectory is not sorted.
             ValueError: If some trajectory is not compatible with the censoring times.
-            ValueError: If any of the inputs contain inf or NaN values except `t` and
-                `y`.
+            ValueError: If any of the inputs contain NaN or infinite values except `t`
+                and `y` for which NaN values are allowed.
             ValueError: If the size is not consistent between inputs.
         """
         validate_params(
@@ -163,7 +206,6 @@ class ModelData(BaseEstimator):
                 "y": [torch.Tensor],
                 "trajectories": [list],
                 "c": [torch.Tensor],
-                "skip_validation": [bool],
             },
             prefer_skip_nested_validation=True,
         )
@@ -200,14 +242,12 @@ class ModelData(BaseEstimator):
             },
             prefer_skip_nested_validation=True,
         )
-        check_consistent_length(model.params.r.cov, self.y.transpose(0, -1))
-
         self.valid_mask = ~self.y.isnan()
         self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
         self.valid_y = self.y.nan_to_num()
         self.buckets = build_all_buckets(
-            self.trajectories, self.c, tuple(model.design.surv_fns.keys())
+            self.trajectories, self.c, tuple(model.design.link_fns.keys())
         )
 
         return self
@@ -224,40 +264,53 @@ class ModelDataUnchecked(ModelData):
 
 @dataclass
 class SampleData(BaseEstimator):
-    """Dataclass for data used in sampling.
+    r"""Dataclass containing individual-level data for sampling procedures.
 
-    This assumes exact knowledge of the individual parameters `psi`. It is exposed
-    in the `compute_surv_logps` and `sample_trajectories` methods of `HazardMixin`,
-    which itself is used in the `MultiStateJointModel` class. This is used for data
-    simulation, and internally, for the prediction of quantities linked to the
-    survival function or trajectories. The `t_trunc` attribute is optional, and if not
-    provided, it is set to the maximum time of observation of the individuals. It
-    corresponds to the truncation time or conditionning time.
+    Covariates:
+        - `x` is a matrix of covariates of shape :math:`(n, p)`, where :math:`n` denotes
+          the number of individuals and :math:`p` the number of covariates.
+
+    Trajectories:
+        - `trajectories` contains the individual-level multistate trajectories. They
+          correspond to a `list[list[tuple[float, Any]]]` where each inner list is a
+          trajectory and each tuple is a `(time, state)` pair.
+
+    Individual Parameters:
+        - `indiv_params` represents the individual-specific parameters. It is expected
+          to have the same number of rows as there are trajectories. Use a 3D tensor
+          only if you fully understand the codebase and mechanisms. Trajectory sampling
+          may only be used with matrices.
+
+    Truncation Times:
+        - `t_trunc` corresponds to truncation or conditioning times for each individual.
+          This attribute is optional and, if not provided, is set to the maximum
+          observation time per individual.
+
+    The data class is used for simulation and for prediction of quantities related to
+    survival functions or trajectories. Unlike `ModelData`, it assumes exact knowledge
+    of the individual parameters.
 
     Raises:
         ValueError: If some trajectory is empty.
         ValueError: If some trajectory is not sorted.
         ValueError: If some trajectory is not compatible with the censoring times.
-        ValueError: If any of the inputs contain inf or NaN values.
+        ValueError: If any of the inputs contain NaN or infinite values.
         ValueError: If the size is not consistent between inputs.
 
     Attributes:
-        x (torch.Tensor | None): The fixed covariates.
-        trajectories (list[Trajectory]): The list of the individual trajectories.
-            A `Trajectory` is a list of tuples containing time and state.
-        psi (torch.Tensor): The individual parameters. Define it as a matrix with
-            the same number of rows as there are `len(trajectories)`. Only use a 3D
-            tensor if you fully understand the codebase and the mechanisms. Trajectory
-            sampling may only be used with matrices.
-        c (torch.Tensor | None, optional): The censoring times as a column vector. They
-            must not be less than the trajectory maximum times. This corresponds to
-            the last times of observation of the individuals or prediction current
-            times.
+        x (torch.Tensor): Fixed covariate matrix of shape `(n, p)`, where `n` is the
+            number of individuals and `p` the number of covariates.
+        trajectories (list[Trajectory]): List of individual trajectories. Each
+            `Trajectory` consists of a sequence of `(time, state)` tuples.
+        indiv_params (torch.Tensor): Individual parameters with the same number of
+            rows as there are trajectories. Use a matrix by default.
+        t_trunc (torch.Tensor | None): Optional truncation times per individual. If
+            None, the maximum observation time is used.
     """
 
-    x: torch.Tensor | None
+    x: torch.Tensor
     trajectories: list[Trajectory]
-    psi: torch.Tensor
+    indiv_params: torch.Tensor
     t_trunc: torch.Tensor | None = None
 
     def __len__(self) -> int:
@@ -280,9 +333,10 @@ class SampleData(BaseEstimator):
         """
         validate_params(
             {
+                "x": [torch.Tensor],
                 "trajectories": [list],
-                "psi": [torch.Tensor],
-                "t_trunc": [torch.Tensor],
+                "indiv_params": [torch.Tensor],
+                "t_trunc": [torch.Tensor, None],
             },
             prefer_skip_nested_validation=True,
         )
@@ -290,11 +344,14 @@ class SampleData(BaseEstimator):
         check_trajectories(self.trajectories, self.t_trunc)
 
         assert_all_finite(self.x, input_name="x")
-        assert_all_finite(self.psi, input_name="psi")
+        assert_all_finite(self.indiv_params, input_name="indiv_params")
         assert_all_finite(self.t_trunc, input_name="t_trunc")
 
         check_consistent_length(
-            self.x, self.psi.transpose(0, -2), self.t_trunc, self.trajectories
+            self.x,
+            self.indiv_params.transpose(0, -2),
+            self.t_trunc,
+            self.trajectories,
         )
 
 

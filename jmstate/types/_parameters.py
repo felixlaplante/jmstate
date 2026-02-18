@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from numbers import Integral
 from typing import Any, Self, cast
 
@@ -12,89 +11,47 @@ from sklearn.utils._param_validation import (  # type: ignore
 from sklearn.utils.validation import assert_all_finite  # type: ignore
 from torch import nn
 
+from ..types._defs import LogBaseHazardFn
 from ..utils._checks import check_matrix_dim
 from ..utils._linalg import flat_from_log_cholesky, log_cholesky_from_flat
 
 
-class UniqueParametersNNModule(nn.Module):
-    """`nn.Module` that has unique parameters."""
-
-    def parameters(self, recurse: bool = True) -> Iterator[nn.Parameter]:
-        """Return an iterator over the unique parameters.
-
-        Args:
-            recurse (bool, optional): Whether to recurse into submodules. Defaults to
-                True.
-
-        Returns:
-            Iterator[nn.Parameter]: An iterator over the unique parameters.
-        """
-        seen: set[int] = set()
-        for param in super().parameters(recurse):
-            if (ptr := param.data_ptr()) not in seen:
-                seen.add(ptr)
-                yield param
-
-    def named_parameters(
-        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
-    ) -> Iterator[tuple[str, nn.Parameter]]:
-        """Return an iterator over the unique parameters.
-
-        Args:
-            prefix (str, optional): The prefix to prepend to the parameter names.
-                Defaults to "".
-            recurse (bool, optional): Whether to recurse into submodules. Defaults to
-                True.
-            remove_duplicate (bool, optional): Whether to remove duplicate parameters.
-                Defaults to True.
-
-        Returns:
-            Iterator[nn.Parameter]: An iterator over the unique parameters.
-        """
-        seen: set[int] = set()
-        for name, param in super().named_parameters(prefix, recurse, remove_duplicate):
-            if (ptr := param.data_ptr()) not in seen:
-                seen.add(ptr)
-                yield name, param
-
-
 class CovParameters(BaseEstimator, nn.Module):
-    r"""`nn.Module` containing covariance parameter.
+    r"""`nn.Module` encapsulating covariance matrix parameters.
 
-    Note three types of covariance matrices parametrization are provided: full matrix;
-    diagonal matrix; scalar matrix. Defaults to the full matrix parametrization.
-    This is achieved through a log Cholesky parametrization of the inverse covariance
-    matrix. Formally, consider :math:`P = \Sigma^{-1}` the precision matrix and let
-    :math:`L` be the Cholesky factor with positive diagonal elements, the log Cholseky
-    is given by
+    This class provides three types of covariance matrix parametrization: full,
+    diagonal, and spherical (scalar). The default is full matrix parametrization.
+    Covariance matrices are internally represented using the **log-Cholesky
+    parametrization** of the inverse covariance (precision) matrix. Formally, let
+    :math:`P = \Sigma^{-1}` be the precision matrix and :math:`L` its Cholesky factor
+    with positive diagonal elements. The log-Cholesky representation :math:`\tilde{L}`
+    is defined by:
 
     .. math::
-        \tilde{L}_{ij} = L_{ij}, \, i > j,
-
-    and
+        \tilde{L}_{ij} = L_{ij}, \quad i > j
 
     .. math::
         \tilde{L}_{ii} = \log L_{ii}.
 
-    This is very numerically stable and fast, as it doesn't require inverting the
-    matrix when computing quadratic forms. The log determinant is then equal to
+    This representation ensures numerical stability and avoids explicit inversion when
+    computing quadratic forms. The log determinant of the precision matrix is then
 
     .. math::
-
         \log \det P = 2 \operatorname{Tr}(\tilde{L}).
 
-    You can use these methods by creating the appropriate isntance from a covariance
-    matrix using the `from_cov` classmethod with `covariance_type` of either `full`,
-    `diag`, or `spherical`.
+    Instances can be created from a covariance matrix using the `from_cov` classmethod
+    with `covariance_type` set to `'full'`, `'diag'`, or `'spherical'`.
 
     Attributes:
-        flat (torch.Tensor): The flat representation of the covariance matrix.
-        dim (int): The dimension of the covariance matrix.
-        covariance_type (str): The method used to parametrize the covariance matrix.
+        flat (torch.Tensor): Flat representation of the covariance matrix suitable
+            for optimization.
+        dim (int): Dimension of the covariance matrix.
+        covariance_type (str): Type of parametrization, one of `'full'`, `'diag'`,
+            or `'spherical'`.
 
     Examples:
-        >>> q_param = CovParameters.from_cov(torch.eye(3), "diag")
-        >>> r_param = CovParameters.from_cov(torch.eye(2), "spherical")
+        >>> random_cov = CovParameters.from_cov(torch.eye(3), "diag")
+        >>> noise_cov = CovParameters.from_cov(torch.eye(2), "spherical")
     """
 
     @classmethod
@@ -110,8 +67,8 @@ class CovParameters(BaseEstimator, nn.Module):
 
         Args:
             V (torch.Tensor): The square covariance matrix.
-            covariance_type (str, optional): The method, `full`, `diag`, or `spherical`.
-                Defaults to `full`.
+            covariance_type (str, optional): The method, `'full'`, `'diag'`, or
+                `'spherical'`. Defaults to `'full'`.
 
         Returns:
             Self: The usable representation.
@@ -136,7 +93,8 @@ class CovParameters(BaseEstimator, nn.Module):
         Args:
             flat (torch.Tensor): The flat representation of the covariance matrix.
             dim (int): The dimension of the covariance matrix.
-            covariance_type (str): The method used to parametrize the covariance matrix.
+            covariance_type (str): The method used to parametrize the covariance
+                matrix.
 
         Raises:
             ValueError: If the representation is invalid.
@@ -174,111 +132,111 @@ class CovParameters(BaseEstimator, nn.Module):
         return L, log_eigvals
 
 
-class ModelParameters(BaseEstimator, UniqueParametersNNModule):
-    r"""`nn.Module` containing model parameters.
+class ModelParameters(BaseEstimator, nn.Module):
+    r"""`nn.Module` encapsulating all model parameters for a multistate joint model.
 
-    The `gamma`  and `betas` attributes may be `None` if the model does not take into
-    account covariates or population level effects. When set, both `alphas` and `betas`
-    are expected to be dictionaries of parameters with keys corresponding to the
-    a tuple `(from_state, to_state)` of states. The `q` and `r` attributes are
-    `CovParameters` objects representing the random effects and residuals matrices
-    respectively. The `extra` attribute is a dictionary of parameters that is passed in
-    addition to other mandatory parameters. For example, if base hazard parameters are
-    to be optimized, they should be passed in `extra`.
+    This module contains population-level parameters, covariate effects, link
+    coefficients, random effects, noise covariance, and log base hazard functions.
+    Parameters can be shared by assigning the same `nn.Parameter` object to multiple
+    fields. Reusing tensors directly is not supported and requires wrapping in
+    `nn.Parameter`.
 
-    Shared parameters are possible by assigning the exact same object to multiple fields
-    so that the data pointer is the same. `self.parameters()` will not return duplicate
-    parameters and is safe to use.
+    `pop_params` are population-level parameters.
+
+    `random_cov` and `noise_cov` are `CovParameters` objects representing the random
+    effects and residual noise covariances respectively.
+
+    `base_hazards` is a dictionary of `LogBaseHazardFn` modules keyed by
+    `(from_state, to_state)` tuples for each transition; optimization can be disabled
+    per hazard via its `frozen` attribute.
+
+    `link_coefs` and `x_coefs` are dictionaries keyed by `(from_state, to_state)`
+    tuples, representing linear coefficients for links and covariates, respectively.
 
     Attributes:
-        gamma (torch.Tensor | None): The population level parameters.
-        q (CovParam): The random effects precision matrix representation.
-        r (CovParam): The residuals precision matrix representation.
-        alphas (nn.ParameterDict): The link linear parameters.
-        betas (nn.ParameterDict | None): The covariates parameters.
-        extra (nn.ParameterDict | None): A dictionary of parameters that is
-            passed in addition to other mandatory parameters.
+        pop_params (torch.Tensor): Population-level parameters.
+        random_cov (CovParameters): Covariance parameters for random effects.
+        noise_cov (CovParameters): Covariance parameters for residual noise.
+        base_hazards (nn.ModuleDict): Log base hazard functions per transition.
+        link_coefs (nn.ParameterDict): Linear parameters for the link functions.
+        x_coefs (nn.ParameterDict): Covariate parameters for each transition.
 
     Examples:
-        >>> # To create a model with simple parameters
-        >>> gamma = torch.zeros(3)
-        >>> alphas = {(0, 1): torch.zeros(3), (1, 0): torch.zeros(3)}
-        >>> betas = {(0, 1): torch.zeros(2), (1, 0): torch.zeros(2)}
-        >>> init_params = ModelParameters(
-        ...     gamma,
-        ...     CovParameters.from_cov(torch.eye(3), "diag"),
-        ...     CovParameters.from_cov(torch.eye(2), "spherical"),
-        ...     alphas,
-        ...     betas,
+        >>> pop_params = torch.zeros(3)
+        >>> random_cov = CovParameters.from_cov(torch.eye(3), "diag")
+        >>> noise_cov = CovParameters.from_cov(torch.eye(2), "spherical")
+        >>> link_coefs = {(0, 1): torch.zeros(3), (1, 0): torch.zeros(3)}
+        >>> x_coefs = {(0, 1): torch.zeros(2), (1, 0): torch.zeros(2)}
+        >>> params = ModelParameters(
+        ...     pop_params,
+        ...     random_cov,
+        ...     noise_cov,
+        ...     link_coefs,
+        ...     x_coefs,
         ... )
-        >>> # To create a model with shared parameters
-        >>> alpha_shared = torch.zeros(3)
-        >>> alphas_shared = {(0, 1): alpha_shared, (1, 0): alpha_shared}
-        >>> init_params_shared = ModelParameters(
-        ...     torch.zeros(3),
-        ...     CovParameters.from_cov(torch.eye(3), "diag"),
-        ...     CovParameters.from_cov(torch.eye(2), "spherical"),
-        ...     alphas_shared,
-        ...     betas,
+        >>> # Shared parameters
+        >>> shared_coef = nn.Parameter(torch.zeros(3))  # Mandatory nn.Parameter
+        >>> shared_link_coefs = {(0, 1): shared_coef, (1, 0): shared_coef}
+        >>> shared_params = ModelParameters(
+        ...     pop_params,
+        ...     random_cov,
+        ...     noise_cov,
+        ...     shared_link_coefs,
+        ...     x_coefs,
         ... )
     """
 
-    gamma: torch.Tensor | None
-    q: CovParameters
-    r: CovParameters
-    alphas: nn.ParameterDict
-    betas: nn.ParameterDict | None
-    extra: nn.ParameterDict | None
+    pop_params: torch.Tensor
+    random_cov: CovParameters
+    noise_cov: CovParameters
+    base_hazards: nn.ModuleDict
+    link_coefs: nn.ParameterDict
+    x_coefs: nn.ParameterDict
 
     @validate_params(
         {
-            "gamma": [torch.Tensor, None],
-            "q": [CovParameters],
-            "r": [CovParameters],
-            "alphas": [dict],
-            "betas": [dict],
-            "extra": [dict, None],
+            "pop_params": [torch.Tensor],
+            "random_cov": [CovParameters],
+            "noise_cov": [CovParameters],
+            "base_hazards": [dict],
+            "link_coefs": [dict],
+            "x_coefs": [dict],
         },
         prefer_skip_nested_validation=True,
     )
     def __init__(
         self,
-        gamma: torch.Tensor | None,
-        q: CovParameters,
-        r: CovParameters,
-        alphas: dict[tuple[Any, Any], torch.Tensor],
-        betas: dict[tuple[Any, Any], torch.Tensor] | None,
-        *,
-        extra: dict[str, torch.Tensor] | None = None,
+        pop_params: torch.Tensor,
+        random_cov: CovParameters,
+        noise_cov: CovParameters,
+        base_hazards: dict[tuple[Any, Any], LogBaseHazardFn],
+        link_coefs: dict[tuple[Any, Any], torch.Tensor],
+        x_coefs: dict[tuple[Any, Any], torch.Tensor],
     ):
         """Initializes the `ModelParams` object.
 
         Args:
-            gamma (torch.Tensor | None): The population level parameters.
-            q (CovParameters): The random effects precision matrix representation.
-            r (CovParameters): The residuals precision matrix representation.
-            alphas (dict[tuple[Any, Any], torch.Tensor]): The link linear parameters.
-            betas (dict[tuple[Any, Any], torch.Tensor] | None): The covariates
-                parameters.
-            extra (dict[str, torch.Tensor] | None, optional): A dictionary of parameters
-                that is passed in addition to other mandatory parameters. Defaults to
-                None.
+            pop_params (torch.Tensor): The population-level parameters.
+            random_cov (CovParameters): Covariance parameters for random effects.
+            noise_cov (CovParameters): Covariance parameters for residual noise.
+            base_hazards (dict[tuple[Any, Any], LogBaseHazardFn]): Log base hazard
+                functions.
+            link_coefs (dict[tuple[Any, Any], torch.Tensor]): Linear parameters for the
+                link functions.
+            x_coefs (dict[tuple[Any, Any], torch.Tensor]): Covariate parameters for each
+                transition.
 
         Raises:
-            ValueError: If any of the tensors contains inf or NaN values.
+            ValueError: If any of the tensors contains NaN or infinite values.
         """
         super().__init__()  # type: ignore
 
-        self.gamma = None if gamma is None else nn.Parameter(gamma)
-        self.q = q
-        self.r = r
-        self.alphas = nn.ParameterDict({str(key): val for key, val in alphas.items()})
-        self.betas = (
-            None
-            if betas is None
-            else nn.ParameterDict({str(key): val for key, val in betas.items()})
-        )
-        self.extra = None if extra is None else nn.ParameterDict(extra)
+        self.pop_params = nn.Parameter(pop_params)
+        self.random_cov = random_cov
+        self.noise_cov = noise_cov
+        self.base_hazards = nn.ModuleDict({str(k): v for k, v in base_hazards.items()})
+        self.link_coefs = nn.ParameterDict({str(k): v for k, v in link_coefs.items()})
+        self.x_coefs = nn.ParameterDict({str(k): v for k, v in x_coefs.items()})
 
         for key, val in self.named_parameters():
             assert_all_finite(val.detach(), input_name=key)
