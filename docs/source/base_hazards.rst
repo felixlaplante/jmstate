@@ -14,5 +14,3 @@ Base Hazard Functions
    Gompertz
    LogNormal
    Weibull
-   clock_forward
-   clock_reset
