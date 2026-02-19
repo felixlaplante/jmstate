@@ -24,7 +24,7 @@ class Exponential(LogBaseHazardFn):
     It is given by the formula:
 
     .. math::
-        \lambda(t) = \lambda.
+        \lambda_0(t) = \lambda.
 
     This method expects:
         - `t0`: a column vector of previous transition times, shape `(n, 1)`.
@@ -97,7 +97,7 @@ class Weibull(LogBaseHazardFn):
     It is given by the formula:
 
     .. math::
-        \lambda(t) = \frac{k}{\lambda} \left( \frac{t}{\lambda} \right)^{k - 1}.
+        \lambda_0(t) = \frac{k}{\lambda} \left( \frac{t}{\lambda} \right)^{k - 1}.
 
     This method expects:
         - `t0`: a column vector of previous transition times, shape `(n, 1)`.
@@ -199,7 +199,7 @@ class Gompertz(LogBaseHazardFn):
     It is given by the formula:
 
     .. math::
-        \lambda(t) = a \exp{bt}.
+        \lambda_0(t) = a \exp{bt}.
 
     This method expects:
         - `t0`: a column vector of previous transition times, shape `(n, 1)`.
@@ -292,7 +292,7 @@ class LogNormal(LogBaseHazardFn):
     It is given by the formula:
 
     .. math::
-        \lambda(t) = \frac{\phi\left( \frac{\log t - \mu}{\sigma} \right)}{t \sigma
+        \lambda_0(t) = \frac{\phi\left( \frac{\log t - \mu}{\sigma} \right)}{t \sigma
         \, \Phi\left( -\frac{\log t - \mu}{\sigma} \right)},
         \quad t > 0,
 
@@ -390,3 +390,4 @@ class LogNormal(LogBaseHazardFn):
             torch.Tensor: The scale.
         """
         return self.log_scale.exp()
+
