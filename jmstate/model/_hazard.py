@@ -23,7 +23,7 @@ class HazardInfo(NamedTuple):
         key (tuple[Any, Any]): The transition key.
         t0 (torch.Tensor): A column vector of previous transition times.
         t1 (torch.Tensor): A matrix of next transition times.
-        x (torch.Tensor): The covariates.
+        x (torch.Tensor): The fixed covariates.
         indiv_params (torch.Tensor): The individual parameters.
     """
 
