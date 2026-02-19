@@ -38,7 +38,7 @@ def summary(model: MultiStateJointModel):
 
     This function displays the estimated parameter values, their standard errors, and
     the (nullity) p-values testing the hypothesis that each coefficient is zero.
-    Note that for certain parameters—such as covariance components—these p-values
+    Note that for certain parameters—such as precision components—these p-values
     may not be meaningful and should be interpreted with caution.
 
     Additionally, the function prints model selection metrics including the log

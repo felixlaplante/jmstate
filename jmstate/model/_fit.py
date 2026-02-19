@@ -200,7 +200,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Returns:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
         """
-        n, q = len(data), self.params.random_cov.dim
+        n, q = len(data), self.params.random_prec.dim
         logpdf = torch.tensor(0.0)
         mb = torch.zeros(n, q)
         mb2 = torch.zeros(n, q, q)
@@ -249,7 +249,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         mb2 /= den
 
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
-        entropy = 0.5 * (torch.logdet(covs) + self.params.random_cov.dim).sum().item()
+        entropy = 0.5 * (torch.logdet(covs) + self.params.random_prec.dim).sum().item()
 
         loglik = logpdf.item() + entropy
         aic = -2 * loglik + 2 * self.params.numel()

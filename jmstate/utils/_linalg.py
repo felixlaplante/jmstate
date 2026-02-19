@@ -30,23 +30,23 @@ def _flat_from_tril(L: torch.Tensor) -> torch.Tensor:
 
 
 def log_cholesky_from_flat(
-    flat: torch.Tensor, dim: int, covariance_type: str
+    flat: torch.Tensor, dim: int, precision_type: str
 ) -> torch.Tensor:
-    """Computes log cholesky from flat tensor according to choice of covariance type.
+    """Computes log cholesky from flat tensor according to choice of precision type.
 
     Args:
         flat (torch.Tensor): The flat tensor parameter.
         dim (int): The dimension of the matrix.
-        covariance_type (str): The covariance type, `'full'`, `'diag'`, or
+        precision_type (str): The precision type, `'full'`, `'diag'`, or
             `'spherical'`.
 
     Raises:
-        ValueError: If the covariance type is not valid.
+        ValueError: If the precision type is not valid.
 
     Returns:
         torch.Tensor: The log cholesky representation.
     """
-    match covariance_type:
+    match precision_type:
         case "full":
             return _tril_from_flat(flat, dim)
         case "diag":
@@ -55,26 +55,26 @@ def log_cholesky_from_flat(
             return flat * torch.eye(dim)
         case _:
             raise ValueError(
-                "Covariance type must be be either 'full', 'diag' or 'spherical', got "
-                f"{covariance_type}"
+                "Precision type must be be either 'full', 'diag' or 'spherical', got "
+                f"{precision_type}"
             )
 
 
-def flat_from_log_cholesky(L: torch.Tensor, covariance_type: str) -> torch.Tensor:
-    """Computes flat tensor from log cholesky according to choice of covariance type.
+def flat_from_log_cholesky(L: torch.Tensor, precision_type: str) -> torch.Tensor:
+    """Computes flat tensor from log cholesky according to choice of precision type.
 
     Args:
         L (torch.Tensor): The square lower triangular matrix parameter.
-        covariance_type (str): The covariance type, `'full'`, `'diag'`, or
+        precision_type (str): The precision type, `'full'`, `'diag'`, or
             `'spherical'`.
 
     Raises:
-        ValueError: If the covariance type is not valid.
+        ValueError: If the precision type is not valid.
 
     Returns:
         torch.Tensor: The flat representation.
     """
-    match covariance_type:
+    match precision_type:
         case "full":
             return _flat_from_tril(L)
         case "diag":
@@ -83,6 +83,6 @@ def flat_from_log_cholesky(L: torch.Tensor, covariance_type: str) -> torch.Tenso
             return L[0, 0].reshape(1)
         case _:
             raise ValueError(
-                "Covariance type must be be either 'full', 'diag' or 'spherical', got "
-                f"{covariance_type}"
+                "Precision type must be be either 'full', 'diag' or 'spherical', got "
+                f"{precision_type}"
             )

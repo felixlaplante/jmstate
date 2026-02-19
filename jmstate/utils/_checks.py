@@ -35,24 +35,24 @@ def check_trajectories(trajectories: list[Trajectory], c: torch.Tensor | None):
         )
 
 
-def check_matrix_dim(flat: torch.Tensor, dim: int, covariance_type: str):
-    """Checks dimensions for matrix according to covariance type.
+def check_matrix_dim(flat: torch.Tensor, dim: int, precision_type: str):
+    """Checks dimensions for matrix according to precision type.
 
     Args:
         flat (torch.Tensor): The flat tensor.
         dim (int): The dimension of the matrix.
-        covariance_type (str): The covariance type.
+        precision_type (str): The precision type.
 
     Raises:
-        ValueError: If the number of elements is incompatible with covariance type
+        ValueError: If the number of elements is incompatible with precision type
             `'full'`.
-        ValueError: If the number of elements is incompatible with covariance type
+        ValueError: If the number of elements is incompatible with precision type
             `'diag'`.
-        ValueError: If the number of elements is not one and the covariance type is
+        ValueError: If the number of elements is not one and the precision type is
             `'spherical'`.
-        ValueError: If the covariance type is not valid.
+        ValueError: If the precision type is not valid.
     """
-    match covariance_type:
+    match precision_type:
         case "full":
             if flat.numel() != (dim * (dim + 1)) // 2:
                 raise ValueError(
@@ -73,6 +73,6 @@ def check_matrix_dim(flat: torch.Tensor, dim: int, covariance_type: str):
                 )
         case _:
             raise ValueError(
-                f"Covariance type must be be either 'full', 'diag' or 'spherical', got "
-                f"{covariance_type}"
+                f"Precision type must be be either 'full', 'diag' or 'spherical', got "
+                f"{precision_type}"
             )

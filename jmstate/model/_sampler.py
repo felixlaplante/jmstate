@@ -55,10 +55,9 @@ class MCMCMixin:
         Returns:
             MetropolisHastingsSampler: The initialized MCMC sampler.
         """
-        n, q = len(data), self.params.random_cov.dim
         return MetropolisHastingsSampler(
             lambda b: self._logpdfs_indiv_params_fn(data, b),
-            torch.zeros(self.n_chains, n, q),
+            torch.zeros(self.n_chains, len(data), self.params.random_prec.dim),
             self.n_chains,
             self.init_step_size,
             self.adapt_rate,
@@ -109,7 +108,7 @@ class MetropolisHastingsSampler:
         self.target_accept_rate = target_accept_rate
 
         # Initialize b
-        self.b = init_b.clone()
+        self.b = init_b
 
         # Compute initial log logpdfs
         self.logpdfs, self.indiv_params = self.logpdfs_indiv_params_fn(self.b)

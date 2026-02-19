@@ -11,12 +11,12 @@ Types
    :recursive:
 
    BucketData
-   CovParameters
    IndividualParametersFn
    LinkFn
    LogBaseHazardFn
    ModelData
    ModelDesign
    ModelParameters
+   PrecisionParameters
    RegressionFn
    SampleData

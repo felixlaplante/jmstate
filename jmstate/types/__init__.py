@@ -8,17 +8,17 @@ from ._defs import (
     LogBaseHazardFn,
     RegressionFn,
 )
-from ._parameters import CovParameters, ModelParameters
+from ._parameters import ModelParameters, PrecisionParameters
 
 __all__ = [
     "BucketData",
-    "CovParameters",
     "IndividualParametersFn",
     "LinkFn",
     "LogBaseHazardFn",
     "ModelData",
     "ModelDesign",
     "ModelParameters",
+    "PrecisionParameters",
     "RegressionFn",
     "SampleData",
 ]
