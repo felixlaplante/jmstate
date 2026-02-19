@@ -153,11 +153,11 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         *,
         n_quad: int = 32,
         n_bisect: int = 32,
-        n_chains: int = 10,
+        n_chains: int = 5,
         init_step_size: float = 0.1,
         adapt_rate: float = 0.01,
         target_accept_rate: float = 0.234,
-        n_warmup: int = 250,
+        n_warmup: int = 100,
         n_subsample: int = 10,
         max_iter_fit: int = 1000,
         tol: float = 0.1,
@@ -182,7 +182,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
                 hazard integration. Defaults to 32.
             n_bisect (int, optional): Number of bisection steps for transition time
                 sampling. Defaults to 32.
-            n_chains (int, optional): Number of parallel MCMC chains. Defaults to 10.
+            n_chains (int, optional): Number of parallel MCMC chains. Defaults to 5.
             init_step_size (float, optional): Initial step size for the MCMC sampler.
                 Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the MCMC step size.
@@ -190,7 +190,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             target_accept_rate (float, optional): Target mean acceptance probability for
                 MCMC. Defaults to 0.234.
             n_warmup (int, optional): Number of warmup iterations per MCMC chain.
-                Defaults to 250.
+                Defaults to 100.
             n_subsample (int, optional): Number of subsamples between MCMC updates.
                 Defaults to 10.
             max_iter_fit (int, optional): Maximum number of iterations for stochastic
