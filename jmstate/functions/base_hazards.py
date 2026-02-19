@@ -112,8 +112,8 @@ class Weibull(LogBaseHazardFn):
     Optimization of the parameters can be disabled by checking the `forzen` flag.
 
     Attributes:
-        log_k (nn.Parameter | torch.Tensor): The log of the shape parameter.
         log_lmda (nn.Parameter | torch.Tensor): The log of the scale parameter.
+        log_k (nn.Parameter | torch.Tensor): The log of the shape parameter.
         clock_type (str): The type of clock to use.
         frozen (bool): Whether the parameters are frozen.
     """
