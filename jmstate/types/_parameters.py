@@ -16,7 +16,7 @@ from ..utils._checks import check_matrix_dim
 from ..utils._linalg import flat_from_log_cholesky, log_cholesky_from_flat
 
 
-class CovParameters(BaseEstimator, nn.Module):
+class PrecisionParameters(BaseEstimator, nn.Module):
     r"""`nn.Module` encapsulating covariance matrix parameters.
 
     This class provides three types of covariance matrix parametrization: full,
@@ -50,9 +50,34 @@ class CovParameters(BaseEstimator, nn.Module):
             or `'spherical'`.
 
     Examples:
-        >>> random_cov = CovParameters.from_cov(torch.eye(3), "diag")
-        >>> noise_cov = CovParameters.from_cov(torch.eye(2), "spherical")
+        >>> random_prec = PrecisionParameters.from_covariance(torch.eye(3), "diag")
+        >>> noise_prec = PrecisionParameters.from_covariance(torch.eye(2), "spherical")
     """
+
+    @classmethod
+    @validate_params(
+        {
+            "P": [torch.Tensor],
+            "covariance_type": [StrOptions({"full", "diag", "spherical"})],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def from_precision(cls, P: torch.Tensor, covariance_type: str = "full") -> Self:
+        r"""Gets instance from precision matrix according to choice of covariance type.
+
+        Args:
+            P (torch.Tensor): The square precision matrix.
+            covariance_type (str, optional): The method, `'full'`, `'diag'`, or
+                `'spherical'`. Defaults to `'full'`.
+
+        Returns:
+            Self: The usable representation.
+        """
+        L = cast(torch.Tensor, torch.linalg.cholesky(P))  # type: ignore
+        L.diagonal().log_()
+        return cls(
+            flat_from_log_cholesky(L, covariance_type), L.size(0), covariance_type
+        )
 
     @classmethod
     @validate_params(
@@ -62,7 +87,7 @@ class CovParameters(BaseEstimator, nn.Module):
         },
         prefer_skip_nested_validation=True,
     )
-    def from_cov(cls, V: torch.Tensor, covariance_type: str = "full") -> Self:
+    def from_covariance(cls, V: torch.Tensor, covariance_type: str = "full") -> Self:
         r"""Gets instance from covariance matrix according to choice of covariance type.
 
         Args:
@@ -73,11 +98,7 @@ class CovParameters(BaseEstimator, nn.Module):
         Returns:
             Self: The usable representation.
         """
-        L = cast(torch.Tensor, torch.linalg.cholesky(V.inverse()))  # type: ignore
-        L.diagonal().log_()
-        return cls(
-            flat_from_log_cholesky(L, covariance_type), L.size(0), covariance_type
-        )
+        return cls.from_precision(V.inverse(), covariance_type)
 
     @validate_params(
         {
@@ -108,7 +129,18 @@ class CovParameters(BaseEstimator, nn.Module):
         check_matrix_dim(self.flat, self.dim, self.covariance_type)
 
     @property
-    def cov(self) -> torch.Tensor:
+    def precision(self) -> torch.Tensor:
+        """Gets the precision matrix.
+
+        Returns:
+            torch.Tensor: The precision matrix.
+        """
+        L = log_cholesky_from_flat(self.flat, self.dim, self.covariance_type)
+        L.diagonal().exp_()
+        return L @ L.T
+
+    @property
+    def covariance(self) -> torch.Tensor:
         """Gets the covariance matrix.
 
         Returns:
@@ -145,9 +177,10 @@ class ModelParameters(BaseEstimator, nn.Module):
     Population-level parameters:
         - `pop_params` are population-level parameters.
 
-    Random effects and noise covariance:
-        - `random_cov` and `noise_cov` are `CovParameters` objects representing
-          the random effects and residual noise covariances respectively.
+    Random effects and noise precision matrices:
+        - `random_prec` and `noise_prec` are `PrecisionParameters` objects
+          representing the random effects and residual noise precision matrices
+          respectively.
 
     Base hazard functions:
         - `base_hazards` is a dictionary of `LogBaseHazardFn` modules keyed by
@@ -161,22 +194,22 @@ class ModelParameters(BaseEstimator, nn.Module):
 
     Attributes:
         pop_params (torch.Tensor): Population-level parameters.
-        random_cov (CovParameters): Covariance parameters for random effects.
-        noise_cov (CovParameters): Covariance parameters for residual noise.
+        random_prec (PrecisionParameters): Precision parameters for random effects.
+        noise_prec (PrecisionParameters): Precision parameters for residual noise.
         base_hazards (nn.ModuleDict): Log base hazard functions per transition.
         link_coefs (nn.ParameterDict): Linear parameters for the link functions.
         x_coefs (nn.ParameterDict): Covariate parameters for each transition.
 
     Examples:
         >>> pop_params = torch.zeros(3)
-        >>> random_cov = CovParameters.from_cov(torch.eye(3), "diag")
-        >>> noise_cov = CovParameters.from_cov(torch.eye(2), "spherical")
+        >>> random_prec = PrecisionParameters.from_covariance(torch.eye(3), "diag")
+        >>> noise_prec = PrecisionParameters.from_covariance(torch.eye(2), "spherical")
         >>> link_coefs = {(0, 1): torch.zeros(3), (1, 0): torch.zeros(3)}
         >>> x_coefs = {(0, 1): torch.zeros(2), (1, 0): torch.zeros(2)}
         >>> params = ModelParameters(
         ...     pop_params,
-        ...     random_cov,
-        ...     noise_cov,
+        ...     random_prec,
+        ...     noise_prec,
         ...     link_coefs,
         ...     x_coefs,
         ... )
@@ -185,16 +218,16 @@ class ModelParameters(BaseEstimator, nn.Module):
         >>> shared_link_coefs = {(0, 1): shared_coef, (1, 0): shared_coef}
         >>> shared_params = ModelParameters(
         ...     pop_params,
-        ...     random_cov,
-        ...     noise_cov,
+        ...     random_prec,
+        ...     noise_prec,
         ...     shared_link_coefs,
         ...     x_coefs,
         ... )
     """
 
     pop_params: torch.Tensor
-    random_cov: CovParameters
-    noise_cov: CovParameters
+    random_prec: PrecisionParameters
+    noise_prec: PrecisionParameters
     base_hazards: nn.ModuleDict
     link_coefs: nn.ParameterDict
     x_coefs: nn.ParameterDict
@@ -202,8 +235,8 @@ class ModelParameters(BaseEstimator, nn.Module):
     @validate_params(
         {
             "pop_params": [torch.Tensor],
-            "random_cov": [CovParameters],
-            "noise_cov": [CovParameters],
+            "random_prec": [PrecisionParameters],
+            "noise_prec": [PrecisionParameters],
             "base_hazards": [dict],
             "link_coefs": [dict],
             "x_coefs": [dict],
@@ -213,8 +246,8 @@ class ModelParameters(BaseEstimator, nn.Module):
     def __init__(
         self,
         pop_params: torch.Tensor,
-        random_cov: CovParameters,
-        noise_cov: CovParameters,
+        random_prec: PrecisionParameters,
+        noise_prec: PrecisionParameters,
         base_hazards: dict[tuple[Any, Any], LogBaseHazardFn],
         link_coefs: dict[tuple[Any, Any], torch.Tensor],
         x_coefs: dict[tuple[Any, Any], torch.Tensor],
@@ -223,8 +256,8 @@ class ModelParameters(BaseEstimator, nn.Module):
 
         Args:
             pop_params (torch.Tensor): The population-level parameters.
-            random_cov (CovParameters): Covariance parameters for random effects.
-            noise_cov (CovParameters): Covariance parameters for residual noise.
+            random_prec (PrecisionParameters): Precision parameters for random effects.
+            noise_prec (PrecisionParameters): Precision parameters for residual noise.
             base_hazards (dict[tuple[Any, Any], LogBaseHazardFn]): Log base hazard
                 functions.
             link_coefs (dict[tuple[Any, Any], torch.Tensor]): Linear parameters for the
@@ -238,8 +271,8 @@ class ModelParameters(BaseEstimator, nn.Module):
         super().__init__()  # type: ignore
 
         self.pop_params = nn.Parameter(pop_params)
-        self.random_cov = random_cov
-        self.noise_cov = noise_cov
+        self.random_prec = random_prec
+        self.noise_prec = noise_prec
         self.base_hazards = nn.ModuleDict({str(k): v for k, v in base_hazards.items()})
         self.link_coefs = nn.ParameterDict({str(k): v for k, v in link_coefs.items()})
         self.x_coefs = nn.ParameterDict({str(k): v for k, v in x_coefs.items()})

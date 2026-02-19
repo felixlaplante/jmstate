@@ -21,7 +21,7 @@ class LogBaseHazardFn(ABC, nn.Module):
     parameters to be optimized during model fitting. For default base hazards, a
     `frozen` attribute can be set to prevent optimization of the module parameters.
 
-    The function expects:
+    Tensor input conventions:
 
     - `t0`: a column vector of previous transition times of shape :math:`(n, 1)`.
     - `t1`: a matrix of future time points at which the log base hazard is evaluated,
@@ -42,14 +42,18 @@ class IndividualParametersFn(Protocol):
     This function maps population-level parameters, covariates, and random effects
     to individual-specific parameters used in a multistate model.
 
-    Given inputs:
+    Tensor input conventions:
 
     - `pop_params`: population-level parameters.
     - `x`: covariates matrix of shape :math:`(n, p)`.
     - `b`: random effects of shape either :math:`(n, q)` (2D) or :math:`(n, m, q)` (3D).
 
-    The function must return individual parameters `indiv_params` of shape 2D or 3D
-    consistent with the input dimensions.
+    Tensor output conventions:
+
+    - Last dimension corresponds to the number of parameters :math:`l`.
+    - Second-last dimension corresponds to the number of individuals :math:`n`.
+    - Optional third-last dimension may be used for parallelization across MCMC
+      chains (= batched processing).
 
     Args:
         pop_params (torch.Tensor): Population-level parameters.
@@ -57,8 +61,9 @@ class IndividualParametersFn(Protocol):
         b (torch.Tensor): Random effects tensor.
 
     Returns:
-        torch.Tensor: Individual parameters tensor of appropriate shape for each
-        individual.
+        torch.Tensor: Individual parameters tensor of shape consistent with
+            :math:`(n, l)` or :math:`(n_chains, n, l)` for parallelized
+            computations.
 
     Examples:
         >>> indiv_params_fn = lambda pop, x, b: pop + b
@@ -77,24 +82,35 @@ class RegressionFn(Protocol):
     parameters of order 2 or 3, returning either 3D or 4D tensors depending on the
     model design.
 
+    Tensor input conventions:
+
+    - `t` represents the measurement times. It can be either:
+        - a 2D tensor of shape :math:`(n, m)` when each individual has
+          individual-specific time points,
+        - a 1D tensor of shape :math:`(m,)` when all individuals share the same
+          measurement times.
+    - `indiv_params` represents the individual-specific parameters. It is expected
+      to have shape :math:`(n, l)` or :math:`(n_chains, n, l)` where :math:`n`
+      is the number of individuals and :math:`l` is the number of parameters.
+
     Tensor output conventions:
 
     - Last dimension corresponds to the response variable dimension :math:`d`.
     - Second-last dimension corresponds to repeated measurements :math:`m`.
     - Third-last dimension corresponds to individual index :math:`n`.
     - Optional fourth-last dimension may be used for parallelization across MCMC
-      chains or batch processing.
+      chains (= batched processing).
 
     This protocol is conceptually identical to `LinkFn`.
 
     Args:
         t (torch.Tensor): Evaluation times of shape :math:`(n, m)` or :math:`(m,)`.
-        indiv_params (torch.Tensor): Individual parameters of shape 2D :math:`(n, q)`
-            or 3D :math:`(n, m, q)`.
+        indiv_params (torch.Tensor): Individual parameters of shape 2D :math:`(n, l)`
+            or 3D :math:`(n_chains, n, l)`.
 
     Returns:
         torch.Tensor: Predicted response values of shape consistent with `(n, m, d)` or
-            `(batch, n, m, d)` for parallelized computations.
+            `(n_chains, n, m, d)` for parallelized computations.
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, indiv_params: torch.Tensor):
@@ -113,24 +129,35 @@ class LinkFn(Protocol):
     transformed outputs, such as transition-specific parameters. Requirements are
     identical to those of `RegressionFn`.
 
+    Tensor input conventions:
+
+    - `t` represents the measurement times. It can be either:
+        - a 2D tensor of shape :math:`(n, m)` when each individual has
+          individual-specific time points,
+        - a 1D tensor of shape :math:`(m,)` when all individuals share the same
+          measurement times.
+    - `indiv_params` represents the individual-specific parameters. It is expected
+      to have shape :math:`(n, l)` or :math:`(n_chains, n, l)` where :math:`n`
+      is the number of individuals and :math:`l` is the number of parameters.
+
     Tensor output conventions:
 
     - Last dimension corresponds to the response variable dimension :math:`d`.
     - Second-last dimension corresponds to repeated measurements :math:`m`.
     - Third-last dimension corresponds to individual index :math:`n`.
     - Optional fourth-last dimension may be used for parallelization across MCMC
-      chains or batch computations.
+      chains (= batched processing).
 
     This protocol is conceptually identical to `RegressionFn`.
 
     Args:
         t (torch.Tensor): Evaluation times of shape :math:`(n, m)` or :math:`(m,)`.
-        indiv_params (torch.Tensor): Individual parameters of shape 2D :math:`(n, q)`
-            or 3D :math:`(n, m, q)`.
+        indiv_params (torch.Tensor): Individual parameters of shape 2D :math:`(n, l)`
+            or 3D :math:`(n_chains, n, l)`.
 
     Returns:
         torch.Tensor: Transformed outputs consistent with shapes `(n, m, d)` or
-            `(batch, n, m, d)` for parallelized computations.
+            `(n_chains, n, m, d)` for parallelized computations.
 
     Examples:
         >>> def sigmoid(t: torch.Tensor, indiv_params: torch.Tensor):

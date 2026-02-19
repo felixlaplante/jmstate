@@ -59,8 +59,8 @@ class PredictMixin(HazardMixin, MCMCMixin):
         check_is_fitted(self, "fim_")
 
         dist = torch.distributions.MultivariateNormal(
-            parameters_to_vector(self.params.parameters()).detach(),
-            cast(torch.Tensor, self.fim_).inverse(),
+            loc=parameters_to_vector(self.params.parameters()).detach(),
+            precision_matrix=cast(torch.Tensor, self.fim_),
         )
         return dist.sample((sample_size,))
 
