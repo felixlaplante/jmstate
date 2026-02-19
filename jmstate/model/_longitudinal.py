@@ -33,10 +33,10 @@ class LongitudinalMixin:
         predicted = self.design.regression_fn(data.valid_t, indiv_params)
         diff = data.valid_y.addcmul(predicted, data.valid_mask, value=-1.0)
 
-        noise_prec_cholesky, noise_nlog_eigvals = (
-            self.params.noise_cov._prec_cholesky_and_log_eigvals  # type: ignore
+        noise_prec_cholesky, noise_prec_log_eigvals = (
+            self.params.noise_prec._prec_cholesky_and_log_eigvals  # type: ignore
         )
         noise_quad_form = (diff @ noise_prec_cholesky).pow(2).sum(dim=(-2, -1))
-        noise_norm_factor = data.n_valid @ (noise_nlog_eigvals - LOG_TWO_PI)
+        noise_norm_factor = data.n_valid @ (noise_prec_log_eigvals - LOG_TWO_PI)
 
         return 0.5 * (noise_norm_factor - noise_quad_form)
