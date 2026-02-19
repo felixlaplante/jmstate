@@ -27,22 +27,13 @@ class LogBaseHazardFn(ABC, nn.Module):
     - `t1`: a matrix of future time points at which the log base hazard is evaluated,
         of shape :math:`(n, m)` matching the number of rows in `t0`.
 
-    Attributes:
-        frozen (bool): If True, the parameters of the log base hazard are not updated
-            during optimization.
-
-    Methods:
-        forward(t0, t1): Computes the log base hazard between `t0` and `t1`.
-
     Notes:
         The outputs are in log scale and can be directly used in likelihood
         computations for multistate models.
     """
 
     @abstractmethod
-    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
-        """:no-index:"""  # noqa: D415
-        ...
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor: ...
 
 
 class IndividualParametersFn(Protocol):
