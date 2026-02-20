@@ -6,7 +6,7 @@ import torch
 from sklearn.utils._param_validation import validate_params  # type: ignore
 from torch import nn
 from torch.func import functional_call, jacfwd  # type: ignore
-from torch.nn.utils import parameters_to_vector, vector_to_parameters
+from torch.nn.utils import parameters_to_vector
 from tqdm import trange
 
 from ..types._data import ModelData, ModelDataUnchecked, ModelDesign
