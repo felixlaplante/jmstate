@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from math import ceil
 from typing import Any, Self, cast
 from warnings import warn
@@ -7,7 +6,7 @@ import torch
 from sklearn.utils._param_validation import validate_params  # type: ignore
 from torch import nn
 from torch.func import functional_call, jacfwd  # type: ignore
-from torch.nn.utils import parameters_to_vector
+from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from tqdm import trange
 
 from ..types._data import ModelData, ModelDataUnchecked, ModelDesign
@@ -84,30 +83,6 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         logpdfs, _ = self._logpdfs_indiv_params_fn(data, b)
         return logpdfs if logpdfs.ndim == 1 else logpdfs.mean(dim=0)
 
-    def _step(
-        self,
-        sampler: MetropolisHastingsSampler,
-        data: ModelData,
-    ):
-        """Performs a step of the optimizer.
-
-        Args:
-            sampler (MetropolisHastingsSampler): The sampler.
-            data (ModelData): The data.
-        """
-
-        def closure():
-            self.optimizer.zero_grad()  # type: ignore
-            logpdfs, _ = self._logpdfs_indiv_params_fn(data, sampler.b)
-            loss = -logpdfs.mean()
-            loss.backward()  # type: ignore
-            return loss.item()
-
-        cast(torch.optim.Optimizer, self.optimizer).step(closure)
-
-        # Restore logpdfs and indiv_params, because parameters changed
-        sampler.reset()
-
     def _is_converged(self) -> bool:
         """Checks if the optimizer has converged.
 
@@ -134,19 +109,70 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Y = torch.stack(self.params_history_[-self.window_size :])
         return r2(Y).max().item() < self.tol
 
-    def _init_jac(
-        self, data: ModelData
-    ) -> tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]:
-        """Initializes the Jacobian matrix and function.
+    def _polyak_average(self):
+        """Performs Polyak averaging."""
+        vec = (
+            cast(torch.Tensor, sum(self.params_history_[-self.window_size :]))
+            / self.window_size
+        )
+        vector_to_parameters(vec, self.params.parameters())
+
+    def _fit(self, data: ModelData, sampler: MetropolisHastingsSampler):
+        """Fits the model using the optimizer and the sampler.
 
         Args:
-            data (ModelData): The complete model data.
+            data (ModelData): The data.
+            sampler (MetropolisHastingsSampler): The sampler.
 
-        Returns:
-            tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]: The Jacobian
-                matrix and the Jacobian function.
+        Raises:
+            ValueError: If the optimizer is not initialized.
         """
-        n = len(data)
+        if self.max_iter_fit <= 0:
+            return
+
+        if self.optimizer is None:
+            raise ValueError("Optimizer is not initialized.")
+
+        def closure():
+            self.optimizer.zero_grad()  # type: ignore
+            logpdfs, _ = self._logpdfs_indiv_params_fn(data, sampler.b)
+            loss = -logpdfs.mean()
+            loss.backward()  # type: ignore
+            return loss.item()
+
+        for i in trange(  # noqa: B007
+            self.max_iter_fit,
+            desc="Fitting joint model",
+            disable=not bool(self.verbose),
+        ):
+            self.optimizer.step(closure)
+            self.params_history_.append(
+                parameters_to_vector(self.params.parameters()).detach()
+            )
+
+            # Restore logpdfs and indiv_params, because parameters changed
+            sampler.reset().run(self.n_subsample)
+
+            if self._is_converged():
+                self._polyak_average()
+                break
+
+        if i == self.max_iter_fit - 1:  # type: ignore
+            warn(
+                "Model may not have converged in the specified number of iterations.",
+                stacklevel=2,
+            )
+
+    def _compute_fim_and_criteria(
+        self, data: ModelData, sampler: MetropolisHastingsSampler
+    ):
+        """Computes the Fisher Information Matrix and model selection criteria.
+
+        Args:
+            data (ModelData): The data.
+            sampler (MetropolisHastingsSampler): The sampler.
+        """
+        n, q = len(data), sampler.b.size(-1)
 
         @jacfwd  # type: ignore
         def _dict_jac_fn(
@@ -158,101 +184,45 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             out = _dict_jac_fn(dict(self.named_parameters()), b)  # type: ignore
             return torch.cat([p.reshape(n, -1) for p in out.values()], dim=-1)  # type: ignore
 
-        return torch.zeros(n, self.params.numel()), cast(
-            Callable[[torch.Tensor], torch.Tensor], _jac_fn
-        )
-
-    def _update_jac(
-        self,
-        mjac: torch.Tensor,
-        jac_fn: Callable[[torch.Tensor], torch.Tensor],
-        sampler: MetropolisHastingsSampler,
-    ):
-        """Updates the Jacobian matrix.
-
-        Args:
-            mjac (torch.Tensor): The mean Jacobian matrix.
-            jac_fn (Callable[[torch.Tensor], torch.Tensor]): The Jacobian function.
-            sampler (MetropolisHasstingsSampler): The sampler.
-        """
-        mjac += jac_fn(sampler.b).detach()  # type: ignore
-
-    def _compute_fim(self, mjac: torch.Tensor) -> torch.Tensor:
-        """Computes the Fisher Information Matrix.
-
-        Args:
-            mjac (torch.Tensor): The mean Jacobian matrix.
-
-        Returns:
-            torch.Tensor: The Fisher Information Matrix.
-        """
-        mjac /= ceil(self.n_samples_summary / self.n_chains)
-        return mjac.T @ mjac
-
-    def _init_criteria(self, data: ModelData):
-        """Initializes the model selection criteria.
-
-        Args:
-            data (ModelData): The complete model data.
-
-        Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]: The criteria.
-        """
-        n, q = len(data), self.params.random_prec.dim
-        logpdf = torch.tensor(0.0)
+        # Initialize accumulators
+        mjac = torch.zeros(n, self.params.numel())
+        logpdf = 0.0
         mb = torch.zeros(n, q)
         mb2 = torch.zeros(n, q, q)
-        return logpdf, mb, mb2
 
-    def _update_criteria(
-        self,
-        logpdf: torch.Tensor,
-        mb: torch.Tensor,
-        mb2: torch.Tensor,
-        sampler: MetropolisHastingsSampler,
-    ):
-        """Updates the model selection criteria.
+        n_iter = ceil(self.n_samples_summary / self.n_chains)
+        for _ in trange(
+            n_iter,
+            desc="Computing FIM and Model Selection Criteria",
+            disable=not bool(self.verbose),
+        ):
+            # Mean jacobian across chains
+            mjac += _jac_fn(sampler.b).detach()  # type: ignore
 
-        Args:
-            logpdf (torch.Tensor): The logpdf.
-            mb (torch.Tensor): The mean of b.
-            mb2 (torch.Tensor): The mean of squared b.
-            sampler (MetropolisHastingsSampler): The sampler.
-        """
-        logpdf += sampler.logpdfs.sum()
-        mb += sampler.b.sum(dim=0)
-        mb2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b)
+            # Mean logpdf across chains
+            logpdf += sampler.logpdfs.sum().item() / self.n_chains
 
-    def _compute_criteria(
-        self,
-        logpdf: torch.Tensor,
-        mb: torch.Tensor,
-        mb2: torch.Tensor,
-        fim: torch.Tensor,
-    ) -> tuple[float, float, float]:
-        """Computes the model selection criteria.
+            # Mean and outer product of b across chains
+            mb += sampler.b.mean(dim=0)
+            mb2 += torch.einsum("ijk,ijl->jkl", sampler.b, sampler.b) / self.n_chains
 
-        Args:
-            logpdf (torch.Tensor): The logpdf.
-            mb (torch.Tensor): The mean of b.
-            mb2 (torch.Tensor): The mean of squared b.
-            fim (torch.Tensor): The Fisher Information Matrix.
+            sampler.run(self.n_subsample)
 
-        Returns:
-            tuple[float, float, float]: The criteria.
-        """
-        den = self.n_chains * ceil(self.n_samples_summary / self.n_chains)
-        logpdf /= den
-        mb /= den
-        mb2 /= den
+        mjac /= n_iter
+        logpdf /= n_iter
+        mb /= n_iter
+        mb2 /= n_iter
 
+        # Compute FIM as variance of the score
+        self.fim_ = mjac.T @ mjac
+
+        # Compute entropy Laplace approximation
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
         entropy = 0.5 * (torch.logdet(covs) + self.params.random_prec.dim).sum().item()
 
-        loglik = logpdf.item() + entropy
-        aic = -2 * loglik + 2 * self.params.numel()
-        bic = -2 * loglik + torch.logdet(fim).item()
-        return loglik, aic, bic
+        self.loglik_ = logpdf + entropy
+        self.aic_ = -2 * self.loglik_ + 2 * self.params.numel()
+        self.bic_ = -2 * self.loglik_ + torch.logdet(self.fim_).item()
 
     @validate_params(
         {
@@ -305,54 +275,14 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Returns:
             Self: The fitted model instance with estimated parameters.
         """
-        if self.optimizer is None:
-            raise ValueError("Optimizer is not initialized.")
-
         data = ModelDataUnchecked(
             data.x, data.t, data.y, data.trajectories, data.c
         ).prepare(self)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data)
-        sampler.run(self.n_warmup)
+        sampler = self._init_mcmc(data).run(self.n_warmup)
 
-        # Main fitting loop
-        for _ in trange(
-            self.max_iter_fit, desc="Fitting joint model", disable=not self.verbose
-        ):
-            self._step(sampler, data)
-            self.params_history_.append(
-                parameters_to_vector(self.params.parameters()).detach()
-            )
-            if self._is_converged():
-                break
-            sampler.run(self.n_subsample)
-
-        if not self._is_converged():
-            warn(
-                "Model may not have converged in the specified number of iterations.",
-                stacklevel=2,
-            )
-
-        # Initialize Jacobian matrix and criteria variables
-        mjac, jac_fn = self._init_jac(data)
-        logpdf, mb, mb2 = self._init_criteria(data)
-
-        # FIM and Criteria loop
-        n_iter = ceil(self.n_samples_summary / self.n_chains)
-        for _ in trange(
-            n_iter,
-            desc="Computing FIM and Model Selection Criteria",
-            disable=not self.verbose,
-        ):
-            self._update_jac(mjac, jac_fn, sampler)
-            self._update_criteria(logpdf, mb, mb2, sampler)
-            for _ in range(self.n_subsample):
-                sampler.step()
-
-        self.fim_ = self._compute_fim(mjac)
-        self.loglik_, self.aic_, self.bic_ = self._compute_criteria(
-            logpdf, mb, mb2, self.fim_
-        )
+        self._fit(data, sampler)
+        self._compute_fim_and_criteria(data, sampler)
 
         return self

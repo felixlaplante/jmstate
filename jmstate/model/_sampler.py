@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, Self, cast
 
 import torch
 
@@ -114,12 +114,21 @@ class MetropolisHastingsSampler:
         self.step_sizes = torch.full((1, self.b.size(-2)), init_step_size)
         self._noise = torch.empty_like(self.b)
 
-    def reset():
-        """Resets the log pdfs and individual parameters."""
-        self.logpdfs, self.indiv_params = self.logpdfs_indiv_params_fn(self.b)
+    def reset(self) -> Self:
+        """Resets the log pdfs and individual parameters.
 
-    def step(self):
-        """Performs a single kernel step."""
+        Returns:
+            Self: The sampler instance.
+        """
+        self.logpdfs, self.indiv_params = self.logpdfs_indiv_params_fn(self.b)
+        return self
+
+    def step(self) -> Self:
+        """Performs a single kernel step.
+
+        Returns:
+            Self: The sampler instance.
+        """
         # Generate proposal noise
         self._noise.uniform_(-1, 1)
 
@@ -148,11 +157,17 @@ class MetropolisHastingsSampler:
         adaptation = (mean_accept_mask - self.target_accept_rate) * self.adapt_rate
         self.step_sizes *= torch.exp(adaptation)
 
-    def run(self, n_steps: int):
+        return self
+
+    def run(self, n_steps: int) -> Self:
         """Runs the sampler for a given number of steps.
 
         Args:
             n_steps (int): The number of steps to run the sampler for.
+
+        Returns:
+            Self: The sampler instance.
         """
         for _ in range(n_steps):
             self.step()
+        return self

@@ -60,6 +60,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         - `tol`: Tolerance for the :math:`R^2` convergence criterion.
         - `window_size`: Window size for :math:`R^2` convergence; default 100.
           This criterion is scale-agnostic and provides a local stationarity test.
+          If converged, it is also used for Polyak averaging.
 
     Printing and visualization:
         - `verbose`: Whether to print progress during fitting and prediction.
@@ -83,7 +84,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         n_subsample (int): Number of subsamples for MCMC iterations.
         max_iter_fit (int): Maximum number of iterations for stochastic gradient ascent.
         tol (float): Tolerance for :math:`R^2` convergence criterion.
-        window_size (int): Window size for :math:`R^2` convergence evaluation.
+        window_size (int): Window size for :math:`R^2` convergence evaluation and Polyak
+            averaging.
         n_samples_summary (int): Number of posterior samples for computing Fisher
             Information and selection criteria.
         verbose (bool): Flag to print fitting and prediction progress.
@@ -156,7 +158,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         n_bisect: int = 32,
         n_chains: int = 5,
         init_step_size: float = 0.1,
-        adapt_rate: float = 0.01,
+        adapt_rate: float = 0.1,
         target_accept_rate: float = 0.234,
         n_warmup: int = 100,
         n_subsample: int = 10,
@@ -187,7 +189,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             init_step_size (float, optional): Initial step size for the MCMC sampler.
                 Defaults to 0.1.
             adapt_rate (float, optional): Adaptation rate for the MCMC step size.
-                Defaults to 0.01.
+                Defaults to 0.1.
             target_accept_rate (float, optional): Target mean acceptance probability for
                 MCMC. Defaults to 0.234.
             n_warmup (int, optional): Number of warmup iterations per MCMC chain.
@@ -199,7 +201,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             tol (float, optional): Tolerance for :math:`R^2` convergence criterion.
                 Defaults to 0.1.
             window_size (int, optional): Window size for :math:`R^2` convergence
-                evaluation. Defaults to 100.
+                evaluation. If converged, it is also used for Polyak averaging.
+                Defaults to 100.
             n_samples_summary (int, optional): Number of posterior samples used to
                 compute the Fisher Information Matrix and model selection criteria.
                 Defaults to 500.

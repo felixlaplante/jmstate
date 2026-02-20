@@ -129,17 +129,19 @@ class PredictMixin(HazardMixin, MCMCMixin):
             sampled_params = self._sample_params(n_iter)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data)
-        sampler.run(self.n_warmup)
+        sampler = self._init_mcmc(data).run(self.n_warmup)
 
         for i in trange(
-            n_iter, desc="Predicting longitudinal values", disable=not self.verbose
+            n_iter,
+            desc="Predicting longitudinal values",
+            disable=not bool(self.verbose),
         ):
             if double_monte_carlo:
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
 
             y = self.design.regression_fn(u, sampler.indiv_params)
             y_pred.extend(y[i] for i in range(y.size(0)))
+
             sampler.run(self.n_subsample)
 
         # Restore parameters
@@ -228,13 +230,12 @@ class PredictMixin(HazardMixin, MCMCMixin):
             sampled_params = self._sample_params(n_iter)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data)
-        sampler.run(self.n_warmup)
+        sampler = self._init_mcmc(data).run(self.n_warmup)
 
         for i in trange(
             n_iter,
             desc="Predicting survival log probabilities",
-            disable=not self.verbose,
+            disable=not bool(self.verbose),
         ):
             if double_monte_carlo:
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
@@ -244,6 +245,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
             )
             surv_logps = self.compute_surv_logps(sample_data, u)
             surv_logps_pred.extend(surv_logps[i] for i in range(surv_logps.size(0)))
+
             sampler.run(self.n_subsample)
 
         if double_monte_carlo:
@@ -323,13 +325,12 @@ class PredictMixin(HazardMixin, MCMCMixin):
             sampled_params = self._sample_params(n_iter)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data)
-        sampler.run(self.n_warmup)
+        sampler = self._init_mcmc(data).run(self.n_warmup)
 
         for i in trange(
             n_iter,
             desc="Predicting trajectories",
-            disable=not self.verbose,
+            disable=not bool(self.verbose),
         ):
             if double_monte_carlo:
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
@@ -342,7 +343,8 @@ class PredictMixin(HazardMixin, MCMCMixin):
                 trajectories_pred.append(
                     self.sample_trajectories(sample_data, c, max_length=max_length)
                 )
-            sampler.run(self.n_subsample)  # type: ignore
+
+            sampler.run(self.n_subsample)
 
         if double_monte_carlo:
             vector_to_parameters(init_params, self.params.parameters())  # type: ignore
