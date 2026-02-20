@@ -172,6 +172,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             data (ModelData): The data.
             sampler (MetropolisHastingsSampler): The sampler.
         """
+        if self.n_samples_summary <= 0:
+            return
+
         n, q = len(data), sampler.b.size(-1)
 
         @jacfwd  # type: ignore
