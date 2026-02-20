@@ -46,7 +46,8 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         - `target_accept_rate`: Target mean acceptance probability.
         - `n_warmup`: Number of warmup iterations per chain.
         - `n_subsample`: Number of subsamples between predictions; higher values
-          reduce autocorrelation but increase computation time.
+          reduce autocorrelation but increase computation time. A value of one means
+          no subsampling.
 
     Fitting settings:
         - `optimizer`: Optimizer for stochastic gradient ascent. If `None`, fitting
@@ -136,7 +137,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             "adapt_rate": [Interval(Real, 0, None, closed="left")],
             "target_accept_rate": [Interval(Real, 0, 1, closed="neither")],
             "n_warmup": [Interval(Integral, 0, None, closed="left")],
-            "n_subsample": [Interval(Integral, 0, None, closed="left")],
+            "n_subsample": [Interval(Integral, 1, None, closed="left")],
             "max_iter_fit": [Interval(Integral, 0, None, closed="left")],
             "tol": [Interval(Real, 0, 1, closed="both")],
             "window_size": [Interval(Integral, 2, None, closed="left")],
