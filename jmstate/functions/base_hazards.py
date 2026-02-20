@@ -390,4 +390,3 @@ class LogNormal(LogBaseHazardFn):
             torch.Tensor: The scale.
         """
         return self.log_scale.exp()
-
