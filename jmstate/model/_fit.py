@@ -109,14 +109,6 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Y = torch.stack(self.params_history_[-self.window_size :])
         return r2(Y).max().item() < self.tol
 
-    def _polyak_average(self):
-        """Performs Polyak averaging."""
-        vec = (
-            cast(torch.Tensor, sum(self.params_history_[-self.window_size :]))
-            / self.window_size
-        )
-        vector_to_parameters(vec, self.params.parameters())
-
     def _fit(self, data: ModelData, sampler: MetropolisHastingsSampler):
         """Fits the model using the optimizer and the sampler.
 
@@ -154,7 +146,6 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             sampler.reset().run(self.n_subsample)
 
             if self._is_converged():
-                self._polyak_average()
                 break
 
         if i == self.max_iter_fit - 1:  # type: ignore
