@@ -107,15 +107,16 @@ class MetropolisHastingsSampler:
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
 
-        # Initialize b
+        # Set state, log pdfs, and individual parameters
         self.b = init_b
+        self.reset()
 
-        # Compute initial log logpdfs
-        self.logpdfs, self.indiv_params = self.logpdfs_indiv_params_fn(self.b)
-
-        # Proposal noise initialization
-        self._noise = torch.empty_like(self.b)
         self.step_sizes = torch.full((1, self.b.size(-2)), init_step_size)
+        self._noise = torch.empty_like(self.b)
+
+    def reset():
+        """Resets the log pdfs and individual parameters."""
+        self.logpdfs, self.indiv_params = self.logpdfs_indiv_params_fn(self.b)
 
     def step(self):
         """Performs a single kernel step."""

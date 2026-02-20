@@ -105,10 +105,8 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
         cast(torch.optim.Optimizer, self.optimizer).step(closure)
 
-        # Restore logpdfs and indiv_params
-        sampler.logpdfs, sampler.indiv_params = sampler.logpdfs_indiv_params_fn(
-            sampler.b
-        )
+        # Restore logpdfs and indiv_params, because parameters changed
+        sampler.reset()
 
     def _is_converged(self) -> bool:
         """Checks if the optimizer has converged.
