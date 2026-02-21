@@ -7,7 +7,7 @@ from sklearn.utils._param_validation import Interval, validate_params  # type: i
 from sklearn.utils.validation import check_is_fitted  # type: ignore
 from torch.nn.utils import parameters_to_vector
 
-from ..types._data import ModelData, ModelDesign
+from ..types._data import ModelDesign
 from ..types._parameters import ModelParameters
 from ._fit import FitMixin
 from ._predict import PredictMixin
@@ -51,8 +51,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
     Fitting settings:
         - `optimizer`: Optimizer for stochastic gradient ascent. If `None`, fitting
-          is disabled. Recommended: `torch.optim.Adam` with learning rate 0.1 to 1.0,
-          starting at 0.5.
+          is disabled. Recommended: `torch.optim.Adam` with learning rate 0.1 to 1.0.
         - `max_iter_fit`: Maximum iterations for gradient ascent.
         - `n_samples_summary`: Number of samples used to compute the Fisher
           Information Matrix and model selection criteria; higher values improve
@@ -98,7 +97,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
     Examples:
         >>> from jmstate import MultiStateJointModel
-        >>> optimizer = torch.optim.Adam(params.parameters(), lr=0.5)
+        >>> optimizer = torch.optim.Adam(params.parameters(), lr=0.1)
         >>> model = MultiStateJointModel(design, params, optimizer)
         >>> model.fit(data)
         >>> from jmstate.utils import summary
@@ -235,27 +234,6 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         self.loglik_ = None
         self.aic_ = None
         self.bic_ = None
-
-    def _logpdfs_indiv_params_fn(
-        self, data: ModelData, b: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Gets the log pdfs with individual effects and log likelihoods.
-
-        Args:
-            data (ModelData): Dataset on which likelihood is computed.
-            b (torch.Tensor): The random effects.
-
-        Returns:
-           tuple[torch.Tensor, torch.Tensor]: The log pdfs and individual parameters.
-        """
-        indiv_params = self.design.indiv_params_fn(self.params.pop_params, data.x, b)
-        logpdfs = (
-            super()._longitudinal_logliks(data, indiv_params)
-            + super()._hazard_logliks(data, indiv_params)
-            + super()._prior_logliks(b)
-        )
-
-        return logpdfs, indiv_params
 
     @property
     def stderr(self) -> torch.Tensor:

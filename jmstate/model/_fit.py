@@ -1,12 +1,13 @@
 from math import ceil
-from typing import Any, Self, cast
+from typing import Any, Self
 from warnings import warn
 
 import torch
 from sklearn.utils._param_validation import validate_params  # type: ignore
 from torch import nn
-from torch.func import functional_call, jacfwd  # type: ignore
+from torch.func import jacfwd  # type: ignore
 from torch.nn.utils import parameters_to_vector
+from torch.nn.utils.stateless import _reparametrize_module  # type: ignore
 from tqdm import trange
 
 from ..types._data import ModelData, ModelDataUnchecked, ModelDesign
@@ -64,14 +65,12 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         self.window_size = window_size
         self.n_samples_summary = n_samples_summary
 
-    def forward(self, data: ModelData, b: torch.Tensor) -> torch.Tensor:
-        """Computes the mean log pdfs for the random effects `b`.
-
-        This is used to compute the Fisher Information Matrix, as
-        `torch.func.functional_call` requires the function to implement a `forward`
-        method that takes the parameters as the first argument. This can also be used
-        to compute the log likelihood of the model manually by integrating it over
-        the random effects with Gauss-Hermite quadrature.
+    def _logpdfs_fn(
+        self,
+        data: ModelData,
+        b: torch.Tensor,
+    ) -> torch.Tensor:
+        """Gets the log pdfs.
 
         Args:
             data (ModelData): Dataset on which likelihood is computed.
@@ -80,8 +79,12 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Returns:
            torch.Tensor: The log pdfs.
         """
-        logpdfs, _ = self._logpdfs_indiv_params_fn(data, b)
-        return logpdfs if logpdfs.ndim == 1 else logpdfs.mean(dim=0)
+        indiv_params = self.design.indiv_params_fn(self.params.fixed_params, data.x, b)
+        return (
+            self._longitudinal_logliks(data, indiv_params)
+            + self._hazard_logliks(data, indiv_params)
+            + self._prior_logliks(b)
+        )
 
     def _is_converged(self) -> bool:
         """Checks if the optimizer has converged.
@@ -127,9 +130,9 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
         def closure():
             self.optimizer.zero_grad()  # type: ignore
-            logpdfs, _ = self._logpdfs_indiv_params_fn(data, sampler.b)
-            loss = -logpdfs.mean()
+            loss = -self._logpdfs_fn(data, sampler.b).mean()
             loss.backward()  # type: ignore
+            torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
             return loss.item()
 
         for i in trange(  # noqa: B007
@@ -168,11 +171,13 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
         n, q = len(data), sampler.b.size(-1)
 
+        # Jac forward since output dimension > input dimension
         @jacfwd  # type: ignore
         def _dict_jac_fn(
             named_parameters_dict: dict[str, torch.Tensor], b: torch.Tensor
-        ) -> dict[str, torch.Tensor]:
-            return functional_call(self, named_parameters_dict, args=(data, b))
+        ) -> torch.Tensor:
+            with _reparametrize_module(self, named_parameters_dict):
+                return self._logpdfs_fn(data, b).mean(dim=0)
 
         def _jac_fn(b: torch.Tensor) -> torch.Tensor:
             out = _dict_jac_fn(dict(self.named_parameters()), b)  # type: ignore
@@ -274,7 +279,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         ).prepare(self)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data).run(self.n_warmup)
+        sampler = self._init_sampler(data).run(self.n_warmup)
 
         self._fit(data, sampler)
         self._compute_fim_and_criteria(data, sampler)

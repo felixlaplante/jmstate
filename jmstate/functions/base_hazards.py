@@ -97,7 +97,7 @@ class Weibull(LogBaseHazardFn):
     It is given by the formula:
 
     .. math::
-        \lambda_0(t) = \frac{k}{\lambda} \left( \frac{t}{\lambda} \right)^{k - 1}.
+        \lambda_0(t) = k \lambda^k t^{k - 1}.
 
     This method expects:
         - `t0`: a column vector of previous transition times, shape `(n, 1)`.
@@ -171,7 +171,7 @@ class Weibull(LogBaseHazardFn):
         """
         t = t1 - t0 if self.clock_type == "sojourn" else t1
         log_t = torch.log(t).clamp(min=-50)
-        return self.log_k - self.log_lmda + (self.k - 1) * (log_t - self.log_lmda)
+        return self.log_k + self.k * self.log_lmda + (self.k - 1) * log_t
 
     @property
     def k(self) -> torch.Tensor:

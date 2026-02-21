@@ -129,7 +129,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
             sampled_params = self._sample_params(n_iter)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data).run(self.n_warmup)
+        sampler = self._init_sampler(data).run(self.n_warmup)
 
         for i in trange(
             n_iter,
@@ -139,7 +139,10 @@ class PredictMixin(HazardMixin, MCMCMixin):
             if double_monte_carlo:
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
 
-            y = self.design.regression_fn(u, sampler.indiv_params)
+            indiv_params = self.design.indiv_params_fn(
+                self.params.fixed_params, data.x, sampler.b
+            )
+            y = self.design.regression_fn(u, indiv_params)
             y_pred.extend(y[i] for i in range(y.size(0)))
 
             sampler.run(self.n_subsample)
@@ -230,7 +233,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
             sampled_params = self._sample_params(n_iter)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data).run(self.n_warmup)
+        sampler = self._init_sampler(data).run(self.n_warmup)
 
         for i in trange(
             n_iter,
@@ -240,9 +243,10 @@ class PredictMixin(HazardMixin, MCMCMixin):
             if double_monte_carlo:
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
 
-            sample_data = SampleData(
-                data.x, data.trajectories, sampler.indiv_params, data.c
+            indiv_params = self.design.indiv_params_fn(
+                self.params.fixed_params, data.x, sampler.b
             )
+            sample_data = SampleData(data.x, data.trajectories, indiv_params, data.c)
             surv_logps = self.compute_surv_logps(sample_data, u)
             surv_logps_pred.extend(surv_logps[i] for i in range(surv_logps.size(0)))
 
@@ -325,7 +329,7 @@ class PredictMixin(HazardMixin, MCMCMixin):
             sampled_params = self._sample_params(n_iter)
 
         # Initialize MCMC
-        sampler = self._init_mcmc(data).run(self.n_warmup)
+        sampler = self._init_sampler(data).run(self.n_warmup)
 
         for i in trange(
             n_iter,
@@ -336,9 +340,12 @@ class PredictMixin(HazardMixin, MCMCMixin):
                 vector_to_parameters(sampled_params[i], self.params.parameters())  # type: ignore
 
             # Sample trajectories, not possible to vectorize fully
-            for j in range(sampler.indiv_params.size(0)):
+            indiv_params = self.design.indiv_params_fn(
+                self.params.fixed_params, data.x, sampler.b
+            )
+            for j in range(indiv_params.size(0)):
                 sample_data = SampleDataUnchecked(
-                    data.x, data.trajectories, sampler.indiv_params[j], data.c
+                    data.x, data.trajectories, indiv_params[j], data.c
                 )
                 trajectories_pred.append(
                     self.sample_trajectories(sample_data, c, max_length=max_length)

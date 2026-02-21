@@ -44,7 +44,7 @@ class IndividualParametersFn(Protocol):
 
     Tensor input conventions:
 
-    - `pop_params`: population-level parameters.
+    - `fixed_params`: population-level parameters.
     - `x`: covariates matrix of shape :math:`(n, p)`.
     - `b`: random effects of shape either :math:`(n, q)` (2D) or :math:`(n, m, q)` (3D).
 
@@ -56,7 +56,7 @@ class IndividualParametersFn(Protocol):
       chains (= batched processing).
 
     Args:
-        pop_params (torch.Tensor): Population-level parameters.
+        fixed_params (torch.Tensor): Population-level parameters.
         x (torch.Tensor): Fixed covariates matrix.
         b (torch.Tensor): Random effects tensor.
 
@@ -66,11 +66,11 @@ class IndividualParametersFn(Protocol):
             computations.
 
     Examples:
-        >>> indiv_params_fn = lambda pop, x, b: pop + b
+        >>> indiv_params_fn = lambda fixed, x, b: fixed + b
     """
 
     def __call__(
-        self, pop_params: torch.Tensor, x: torch.Tensor, b: torch.Tensor
+        self, fixed_params: torch.Tensor, x: torch.Tensor, b: torch.Tensor
     ) -> torch.Tensor: ...
 
 
