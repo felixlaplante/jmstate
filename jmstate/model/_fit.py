@@ -132,7 +132,6 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             self.optimizer.zero_grad()  # type: ignore
             loss = -self._logpdfs_fn(data, sampler.b).mean()
             loss.backward()  # type: ignore
-            torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
             return loss.item()
 
         for i in trange(  # noqa: B007
