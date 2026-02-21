@@ -174,11 +174,6 @@ class ModelData(BaseEstimator):
     y: torch.Tensor
     trajectories: list[Trajectory]
     c: torch.Tensor
-    valid_mask: torch.Tensor = field(init=False)
-    n_valid: torch.Tensor = field(init=False)
-    valid_t: torch.Tensor = field(init=False)
-    valid_y: torch.Tensor = field(init=False)
-    buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
 
     def __len__(self) -> int:
         """Gets the number of individuals.
@@ -224,6 +219,21 @@ class ModelData(BaseEstimator):
         if ((~self.y.isnan()).any(dim=-1) & self.t.isnan()).any():
             raise ValueError("NaN time values on non NaN y values")
 
+
+@dataclass
+class ModelDataUnchecked(ModelData):
+    """Unchecked model data class."""
+
+    valid_mask: torch.Tensor = field(init=False)
+    n_valid: torch.Tensor = field(init=False)
+    valid_t: torch.Tensor = field(init=False)
+    valid_y: torch.Tensor = field(init=False)
+    buckets: dict[tuple[Any, Any], tuple[torch.Tensor, ...]] = field(init=False)
+
+    def __post_init__(self):
+        """Overrides to skip checks."""
+        pass
+
     def prepare(self, model: FitMixin | PredictMixin) -> Self:
         """Sets the representation for likelihood computations according to model.
 
@@ -233,15 +243,16 @@ class ModelData(BaseEstimator):
         Returns:
             Self: The prepared (completed) data.
         """
-        from ..model._fit import FitMixin  # noqa: PLC0415
-        from ..model._predict import PredictMixin  # noqa: PLC0415
 
-        validate_params(
-            {
-                "model": [FitMixin | PredictMixin],
-            },
-            prefer_skip_nested_validation=True,
-        )
+        def quad_fn(
+            t0: torch.Tensor, t1: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            half = 0.5 * (t1 - t0)
+            return half, torch.cat(
+                [t1, (t0 + t1).addmm(half, model._std_nodes, beta=0.5)],  # type: ignore
+                dim=-1,
+            )
+
         self.valid_mask = ~self.y.isnan()
         self.n_valid = self.valid_mask.sum(dim=-2).to(torch.get_default_dtype())
         self.valid_t = self.t.nan_to_num(self.t.nanmean().item())
@@ -249,17 +260,11 @@ class ModelData(BaseEstimator):
         self.buckets = build_all_buckets(
             self.trajectories, self.c, tuple(model.design.link_fns.keys())
         )
+        self.quads = {
+            key: quad_fn(t0, t1) for key, (_, t0, t1, _) in self.buckets.items()
+        }
 
         return self
-
-
-@dataclass
-class ModelDataUnchecked(ModelData):
-    """Unchecked model data class."""
-
-    def __post_init__(self):
-        """Overrides to skip checks."""
-        pass
 
 
 @dataclass

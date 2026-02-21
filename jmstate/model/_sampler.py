@@ -3,7 +3,7 @@ from typing import Any, Self, cast
 
 import torch
 
-from ..types._data import ModelData
+from ..types._data import ModelDataUnchecked
 from ..types._parameters import ModelParameters
 
 
@@ -18,7 +18,7 @@ class MCMCMixin:
 
     def _logpdfs_fn(
         self,
-        data: ModelData,
+        data: ModelDataUnchecked,
         b: torch.Tensor,
     ) -> torch.Tensor: ...
 
@@ -46,11 +46,11 @@ class MCMCMixin:
         self.adapt_rate = adapt_rate
         self.target_accept_rate = target_accept_rate
 
-    def _init_sampler(self, data: ModelData):
+    def _init_sampler(self, data: ModelDataUnchecked):
         """Initializes the MCMC sampler.
 
         Args:
-            data (ModelData): The complete model data.
+            data (ModelDataUnchecked): The model data.
 
         Returns:
             MetropolisHastingsSampler: The initialized MCMC sampler.

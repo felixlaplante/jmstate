@@ -67,7 +67,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
     def _logpdfs_fn(
         self,
-        data: ModelData,
+        data: ModelDataUnchecked,
         b: torch.Tensor,
     ) -> torch.Tensor:
         """Gets the log pdfs.
@@ -112,7 +112,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         Y = torch.stack(self.params_history_[-self.window_size :])
         return r2(Y).max().item() < self.tol
 
-    def _fit(self, data: ModelData, sampler: MetropolisHastingsSampler):
+    def _fit(self, data: ModelDataUnchecked, sampler: MetropolisHastingsSampler):
         """Fits the model using the optimizer and the sampler.
 
         Args:
@@ -157,7 +157,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             )
 
     def _compute_fim_and_criteria(
-        self, data: ModelData, sampler: MetropolisHastingsSampler
+        self, data: ModelDataUnchecked, sampler: MetropolisHastingsSampler
     ):
         """Computes the Fisher Information Matrix and model selection criteria.
 

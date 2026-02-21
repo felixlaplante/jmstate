@@ -80,7 +80,7 @@ def flat_from_log_cholesky(L: torch.Tensor, precision_type: str) -> torch.Tensor
         case "diag":
             return L.diag()
         case "spherical":
-            return L[0, 0].reshape(1)
+            return L[0, 0].flatten()
         case _:
             raise ValueError(
                 "Precision type must be be either 'full', 'diag' or 'spherical', got "

@@ -200,7 +200,7 @@ def build_possible_buckets(
         key: (
             idxs_tensor := torch.frombuffer(idxs, dtype=torch.int64),
             torch.frombuffer(t0s, dtype=dtype).reshape(-1, 1),
-            c.index_select(0, idxs_tensor),
+            c[idxs_tensor],
         )
         for key, (idxs, t0s) in buckets.items()
     }

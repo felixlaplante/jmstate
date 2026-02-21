@@ -9,7 +9,6 @@ Model
 .. autoclass:: jmstate.model.MultiStateJointModel
    :members: 
       __init__,
-      forward,
       compute_surv_logps,
       sample_trajectories,
       fit,
