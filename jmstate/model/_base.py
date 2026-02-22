@@ -47,7 +47,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         - `n_warmup`: Number of warmup iterations per chain.
         - `n_subsample`: Number of subsamples between predictions; higher values
           reduce autocorrelation but increase computation time. A value of one means
-          no subsampling.
+          no subsampling. This value may be very sensitive.
 
     Fitting settings:
         - `optimizer`: Optimizer for stochastic gradient ascent. If `None`, fitting
@@ -59,7 +59,6 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         - `tol`: Tolerance for the :math:`R^2` convergence criterion.
         - `window_size`: Window size for :math:`R^2` convergence; default 100.
           This criterion is scale-agnostic and provides a local stationarity test.
-          If converged, it is also used for Polyak averaging.
 
     Printing and visualization:
         - `verbose`: Whether to print progress during fitting and prediction.
@@ -83,8 +82,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         n_subsample (int): Number of subsamples for MCMC iterations.
         max_iter_fit (int): Maximum number of iterations for stochastic gradient ascent.
         tol (float): Tolerance for :math:`R^2` convergence criterion.
-        window_size (int): Window size for :math:`R^2` convergence evaluation and Polyak
-            averaging.
+        window_size (int): Window size for :math:`R^2` convergence evaluation.
         n_samples_summary (int): Number of posterior samples for computing Fisher
             Information and selection criteria.
         verbose (bool): Flag to print fitting and prediction progress.
@@ -160,7 +158,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         adapt_rate: float = 0.1,
         target_accept_rate: float = 0.234,
         n_warmup: int = 100,
-        n_subsample: int = 10,
+        n_subsample: int = 20,
         max_iter_fit: int = 1000,
         tol: float = 0.1,
         window_size: int = 100,
@@ -194,14 +192,13 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             n_warmup (int, optional): Number of warmup iterations per MCMC chain.
                 Defaults to 100.
             n_subsample (int, optional): Number of subsamples between MCMC updates.
-                Defaults to 10.
+                Defaults to 20.
             max_iter_fit (int, optional): Maximum number of iterations for stochastic
                 gradient ascent. Defaults to 1000.
             tol (float, optional): Tolerance for :math:`R^2` convergence criterion.
                 Defaults to 0.1.
             window_size (int, optional): Window size for :math:`R^2` convergence
-                evaluation. If converged, it is also used for Polyak averaging.
-                Defaults to 100.
+                evaluation. Defaults to 100.
             n_samples_summary (int, optional): Number of posterior samples used to
                 compute the Fisher Information Matrix and model selection criteria.
                 Defaults to 500.
