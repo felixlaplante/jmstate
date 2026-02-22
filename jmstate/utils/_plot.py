@@ -55,7 +55,7 @@ def plot_params_history(
     )
 
     if len(model.params_history_) <= 1:
-        raise ValueError("Only one parameter history provided")
+        raise ValueError("More than one parameter history is required to plot")
 
     # Get the names
     named_parameters_dict = dict(model.params.named_parameters())

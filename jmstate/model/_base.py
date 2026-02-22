@@ -51,7 +51,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
 
     Fitting settings:
         - `optimizer`: Optimizer for stochastic gradient ascent. If `None`, fitting
-          is disabled. Recommended: `torch.optim.Adam` with learning rate 0.1 to 1.0.
+          is disabled. Recommended: `torch.optim.Adam` with learning rate 0.01 to 0.5.
         - `max_iter_fit`: Maximum iterations for gradient ascent.
         - `n_samples_summary`: Number of samples used to compute the Fisher
           Information Matrix and model selection criteria; higher values improve
@@ -158,7 +158,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
         adapt_rate: float = 0.1,
         target_accept_rate: float = 0.234,
         n_warmup: int = 100,
-        n_subsample: int = 20,
+        n_subsample: int = 10,
         max_iter_fit: int = 1000,
         tol: float = 0.1,
         window_size: int = 100,
@@ -192,7 +192,7 @@ class MultiStateJointModel(BaseEstimator, FitMixin, PredictMixin):
             n_warmup (int, optional): Number of warmup iterations per MCMC chain.
                 Defaults to 100.
             n_subsample (int, optional): Number of subsamples between MCMC updates.
-                Defaults to 20.
+                Defaults to 10.
             max_iter_fit (int, optional): Maximum number of iterations for stochastic
                 gradient ascent. Defaults to 1000.
             tol (float, optional): Tolerance for :math:`R^2` convergence criterion.
