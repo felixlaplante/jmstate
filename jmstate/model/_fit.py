@@ -126,49 +126,6 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             stacklevel=stacklevel,
         )
 
-    def _fit(self, data: ModelDataUnchecked, sampler: MetropolisWithinGibbsSampler):
-        """Fits the model using the optimizer and the sampler.
-
-        Args:
-            data (ModelData): The data.
-            sampler (MetropolisWithinGibbsSampler): The sampler.
-
-        Raises:
-            ValueError: If the optimizer is not initialized.
-        """
-        if self.max_iter <= 0:
-            return
-
-        if self.optimizer is None:
-            raise ValueError("Optimizer is not initialized.")
-
-        def closure():
-            self.optimizer.zero_grad()  # type: ignore
-            loss = -self._logpdfs_fn(data, sampler.b).mean()
-            loss.backward()  # type: ignore
-            return loss.item()
-
-        converged = False
-        for _ in trange(
-            self.max_iter,
-            desc="Fitting joint model",
-            disable=not bool(self.verbose),
-        ):
-            self.optimizer.step(closure)
-            self.params_history_.append(
-                parameters_to_vector(self.params.parameters()).detach()
-            )
-
-            # Restore logpdfs and indiv_params, because parameters changed
-            sampler.reset().run(self.n_subsample)
-
-            if self._is_converged():
-                converged = True
-                break
-
-        if not converged:
-            self._warn_not_converged(stacklevel=2)
-
     @validate_params(
         {
             "data": [ModelData],
