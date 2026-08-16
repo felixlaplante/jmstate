@@ -1,5 +1,6 @@
 """Tests for model fitting."""
 
+import math
 import warnings
 
 import pytest
@@ -33,3 +34,17 @@ def test_convergence():
         for warning in caught
         if issubclass(warning.category, ConvergenceWarning)
     ]
+
+
+def test_summary():
+    model = _model().fit(_data())
+
+    with pytest.raises(TypeError):
+        model.compute_summary(2, 4, 2)
+
+    model.compute_summary(
+        n_posterior_samples=2,
+        n_importance_samples=4,
+        importance_batch_size=2,
+    )
+    assert math.isfinite(model.loglik_)

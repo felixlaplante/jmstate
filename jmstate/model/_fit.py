@@ -1,4 +1,4 @@
-from math import ceil
+from math import ceil, log
 from numbers import Integral
 from typing import Any, Self
 from warnings import warn
@@ -8,6 +8,7 @@ from sklearn.base import check_is_fitted  # type: ignore
 from sklearn.exceptions import ConvergenceWarning  # type: ignore
 from sklearn.utils._param_validation import Interval, validate_params  # type: ignore
 from torch import nn
+from torch.distributions import MultivariateNormal
 from torch.func import jacfwd  # type: ignore
 from torch.nn.utils import parameters_to_vector
 from torch.nn.utils.stateless import _reparametrize_module  # type: ignore
@@ -200,11 +201,19 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
     @validate_params(
         {
-            "n_samples": [Interval(Integral, 1, None, closed="left")],
+            "n_posterior_samples": [Interval(Integral, 1, None, closed="left")],
+            "n_importance_samples": [Interval(Integral, 1, None, closed="left")],
+            "importance_batch_size": [Interval(Integral, 1, None, closed="left")],
         },
         prefer_skip_nested_validation=True,
     )
-    def compute_summary(self, n_samples: int = 500) -> Self:
+    def compute_summary(
+        self,
+        *,
+        n_posterior_samples: int = 500,
+        n_importance_samples: int = 1000,
+        importance_batch_size: int = 128,
+    ) -> Self:
         r"""Computes summary statistics for the fitted model.
 
         The expected Fisher Information Matrix is estimated as:
@@ -214,17 +223,23 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             \hat{\theta})} \left(\nabla \log \mathcal{L}(\hat{\theta} ; x_i, b) \nabla
             \log \mathcal{L}(\hat{\theta} ; x_i, b)^T \right).
 
-        Model selection criteria are computed using a Laplace approximation of the
-        posterior distribution, providing closed-form estimates of entropy. The
-        parameter `n_samples` controls the number of posterior samples used for
-        computing the Fisher Information Matrix and selection metrics; increasing this
-        number improves accuracy at the cost of computational time.
+        Model selection criteria use importance sampling with subject-specific Gaussian
+        proposals fitted to posterior draws. The first sampling stage estimates each
+        proposal's mean and covariance, and the second draws independent samples from
+        those proposals to estimate the marginal likelihood.
 
         For additional details, see ISSN 2824-7795.
 
         Args:
-            n_samples (int, optional): Number of posterior samples to use for computing
-                the Fisher Information Matrix and selection metrics. Defaults to 500.
+            n_posterior_samples (int, optional): Number of posterior samples used to
+                estimate the Fisher Information Matrix and Gaussian proposal moments.
+                Defaults to 500.
+            n_importance_samples (int, optional): Number of independent Gaussian
+                proposal draws used to estimate the marginal likelihood. Defaults to
+                1000.
+            importance_batch_size (int, optional): Number of importance draws evaluated
+                together. This controls memory use, not statistical accuracy. Defaults
+                to 128.
 
         Returns:
             Self: The fitted model with summary statistics computed.
@@ -247,21 +262,17 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
 
         # Initialize accumulators
         mjac = torch.zeros(n, self.params.numel())
-        logpdf = 0.0
         mb = torch.zeros(n, q)
         mb2 = torch.zeros(n, q, q)
 
-        n_iter = ceil(n_samples / self.n_chains)
+        n_iter = ceil(n_posterior_samples / self.n_chains)
         for _ in trange(
             n_iter,
-            desc="Computing FIM and Model Selection Criteria",
+            desc="Estimating FIM and Gaussian proposal",
             disable=not bool(self.verbose),
         ):
             # Mean jacobian across chains
             mjac += _jac_fn().detach()  # type: ignore
-
-            # Mean logpdf across chains
-            logpdf += self.sampler.logpdfs.sum().item() / self.n_chains  # type: ignore
 
             # Mean and outer product of b across chains
             mb += self.sampler.b.mean(dim=0)  # type: ignore
@@ -273,18 +284,42 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
             self.sampler.run(self.n_subsample)  # type: ignore
 
         mjac /= n_iter
-        logpdf /= n_iter
         mb /= n_iter
         mb2 /= n_iter
 
         # Compute FIM as variance of the score
         self.fim_ = mjac.T @ mjac
 
-        # Compute entropy Laplace approximation
+        # Fit positive-definite Gaussian proposals to the posterior moments
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
-        entropy = 0.5 * (torch.logdet(covs) + self.params.random_prec.dim).sum().item()
+        eigvals, eigvecs = torch.linalg.eigh(covs)
+        eig_floor = torch.finfo(covs.dtype).eps * eigvals.abs().amax(dim=-1).clamp_min(
+            1.0
+        )
+        eigvals = torch.maximum(eigvals, eig_floor.unsqueeze(-1))
+        covs = (eigvecs * eigvals.unsqueeze(-2)) @ eigvecs.transpose(-2, -1)
+        proposal = MultivariateNormal(mb, covariance_matrix=covs)
 
-        self.loglik_ = logpdf + entropy
+        # Estimate each subject's marginal likelihood in bounded-memory batches
+        log_weight_sum = torch.full((n,), -torch.inf, dtype=mb.dtype, device=mb.device)
+        with torch.no_grad():
+            for start in trange(
+                0,
+                n_importance_samples,
+                importance_batch_size,
+                desc="Computing importance-sampling likelihood",
+                disable=not bool(self.verbose),
+            ):
+                batch_size = min(importance_batch_size, n_importance_samples - start)
+                samples = proposal.sample((batch_size,))
+                log_weights = self.sampler.logpdfs_fn(samples) - proposal.log_prob(
+                    samples
+                )
+                log_weight_sum = torch.logaddexp(
+                    log_weight_sum, torch.logsumexp(log_weights, dim=0)
+                )
+
+        self.loglik_ = (log_weight_sum - log(n_importance_samples)).sum().item()
         self.aic_ = -2 * self.loglik_ + 2 * self.params.numel()
         fim_sign, fim_logdet = torch.linalg.slogdet(self.fim_)
         self.bic_ = (
