@@ -295,7 +295,7 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         proposal = MultivariateNormal(mb, covariance_matrix=covs)
 
         # Estimate each subject's marginal likelihood in bounded-memory batches
-        log_weight_sum = torch.full((n,), -torch.inf, dtype=mb.dtype, device=mb.device)
+        log_weight_sum = torch.full((n,), -torch.inf, dtype=mb.dtype)
         with torch.no_grad():
             for start in trange(
                 0,
