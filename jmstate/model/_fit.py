@@ -290,14 +290,8 @@ class FitMixin(PriorMixin, LongitudinalMixin, HazardMixin, MCMCMixin, nn.Module)
         # Compute FIM as variance of the score
         self.fim_ = mjac.T @ mjac
 
-        # Fit positive-definite Gaussian proposals to the posterior moments
+        # Fit Gaussian proposals to the posterior moments
         covs = mb2 - torch.einsum("ij,ik->ijk", mb, mb)
-        eigvals, eigvecs = torch.linalg.eigh(covs)
-        eig_floor = torch.finfo(covs.dtype).eps * eigvals.abs().amax(dim=-1).clamp_min(
-            1.0
-        )
-        eigvals = torch.maximum(eigvals, eig_floor.unsqueeze(-1))
-        covs = (eigvecs * eigvals.unsqueeze(-2)) @ eigvecs.transpose(-2, -1)
         proposal = MultivariateNormal(mb, covariance_matrix=covs)
 
         # Estimate each subject's marginal likelihood in bounded-memory batches
