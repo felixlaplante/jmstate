@@ -22,8 +22,8 @@ tqdm.
 
 ### Data integrity
 
-The committed PAQUID dataset is the canonical reproduction input. Verify it before
-running an analysis:
+The committed PAQUID and PBC2 datasets are the canonical reproduction inputs. Verify
+both before running an analysis:
 
 ```bash
 cd data
@@ -33,6 +33,11 @@ sha256sum --check SHA256SUMS
 The PAQUID file is the canonical reproduction input in this repository. Its original
 license and reuse terms were not supplied with the dataset, so its inclusion does not
 grant redistribution or reuse rights.
+
+The PBC2 file is a CSV conversion of the `pbc2` dataset distributed with the
+[joineRML](https://github.com/graemeleehickey/joineRML) R package. It is
+licensed separately under the [GNU GPL version 3](https://www.gnu.org/licenses/gpl-3.0.txt).
+The repository's BSD license does not apply to `data/pbc2.csv`.
 
 ## Citation
 
