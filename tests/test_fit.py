@@ -1,8 +1,10 @@
 """Tests for model fitting."""
 
+import math
 import warnings
 
 import pytest
+import torch
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils._param_validation import InvalidParameterError
 
@@ -33,3 +35,20 @@ def test_convergence():
         for warning in caught
         if issubclass(warning.category, ConvergenceWarning)
     ]
+
+
+def test_summary():
+    torch.manual_seed(42)
+    model = _model()
+    model.n_subsample = 1
+    model.fit(_data())
+
+    with pytest.raises(TypeError):
+        model.compute_summary(2, 4, 2)
+
+    model.compute_summary(
+        n_posterior_samples=8,
+        n_importance_samples=4,
+        importance_batch_size=2,
+    )
+    assert math.isfinite(model.loglik_)

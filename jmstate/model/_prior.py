@@ -2,6 +2,7 @@ from typing import Any
 
 import torch
 
+from ..types._defs import LOG_TWO_PI
 from ..types._parameters import ModelParameters
 
 
@@ -27,6 +28,6 @@ class PriorMixin:
             self.params.random_prec._prec_cholesky_and_log_eigvals  # type: ignore
         )
         random_quad_form = (b @ random_prec_cholesky).pow(2).sum(dim=-1)
-        random_norm_factor = random_prec_log_eigvals.sum()
+        random_norm_factor = random_prec_log_eigvals.sum() - b.size(-1) * LOG_TWO_PI
 
         return 0.5 * (random_norm_factor - random_quad_form)
