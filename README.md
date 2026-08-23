@@ -1,6 +1,25 @@
-# jmstate
+<p align="center">
+  <img src="https://raw.githubusercontent.com/felixlaplante0/jmstate/main/docs/source/_static/jmstate-logo.svg" alt="jmstate logo" width="128">
+</p>
 
-[![codecov](https://codecov.io/gh/felixlaplante0/jmstate/graph/badge.svg)](https://codecov.io/gh/felixlaplante0/jmstate)
+<h1 align="center">jmstate</h1>
+
+<p align="center"><strong>Flexible multi-state joint models.</strong><br>
+Joint modeling of longitudinal and time-to-event data with PyTorch.</p>
+
+<p align="center">
+  <a href="https://jmstate.readthedocs.io/en/latest/">Documentation</a> ·
+  <a href="https://pypi.org/project/jmstate/">PyPI</a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/jmstate/"><img src="https://img.shields.io/pypi/v/jmstate?logo=pypi&logoColor=white" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/jmstate/"><img src="https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white" alt="Supported Python versions: 3.11 and later"></a>
+  <a href="https://github.com/felixlaplante0/jmstate/actions/workflows/lint.yml"><img src="https://github.com/felixlaplante0/jmstate/actions/workflows/lint.yml/badge.svg" alt="Lint status"></a>
+  <a href="https://codecov.io/gh/felixlaplante0/jmstate"><img src="https://codecov.io/gh/felixlaplante0/jmstate/graph/badge.svg" alt="Coverage"></a>
+  <a href="https://jmstate.readthedocs.io/en/latest/"><img src="https://readthedocs.org/projects/jmstate/badge/?version=latest" alt="Documentation status"></a>
+  <a href="https://github.com/felixlaplante0/jmstate/blob/main/LICENSE"><img src="https://img.shields.io/github/license/felixlaplante0/jmstate" alt="License"></a>
+</p>
 
 **jmstate** is a Python package for **nonlinear multi-state joint modeling** of longitudinal and time-to-event data. Built on [PyTorch](https://pytorch.org/), it enables flexible specification of regression and link functions — including neural networks — while still offering built-in parametric baseline hazards and utilities for inference and prediction.
 
@@ -195,4 +214,3 @@ plt.show()
 ```
 
 ---
-
