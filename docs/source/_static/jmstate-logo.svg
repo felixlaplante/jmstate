@@ -3,8 +3,8 @@
   <desc id="desc">A continuous path joining longitudinal observations to a terminal event state.</desc>
   <defs>
     <linearGradient id="surface" x1="24" y1="18" x2="232" y2="238" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#eee9e2"/>
-      <stop offset="1" stop-color="#bed8e8"/>
+      <stop stop-color="#cbdde6"/>
+      <stop offset="1" stop-color="#efe4e1"/>
     </linearGradient>
     <linearGradient id="flow" x1="44" y1="70" x2="216" y2="170" gradientUnits="userSpaceOnUse">
       <stop stop-color="#2563eb"/>
