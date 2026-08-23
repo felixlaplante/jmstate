@@ -21,9 +21,9 @@
     stroke-linejoin="round"
   />
   <g stroke="#132238" stroke-width="5">
-    <circle cx="80" cy="67" r="9" fill="#2563eb"/>
-    <circle cx="46" cy="180" r="9" fill="#8e5bb7"/>
-    <circle cx="154" cy="143" r="9" fill="#ffc857"/>
-    <circle cx="218" cy="171" r="9" fill="#f4512c"/>
+    <circle cx="80" cy="67" r="9" fill="url(#flow)"/>
+    <circle cx="46" cy="180" r="9" fill="url(#flow)"/>
+    <circle cx="154" cy="143" r="9" fill="url(#flow)"/>
+    <circle cx="218" cy="171" r="9" fill="url(#flow)"/>
   </g>
 </svg>
