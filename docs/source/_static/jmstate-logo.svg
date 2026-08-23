@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">jmstate logo</title>
+  <desc id="desc">A continuous path joining longitudinal observations to a terminal event state.</desc>
+  <defs>
+    <linearGradient id="surface" x1="24" y1="18" x2="232" y2="238" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f4f1eb"/>
+      <stop offset="1" stop-color="#d7e5ef"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="44" y1="70" x2="216" y2="170" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#f4512c"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#surface)"/>
+  <path
+    d="M80 67 V146 C80 173 67 190 46 180 C34 174 36 158 48 153 C62 147 75 157 86 169 C96 179 101 167 105 146 C109 125 121 113 134 116 C146 119 152 129 154 143 C159 124 172 114 184 119 C196 124 201 138 201 152 C201 167 208 175 218 171"
+    fill="none"
+    stroke="url(#flow)"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <g stroke="#132238" stroke-width="5">
+    <circle cx="80" cy="67" r="9" fill="#2563eb"/>
+    <circle cx="46" cy="180" r="9" fill="#8e5bb7"/>
+    <circle cx="154" cy="143" r="9" fill="#ffc857"/>
+    <circle cx="218" cy="171" r="9" fill="#f4512c"/>
+  </g>
+</svg>

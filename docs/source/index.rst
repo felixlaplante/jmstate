@@ -1,94 +1,84 @@
-Joint Multi-State Modeling
-===========================
+jmstate
+========
 
-**jmstate** is a Python package for nonlinear multi-state joint modeling of longitudinal and time-to-event data. Built on PyTorch, it supports flexible regression and link functions, including neural networks, alongside parametric baseline hazards and tools for inference and prediction.
+.. raw:: html
 
-Features
---------
+   <section class="hero">
+     <img class="hero-logo" src="_static/jmstate-logo.svg" alt="jmstate logo">
+     <p class="eyebrow">JOINT MULTI-STATE MODELING</p>
+     <h1>Flexible models for longitudinal and event data.</h1>
+     <p class="hero-copy">jmstate connects longitudinal biomarkers and multi-state event histories through shared random effects, automatic differentiation, and parametric baseline hazards.</p>
+     <div class="hero-actions">
+       <a class="primary" href="getting-started.html">Get started</a>
+       <a class="secondary" href="paquid.html">See the examples</a>
+     </div>
+   </section>
 
-- **Flexible longitudinal models**: Supports user-defined regression and individual-effects functions.
-- **General multi-state processes**: Handles arbitrary recurrent, absorbing, and monotone state graphs under a semi-Markov assumption.
-- **Shared random effects**: Links longitudinal biomarkers and transition hazards through individual random effects.
-- **Parametric baseline hazards**: Includes exponential, Weibull, Gompertz, and log-normal baseline hazard functions.
-- **Automatic differentiation**: Uses PyTorch optimization for likelihood-based estimation.
-- **Inference and prediction**: Provides MCMC diagnostics, parameter summaries, and trajectory prediction utilities.
+.. raw:: html
 
-Method
-------
+   <aside class="pypi-card">
+     <div>
+       <span class="pypi-kicker">PYTHON PACKAGE</span>
+       <strong>Available on PyPI</strong>
+       <p>Install jmstate and build a joint model with familiar PyTorch objects.</p>
+     </div>
+     <a href="https://pypi.org/project/jmstate/">View package&nbsp;→</a>
+   </aside>
 
-The longitudinal sub-model is
-
-.. math::
-
-   y_{ij} = h(t_{ij}, \psi_i) + \epsilon_{ij}, \qquad \epsilon_{ij} \sim \mathcal{N}(0, R),
-
-where :math:`h` is a user-defined regression function and the individual parameters are
-
-.. math::
-
-   \psi_i = f(\gamma, X_i, b_i), \qquad b_i \sim \mathcal{N}(0, Q).
-
-For a transition :math:`k \to k'` at time :math:`t` after entering the current state at :math:`t_0`, the multi-state sub-model specifies
-
-.. math::
-
-   \lambda^{k \to k'}(t_0, t) = \lambda_0^{k \to k'}(t_0, t) \exp\left(\alpha^{k \to k'} g^{k \to k'}(t, \psi_i) + \beta^{k \to k'} X_i\right).
-
-The model estimates parameters by maximizing the observed-data log-likelihood. Its gradient is evaluated with the Fisher identity and approximated using a Metropolis-within-Gibbs sampler over the random effects combined with stochastic gradient optimization.
-
-Installation
+Why jmstate?
 ------------
 
-Install the package from PyPI:
+jmstate provides a flexible framework for nonlinear joint multi-state models of
+longitudinal and time-to-event data.
 
-.. code-block:: bash
+.. grid:: 1 2 2 3
+   :gutter: 3
 
-   python -m pip install jmstate
+   .. grid-item-card:: Flexible model design
+      :class-card: feature-card
 
-Usage
------
+      Define individual-effects, regression, and transition-link functions for the model you need.
 
-Define a model design, initialize its parameters, and fit it to longitudinal and multi-state data:
+   .. grid-item-card:: General state graphs
+      :class-card: feature-card
 
-.. code-block:: python
+      Work with recurrent, absorbing, and monotone processes under a semi-Markov assumption.
 
-   import torch
-   from jmstate import MultiStateJointModel
-   from jmstate.functions.base_hazards import Exponential
-   from jmstate.types import ModelData, ModelDesign, ModelParameters, PrecisionParameters
+   .. grid-item-card:: Inference and prediction
+      :class-card: feature-card
 
-   def individual_parameters(fixed, x, random_effects):
-       return fixed * torch.exp(random_effects)
+      Fit with automatic differentiation, inspect MCMC diagnostics, and predict model quantities.
 
-   def regression(t, parameters):
-       amplitude, elimination, absorption = parameters.chunk(3, dim=-1)
-       return (amplitude * (torch.exp(-elimination * t) - torch.exp(-absorption * t))).unsqueeze(-1)
+Explore jmstate
+---------------
 
-   design = ModelDesign(
-       individual_parameters,
-       regression_fn=regression,
-       link_fns={(1, 2): regression},
-   )
-   parameters = ModelParameters(
-       torch.ones(3),
-       PrecisionParameters.from_covariance(torch.eye(3), "diag"),
-       PrecisionParameters.from_covariance(torch.eye(1), "spherical"),
-       {(1, 2): Exponential(1.0)},
-       {(1, 2): torch.zeros(1)},
-       {(1, 2): torch.zeros(1)},
-   )
-   model = MultiStateJointModel(design, parameters, torch.optim.Adam(parameters.parameters()))
-   model.fit(ModelData(x, t, y, trajectories, c))
+.. grid:: 1 2 2 3
+   :gutter: 3
 
-Configuration
--------------
+   .. grid-item-card:: Get started
+      :link: getting-started
+      :link-type: doc
 
-``ModelDesign`` defines the individual-effects, regression, and transition-link functions. ``ModelParameters`` holds population effects, precision parameters, baseline hazards, and transition coefficients. The model accepts any PyTorch optimizer; the fitted estimator provides parameter summaries, diagnostics, and prediction methods.
+      Install jmstate and fit your first joint multi-state model.
 
-API Reference
--------------
+   .. grid-item-card:: Model guide
+      :link: model-guide
+      :link-type: doc
+
+      Read the model specification and understand the estimation workflow.
+
+   .. grid-item-card:: Examples
+      :link: paquid
+      :link-type: doc
+
+      Reproduce the PAQUID and simulated analyses from the repository scripts.
 
 .. toctree::
+   :hidden:
    :maxdepth: 2
 
+   getting-started
+   model-guide
+   paquid
+   simulated
    modules
