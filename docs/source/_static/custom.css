@@ -1,5 +1,11 @@
-:root {
+:root,
+html[data-theme="light"],
+html[data-theme="dark"] {
   --jmstate-blue: #3a86ff;
+  --pst-color-primary: var(--jmstate-blue);
+  --pst-color-primary-highlight: var(--jmstate-blue);
+  --pst-color-link: var(--jmstate-blue);
+  --pst-color-link-hover: var(--jmstate-blue);
 }
 
 .bd-page-width {
