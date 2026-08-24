@@ -15,4 +15,5 @@ Base Hazard Functions
    Exponential
    Gompertz
    LogNormal
+   Neural
    Weibull

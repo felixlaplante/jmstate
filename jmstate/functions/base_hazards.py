@@ -1,6 +1,6 @@
 """Base hazard functions."""
 
-__all__ = ["Exponential", "Gompertz", "LogNormal", "Weibull"]
+__all__ = ["Exponential", "Gompertz", "LogNormal", "Neural", "Weibull"]
 
 from numbers import Real
 from typing import cast
@@ -14,6 +14,38 @@ from sklearn.utils._param_validation import (  # type: ignore
 from torch import nn
 
 from ..types._defs import LOG_TWO_PI, LogBaseHazardFn
+
+
+class Neural(LogBaseHazardFn):
+    r"""Implements a neural-network log base hazard.
+
+    The supplied network maps each scalar time to a scalar log hazard. It receives a
+    two-dimensional tensor of shape ``(n_times, 1)`` and its output is reshaped to the
+    input time shape.
+
+    Args:
+        nn (nn.Module): Network mapping scalar times to scalar log hazards.
+        clock_type (str, optional): The clock used to construct the input times.
+            Defaults to ``"sojourn"``.
+    """
+
+    @validate_params(
+        {
+            "nn": [nn.Module],
+            "clock_type": [StrOptions({"sojourn", "absolute"})],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def __init__(self, nn: nn.Module, *, clock_type: str = "sojourn"):
+        """Initialize the neural log base hazard."""
+        super().__init__()  # type: ignore
+        self.nn = nn
+        self.clock_type = clock_type
+
+    def forward(self, t0: torch.Tensor, t1: torch.Tensor) -> torch.Tensor:
+        """Evaluate the log base hazard at ``t1`` relative to ``t0``."""
+        t = t1 - t0 if self.clock_type == "sojourn" else t1
+        return self.nn(t.reshape(-1, 1)).reshape(t.shape)
 
 
 class Exponential(LogBaseHazardFn):
